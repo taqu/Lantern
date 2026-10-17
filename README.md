@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted full-text search platform for Windows and intranet environments.
 
-**Current status: Phase 0 — project bootstrap and dependency feasibility.**
+**Current status: Phase 1 — working Blazor search UI connected to Meilisearch.**
 
 ---
 
@@ -86,9 +86,9 @@ Integration tests are skipped unless `MEILI_MASTER_KEY` is set.
 dotnet run --project src/Lantern.Web
 ```
 
-Then open: http://localhost:5000
+Then open: http://localhost:5000/search
 
-The home page shows "Lantern is running." Search functionality is not yet available.
+The search page is available at `/search`. The home page at `/` redirects to `/search` automatically.
 
 ---
 
@@ -110,6 +110,19 @@ The home page shows "Lantern is running." Search functionality is not yet availa
    ```
 
 Meilisearch binds to `127.0.0.1:7700` only. Never expose it directly to the network.
+
+---
+
+## Seed the Development Index
+
+Seed 22 sample documents (English and Japanese, multiple document types) into the `lantern-documents` index:
+
+```powershell
+# Ensure Meilisearch is running and MEILI_MASTER_KEY is set
+dotnet run --project tools/Lantern.Feasibility -- --seed
+```
+
+After seeding, open http://localhost:5000/search and search for terms like `lantern`, `meilisearch`, `検索`, `PDF`, etc.
 
 ---
 
@@ -144,29 +157,18 @@ Tests are skipped (not failed) if `MEILI_MASTER_KEY` is not set.
 
 ---
 
-## Phase 0 Limitations
+## Phase 1 Limitations
 
-The following are **not** implemented in Phase 0:
+The following are **not** implemented in Phase 1:
 
-- Search UI or result display
-- Document indexing pipeline
-- Filesystem or web crawler
-- Administration interface
+- Document crawling pipeline (filesystem or web)
+- Administration interface for index management
 - SQLite configuration database
 - User authentication
 - Windows service integration
 - Scheduler or background job management
-
----
-
-## Planned Phase 1
-
-Phase 1 will implement the first search UI prototype:
-
-- A working search page in Blazor
-- Manual document indexing via the administration interface
-- Basic result display with title, snippet, and source path
-- Meilisearch service abstraction in `Lantern.Infrastructure`
+- Highlighted search snippets (plain-text snippets only)
+- OCR support for scanned PDFs
 
 ---
 

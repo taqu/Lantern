@@ -1,12 +1,6 @@
 @page "/"
+@inject NavigationManager Nav
 
-<PageTitle>Lantern</PageTitle>
-
-<h1>Lantern</h1>
-
-<p>Lantern is running.</p>
-
-<p class="text-muted">
-    Full-text search is not yet available. Phase 0 — project bootstrap and
-    dependency feasibility validation — is in progress.
-</p>
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/search");
+}

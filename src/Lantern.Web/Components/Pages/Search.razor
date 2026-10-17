@@ -1,0 +1,185 @@
+@page "/search"
+@rendermode InteractiveServer
+@using Lantern.Core.Search
+@using Lantern.Infrastructure.Search
+@inject ISearchService SearchService
+@inject NavigationManager Nav
+
+<PageTitle>Search — Lantern</PageTitle>
+
+<div class="search-page">
+    <header class="search-header">
+        <h1 class="search-brand">Lantern</h1>
+    </header>
+
+    <section class="search-form-section">
+        <form @onsubmit="HandleSubmit" @onsubmit:preventDefault>
+            <div class="search-input-row">
+                <label for="search-input" class="visually-hidden">Search documents</label>
+                <input id="search-input"
+                       type="search"
+                       class="search-input"
+                       placeholder="Search documents..."
+                       @bind="_query"
+                       @bind:event="oninput"
+                       maxlength="500"
+                       autocomplete="off"
+                       aria-label="Search documents" />
+                <button type="submit" class="search-button" disabled="@_isLoading">
+                    @(_isLoading ? "Searching\u2026" : "Search")
+                </button>
+            </div>
+        </form>
+    </section>
+
+    @if (_errorMessage != null)
+    {
+        <div class="search-error" role="alert">@_errorMessage</div>
+    }
+    else if (_response != null)
+    {
+        <section class="search-results" aria-label="Search results">
+            @if (_response.TotalHits == 0)
+            {
+                <p class="search-noresults">No documents matched your search.</p>
+            }
+            else
+            {
+                <p class="search-count">About @_response.TotalHits result@(_response.TotalHits == 1 ? "" : "s")</p>
+                <ol class="result-list">
+                    @foreach (var item in _response.Items)
+                    {
+                        <li class="result-item">
+                            <div class="result-title">
+                                @if (UrlValidator.IsSafeDisplayUrl(item.Url))
+                                {
+                                    <a href="@item.Url" target="_blank" rel="noopener noreferrer">@(item.Title.Length > 0 ? item.Title : "(Untitled)")</a>
+                                }
+                                else
+                                {
+                                    <span>@(item.Title.Length > 0 ? item.Title : "(Untitled)")</span>
+                                }
+                            </div>
+                            @if (UrlValidator.IsSafeDisplayUrl(item.Url))
+                            {
+                                <div class="result-url">@item.Url</div>
+                            }
+                            else if (!string.IsNullOrEmpty(item.Path))
+                            {
+                                <div class="result-path">@item.Path</div>
+                            }
+                            @if (!string.IsNullOrEmpty(item.Snippet))
+                            {
+                                <div class="result-snippet">@item.Snippet</div>
+                            }
+                            @if (!string.IsNullOrEmpty(item.DocumentType))
+                            {
+                                <span class="result-type">@item.DocumentType</span>
+                            }
+                        </li>
+                    }
+                </ol>
+
+                <nav class="pagination" aria-label="Pagination">
+                    @if (_response.Page > 1)
+                    {
+                        <a class="page-link" href="@BuildUrl(_submittedQuery, _response.Page - 1)">Previous</a>
+                    }
+                    else
+                    {
+                        <span class="page-link disabled" aria-disabled="true">Previous</span>
+                    }
+
+                    <span class="page-current">Page @_response.Page of @TotalPages</span>
+
+                    @if (_response.Page < TotalPages)
+                    {
+                        <a class="page-link" href="@BuildUrl(_submittedQuery, _response.Page + 1)">Next</a>
+                    }
+                    else
+                    {
+                        <span class="page-link disabled" aria-disabled="true">Next</span>
+                    }
+                </nav>
+            }
+        </section>
+    }
+    else if (!_isLoading)
+    {
+        <p class="search-hint">Enter a search query above to find documents.</p>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? QueryParam { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageParam { get; set; }
+
+    private string _query = "";
+    private string _submittedQuery = "";
+    private bool _isLoading;
+    private string? _errorMessage;
+    private SearchPageResponse? _response;
+    private CancellationTokenSource? _cts;
+
+    private int CurrentPage => _response?.Page ?? 1;
+    private int TotalPages => _response is null || _response.PageSize == 0
+        ? 1
+        : (int)Math.Ceiling((double)_response.TotalHits / _response.PageSize);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var q = QueryParam?.Trim() ?? "";
+        var page = PageParam is > 0 ? PageParam.Value : 1;
+
+        if (q == _submittedQuery && page == CurrentPage && _response != null)
+            return;
+
+        _query = q;
+
+        if (!string.IsNullOrEmpty(q))
+            await ExecuteSearchAsync(q, page);
+    }
+
+    private async Task HandleSubmit()
+    {
+        var q = _query.Trim();
+        if (string.IsNullOrEmpty(q)) return;
+        Nav.NavigateTo(BuildUrl(q, 1));
+    }
+
+    private async Task ExecuteSearchAsync(string query, int page)
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _isLoading = true;
+        _errorMessage = null;
+        _submittedQuery = query;
+        _response = null;
+
+        try
+        {
+            _response = await SearchService.SearchPageAsync(query, page, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer search — ignore.
+        }
+        catch (SearchException)
+        {
+            _errorMessage = "Search is temporarily unavailable. Please try again later.";
+        }
+        catch (Exception)
+        {
+            _errorMessage = "Search is temporarily unavailable. Please try again later.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string BuildUrl(string q, int page)
+        => $"/search?q={Uri.EscapeDataString(q)}&page={page}";
+}

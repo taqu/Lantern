@@ -9,5 +9,7 @@ public sealed class SearchDocument
     public required string Title { get; init; }
     public required string Content { get; init; }
     public string? SourcePath { get; init; }
+    public string? Url { get; init; }
+    public string? DocumentType { get; init; }
     public DateTimeOffset IndexedAt { get; init; } = DateTimeOffset.UtcNow;
 }

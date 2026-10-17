@@ -1,28 +1,30 @@
 namespace Lantern.Feasibility;
 
 /// <summary>
-/// Lantern Phase 0 feasibility tool.
+/// Lantern Phase 0/1 feasibility and development tool.
 ///
 /// Usage:
 ///   dotnet run                         Run all feasibility tests
 ///   dotnet run -- --meili              Meilisearch connectivity test only
 ///   dotnet run -- --extract <path>     Extract text from a single document
 ///   dotnet run -- --generate-samples   Generate sample Office documents in samples/documents/
+///   dotnet run -- --seed               Seed sample documents into the lantern-documents index
 ///
 /// Environment variables:
 ///   MEILI_HOST        Meilisearch host URL (default: http://localhost:7700)
-///   MEILI_MASTER_KEY  Meilisearch master key (required for Meilisearch tests)
+///   MEILI_MASTER_KEY  Meilisearch master key (required for Meilisearch tests and seeding)
 /// </summary>
 internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("Lantern Feasibility Tool — Phase 0");
-        Console.WriteLine("===================================");
+        Console.WriteLine("Lantern Feasibility Tool — Phase 0/1");
+        Console.WriteLine("=====================================");
 
         bool runMeili = false;
         bool runExtract = false;
         bool generateSamples = false;
+        bool runSeed = false;
         string? extractPath = null;
 
         for (int i = 0; i < args.Length; i++)
@@ -45,6 +47,9 @@ internal static class Program
                 case "--generate-samples":
                     generateSamples = true;
                     break;
+                case "--seed":
+                    runSeed = true;
+                    break;
                 case "--help":
                 case "-h":
                     PrintHelp();
@@ -54,6 +59,19 @@ internal static class Program
                     PrintHelp();
                     return 2;
             }
+        }
+
+        // --seed is a standalone command; skip if explicitly requested
+        if (runSeed)
+        {
+            Console.WriteLine();
+            Console.WriteLine("=== Seeding development index ===");
+            bool seedOk = await Seeder.RunAsync();
+            Console.WriteLine();
+            Console.WriteLine("=== Summary ===");
+            Console.WriteLine($"  Seed : {(seedOk ? "PASS" : "FAIL")}");
+            Console.WriteLine();
+            return seedOk ? 0 : 1;
         }
 
         bool runAll = !runMeili && !runExtract && !generateSamples;
@@ -128,6 +146,7 @@ internal static class Program
         Console.WriteLine("  dotnet run -- --meili              Meilisearch connectivity test only");
         Console.WriteLine("  dotnet run -- --extract <path>     Extract text from a single document");
         Console.WriteLine("  dotnet run -- --generate-samples   Generate sample Office documents");
+        Console.WriteLine("  dotnet run -- --seed               Seed sample docs into lantern-documents index");
         Console.WriteLine();
         Console.WriteLine("Environment variables:");
         Console.WriteLine("  MEILI_HOST        Meilisearch URL (default: http://localhost:7700)");
