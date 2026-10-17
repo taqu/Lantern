@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lantern Sample HTML Document</title>
+</head>
+<body>
+    <h1>Lantern Sample HTML Document</h1>
+    <p>This file is a test fixture for the Lantern document extraction feasibility evaluation.</p>
+
+    <h2>English Content</h2>
+    <p>Lantern is a lightweight, self-hosted full-text search platform for Windows and intranet environments.</p>
+    <p>It uses Meilisearch Community Edition as its search engine and Blazor as its web framework.</p>
+
+    <h2>Japanese Content / 日本語コンテンツ</h2>
+    <p>ランタン（Lantern）は、Windowsおよびイントラネット環境向けの軽量な自己ホスト型全文検索プラットフォームです。</p>
+    <p>全文検索エンジンとしてMeilisearch Community Editionを使用し、WebフレームワークとしてBlazorを採用しています。</p>
+
+    <h2>Format Matrix</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Format</th>
+                <th>Library</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>TXT</td><td>Toxy</td><td>Testing</td></tr>
+            <tr><td>HTML</td><td>Toxy</td><td>Testing</td></tr>
+            <tr><td>PDF</td><td>Toxy (PdfPig)</td><td>Testing</td></tr>
+            <tr><td>DOCX</td><td>Toxy (DocumentFormat.OpenXml)</td><td>Testing</td></tr>
+            <tr><td>XLSX</td><td>Toxy (DocumentFormat.OpenXml)</td><td>Testing</td></tr>
+            <tr><td>PPTX</td><td>Toxy (DocumentFormat.OpenXml)</td><td>Testing</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Known Search Terms</h2>
+    <ul>
+        <li>lightweight</li>
+        <li>full-text search</li>
+        <li>Meilisearch</li>
+        <li>Blazor</li>
+        <li>全文検索</li>
+        <li>軽量</li>
+    </ul>
+
+    <!-- This comment should not appear in extracted text -->
+    <script>
+        // This script content should ideally not appear in plain-text extraction
+        var shouldBeIgnored = true;
+    </script>
+</body>
+</html>

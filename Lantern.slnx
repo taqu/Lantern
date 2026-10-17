@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lantern.Core/Lantern.Core.csproj" />
+    <Project Path="src/Lantern.Crawling/Lantern.Crawling.csproj" />
+    <Project Path="src/Lantern.Infrastructure/Lantern.Infrastructure.csproj" />
+    <Project Path="src/Lantern.Web/Lantern.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj" />
+    <Project Path="tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Lantern.Feasibility/Lantern.Feasibility.csproj" />
+  </Folder>
+</Solution>

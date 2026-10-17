@@ -1,0 +1,39 @@
+Lantern Sample Plain Text Document
+====================================
+
+This file is a test fixture for the Lantern document extraction feasibility evaluation.
+
+Section 1: English Content
+---------------------------
+
+Lantern is a lightweight, self-hosted full-text search platform for Windows and intranet environments.
+
+It is built on:
+- ASP.NET Core and Blazor for the web interface
+- Meilisearch Community Edition for full-text indexing and search
+- Toxy for document text extraction
+- .NET 10 LTS as the runtime
+
+Section 2: Japanese Content / 日本語コンテンツ
+---------------------------------------------
+
+ランタン（Lantern）は、Windowsおよびイントラネット環境向けの軽量な自己ホスト型全文検索プラットフォームです。
+
+主な特徴：
+- ASP.NET CoreおよびBlazorを使用したWebインターフェース
+- Meilisearch Community Editionによる全文インデックスおよび検索
+- Toxyによるドキュメントテキスト抽出
+- ランタイムとして.NET 10 LTS
+
+Section 3: Known Search Terms
+------------------------------
+
+The following terms are used in extraction verification:
+- "lightweight"
+- "full-text search"
+- "Meilisearch"
+- "Blazor"
+- "全文検索"
+- "軽量"
+
+End of test document.
