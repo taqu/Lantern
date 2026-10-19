@@ -2,8 +2,14 @@
 
 ## Status
 
-This document describes the **intended** architecture of the Lantern full-text search platform.
-The components marked **[Phase 0 only]** are the extent of what is currently implemented.
+Phase 1 provides the Blazor search page and server-side Meilisearch search service.
+Phase 2 adds the shared document model, identity and normalization, bounded indexing,
+task completion and safe rebuilds. See [indexing.md](indexing.md) for the current indexing
+contract, settings and concurrency decisions. The older diagrams below describe the
+initial intended layout. Phase 3 now adds SQLite settings and crawler-definition persistence,
+cookie authentication, and protected Blazor administration pages. See
+[administration.md](administration.md) for provisioning, security, paths and migrations.
+Crawler management workflows and extraction integration remain future work.
 
 ---
 
@@ -145,9 +151,8 @@ Windows x64 Host
 
 | Phase | Focus |
 |-------|-------|
-| 0 | Project bootstrap, dependency feasibility (current) |
+| 0 | Project bootstrap, dependency feasibility |
 | 1 | Search UI prototype — basic search page in Blazor |
-| 2 | Crawler foundation — local filesystem indexing |
-| 3 | Administration and configuration |
-| 4 | Web crawling, scheduling |
-| 5 | Production hardening, Windows service packaging |
+| 2 | Search and indexing foundation |
+| 3 | Administration, SQLite settings and administrator authentication |
+| 4–12 | Extraction, crawlers, scheduling, hardening and packaging (future) |

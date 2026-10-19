@@ -1,0 +1,30 @@
+@page "/admin/crawlers"
+@inject AdministrationService Administration
+@inject ILogger<Crawlers> Logger
+
+<PageTitle>Crawlers · Lantern Administration</PageTitle>
+<h1>Crawlers</h1>
+<p>Crawler configuration and execution are not available in this phase.</p>
+@if (_error) { <p class="alert alert-danger">Crawler definitions could not be loaded.</p> }
+else if (_crawlers.Count > 0)
+{
+    <table class="table">
+        <thead><tr><th>Name</th><th>Type</th><th>Enabled</th><th>Updated (UTC)</th></tr></thead>
+        <tbody>
+            @foreach (var crawler in _crawlers)
+            { <tr><td>@crawler.Name</td><td>@crawler.CrawlerType</td><td>@crawler.Enabled</td><td>@crawler.UpdatedAt.ToUniversalTime().ToString("u")</td></tr> }
+        </tbody>
+    </table>
+}
+else { <p>No crawler definitions have been stored.</p> }
+
+@code {
+    private List<CrawlerDefinition> _crawlers = [];
+    private bool _error;
+    protected override async Task OnInitializedAsync()
+    {
+        try { _crawlers = await Administration.GetCrawlersAsync(); }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        { Logger.LogError("Unable to load crawler definitions ({ErrorType})", ex.GetType().Name); _error = true; }
+    }
+}

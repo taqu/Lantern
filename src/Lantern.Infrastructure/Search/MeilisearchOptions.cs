@@ -11,4 +11,7 @@ public sealed class MeilisearchOptions
 
     public string Url { get; set; } = "http://127.0.0.1:7700";
     public string IndexName { get; set; } = "lantern-documents";
+    public int MaxDocumentsPerBatch { get; set; } = 100;
+    public int MaxPayloadBytesPerBatch { get; set; } = 4 * 1024 * 1024;
+    public int TaskTimeoutSeconds { get; set; } = 60;
 }

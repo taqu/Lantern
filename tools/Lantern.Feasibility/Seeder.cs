@@ -1,4 +1,7 @@
 using Meilisearch;
+using Lantern.Core.Search;
+using Lantern.Infrastructure.Search;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Lantern.Feasibility;
 
@@ -8,8 +11,6 @@ namespace Lantern.Feasibility;
 internal static class Seeder
 {
     private const string IndexName = "lantern-documents";
-    private const string PrimaryKey = "id";
-    private const double TimeoutMs = 30_000;
 
     public static async Task<bool> RunAsync()
     {
@@ -33,49 +34,15 @@ internal static class Seeder
             var health = await client.HealthAsync();
             Console.WriteLine($"  Meilisearch health: {health.Status}");
 
-            // Delete existing index (idempotent)
-            Console.WriteLine($"  Dropping index '{IndexName}' (if it exists)...");
-            try
-            {
-                var indexes = await client.GetAllIndexesAsync();
-                if (indexes.Results.Any(i => i.Uid == IndexName))
-                {
-                    var deleteTask = await client.DeleteIndexAsync(IndexName);
-                    await client.WaitForTaskAsync(deleteTask.TaskUid, timeoutMs: TimeoutMs);
-                    Console.WriteLine("  Index dropped.");
-                }
-                else
-                {
-                    Console.WriteLine("  Index did not exist, nothing to drop.");
-                }
-            }
-            catch (MeilisearchApiError)
-            {
-                // Index might not exist — that's fine.
-            }
-
-            // Create index
-            Console.WriteLine($"  Creating index '{IndexName}'...");
-            var createTask = await client.CreateIndexAsync(IndexName, PrimaryKey);
-            var createResult = await client.WaitForTaskAsync(createTask.TaskUid, timeoutMs: TimeoutMs);
-            if (createResult.Status != TaskInfoStatus.Succeeded)
-            {
-                Console.Error.WriteLine($"ERROR: Failed to create index. Status: {createResult.Status}");
-                return false;
-            }
-            Console.WriteLine("  Index created.");
-
-            // Add documents
             var documents = BuildSeedDocuments();
-            Console.WriteLine($"  Indexing {documents.Count} documents...");
-            var index = client.Index(IndexName);
-            var addTask = await index.AddDocumentsAsync(documents);
-            var addResult = await client.WaitForTaskAsync(addTask.TaskUid, timeoutMs: TimeoutMs);
-            if (addResult.Status != TaskInfoStatus.Succeeded)
+            var indexing = new MeilisearchIndexingService(client, new MeilisearchOptions { IndexName = IndexName },
+                NullLogger<MeilisearchIndexingService>.Instance);
+            await indexing.UpsertBatchAsync(documents.Select(d => new SearchDocument
             {
-                Console.Error.WriteLine($"ERROR: Failed to index documents. Status: {addResult.Status}");
-                return false;
-            }
+                SourceId = "development-seed", SourceType = d.SourcePath != null ? "file" : "web",
+                Path = d.SourcePath, Uri = d.Url ?? "", Title = d.Title, Content = d.Content,
+                MimeType = d.SourcePath == null ? "text/html" : null
+            }));
 
             Console.WriteLine($"  Successfully indexed {documents.Count} documents into '{IndexName}'.");
             return true;

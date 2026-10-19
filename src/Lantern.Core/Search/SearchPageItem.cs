@@ -9,4 +9,11 @@ public sealed record SearchPageItem(
     string? Url,
     string? Path,
     string? Snippet,
-    string? DocumentType);
+    string? DocumentType,
+    string? SourceId = null,
+    string? SourceType = null,
+    string? Extension = null,
+    string? MimeType = null,
+    long? Size = null,
+    DateTimeOffset? ModifiedAt = null,
+    DateTimeOffset? IndexedAt = null);

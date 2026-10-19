@@ -2,7 +2,11 @@
 
 A lightweight, self-hosted full-text search platform for Windows and intranet environments.
 
-**Current status: Phase 1 — working Blazor search UI connected to Meilisearch.**
+**Current status: Phase 3 — search/indexing foundation and persistent, authenticated administration.**
+
+See [administration setup](docs/administration.md) for HTTPS login, initial account
+provisioning, SQLite paths and migrations, and [indexing](docs/indexing.md) for the
+shared document and indexing APIs. Crawlers and extraction integration are future work.
 
 ---
 

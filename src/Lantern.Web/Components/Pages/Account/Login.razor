@@ -1,0 +1,21 @@
+@page "/account/login"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<PageTitle>Administrator Login · Lantern</PageTitle>
+<h1>Administrator Login</h1>
+@if (Invalid) { <p class="alert alert-danger" role="alert">Sign-in failed. Check your credentials or try again later.</p> }
+<form method="post" action="/account/sign-in" data-enhance="false" style="max-width: 28rem">
+    <AntiforgeryToken />
+    <div class="mb-3">
+        <label class="form-label" for="username">Username</label>
+        <input class="form-control" id="username" name="username" autocomplete="username" maxlength="80" required />
+    </div>
+    <div class="mb-3">
+        <label class="form-label" for="password">Password</label>
+        <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" maxlength="128" required />
+    </div>
+    <button class="btn btn-primary" type="submit">Sign in</button>
+</form>
+
+@code { [SupplyParameterFromQuery] public bool Invalid { get; set; } }

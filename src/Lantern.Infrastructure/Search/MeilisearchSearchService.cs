@@ -15,15 +15,19 @@ public sealed class MeilisearchSearchService : ISearchService
     private readonly MeilisearchClient _client;
     private readonly string _indexName;
     private readonly ILogger<MeilisearchSearchService> _logger;
+    private readonly IDocumentIndexingService _indexing;
 
     public MeilisearchSearchService(
         MeilisearchOptions options,
         string? apiKey,
-        ILogger<MeilisearchSearchService> logger)
+        ILogger<MeilisearchSearchService> logger,
+        IDocumentIndexingService? indexing = null)
     {
         _client = new MeilisearchClient(options.Url, apiKey ?? "");
         _indexName = options.IndexName;
         _logger = logger;
+        _indexing = indexing ?? new MeilisearchIndexingService(_client, options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MeilisearchIndexingService>.Instance);
     }
 
     // -----------------------------------------------------------------------
@@ -43,6 +47,7 @@ public sealed class MeilisearchSearchService : ISearchService
 
         try
         {
+            await _indexing.EnsureIndexAsync(cancellationToken);
             var index = _client.Index(_indexName);
             var searchQuery = new SearchQuery
             {
@@ -56,10 +61,12 @@ public sealed class MeilisearchSearchService : ISearchService
             var items = results.Hits.Select(h => new SearchPageItem(
                 Id: h.Id,
                 Title: string.IsNullOrEmpty(h.Title) ? "(Untitled)" : h.Title,
-                Url: h.Url,
-                Path: h.SourcePath,
+                Url: h.Uri ?? h.Url,
+                Path: h.Path ?? h.SourcePath,
                 Snippet: BuildSnippet(h.Content),
-                DocumentType: h.DocumentType
+                DocumentType: h.Extension?.TrimStart('.').ToUpperInvariant() ?? h.DocumentType ?? h.SourceType?.ToUpperInvariant(),
+                SourceId: h.SourceId, SourceType: h.SourceType, Extension: h.Extension,
+                MimeType: h.MimeType, Size: h.Size, ModifiedAt: h.ModifiedAt, IndexedAt: h.IndexedAt
             )).ToList();
 
             long totalHits = results.EstimatedTotalHits;
@@ -81,6 +88,11 @@ public sealed class MeilisearchSearchService : ISearchService
             _logger.LogError(ex, "HTTP error contacting Meilisearch during SearchPageAsync for query '{Query}'", query);
             throw new SearchException("Could not reach the Meilisearch server.", ex);
         }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+        {
+            _logger.LogError(ex, "Meilisearch index initialization did not complete");
+            throw new SearchException("The search index could not be initialized. Please try again later.", ex);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -92,6 +104,7 @@ public sealed class MeilisearchSearchService : ISearchService
         string query,
         CancellationToken cancellationToken = default)
     {
+        if (indexUid == _indexName) await _indexing.EnsureIndexAsync(cancellationToken);
         var index = _client.Index(indexUid);
         var searchable = await index.SearchAsync<MeiliDocument>(query, cancellationToken: cancellationToken);
         var results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
@@ -110,6 +123,10 @@ public sealed class MeilisearchSearchService : ISearchService
                 SourcePath = h.SourcePath,
                 Url = h.Url,
                 DocumentType = h.DocumentType,
+                Uri = h.Uri ?? h.Url ?? "", Path = h.Path ?? h.SourcePath,
+                SourceId = h.SourceId ?? "", SourceType = h.SourceType ?? "",
+                Extension = h.Extension, MimeType = h.MimeType, Size = h.Size,
+                ModifiedAt = h.ModifiedAt, IndexedAt = h.IndexedAt,
             }).ToList()
         };
     }
@@ -119,24 +136,15 @@ public sealed class MeilisearchSearchService : ISearchService
         SearchDocument doc,
         CancellationToken cancellationToken = default)
     {
-        var index = _client.Index(indexUid);
-        var meili = new MeiliDocument
-        {
-            Id = doc.Id,
-            Title = doc.Title,
-            Content = doc.Content,
-            SourcePath = doc.SourcePath,
-            Url = doc.Url,
-            DocumentType = doc.DocumentType,
-        };
-        var task = await index.AddDocumentsAsync(new[] { meili }, cancellationToken: cancellationToken);
-        await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TaskTimeoutMs);
+        if (indexUid != _indexName) throw new ArgumentException("Use the configured indexing service for document writes.", nameof(indexUid));
+        await _indexing.UpsertAsync(doc, cancellationToken);
     }
 
     public async Task DeleteIndexAsync(string indexUid, CancellationToken cancellationToken = default)
     {
         var task = await _client.DeleteIndexAsync(indexUid, cancellationToken);
-        await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TaskTimeoutMs);
+        var result = await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TaskTimeoutMs, cancellationToken: cancellationToken);
+        if (result.Status != TaskInfoStatus.Succeeded) throw new InvalidOperationException($"Delete index task {task.TaskUid} failed: {result.Error}");
     }
 
     // -----------------------------------------------------------------------
@@ -162,6 +170,15 @@ public sealed class MeilisearchSearchService : ISearchService
 /// </summary>
 internal sealed class MeiliDocument
 {
+    public string? Uri { get; set; }
+    public string? Path { get; set; }
+    public string? SourceId { get; set; }
+    public string? SourceType { get; set; }
+    public string? Extension { get; set; }
+    public string? MimeType { get; set; }
+    public long? Size { get; set; }
+    public DateTimeOffset? ModifiedAt { get; set; }
+    public DateTimeOffset IndexedAt { get; set; }
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
     public string Content { get; set; } = "";

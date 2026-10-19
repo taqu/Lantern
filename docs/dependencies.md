@@ -5,6 +5,18 @@ including their licenses and redistribution considerations.
 
 This is a technical assessment only. It is not a substitute for legal advice.
 
+## Phase 3 additions
+
+Administration uses Microsoft.EntityFrameworkCore.Sqlite and Design 10.0.13, plus
+Microsoft.AspNetCore.Mvc.Testing 10.0.13 for HTTP tests. The SQLitePCLRaw bundle is pinned
+to 3.0.5, bringing the native SQLite 3.53.4 package instead of the vulnerable older native
+dependency selected by the original provider defaults. EF Core and ASP.NET Core packages
+use MIT licensing; SQLitePCLRaw's package metadata specifies Apache-2.0. The existing
+feasibility tool's ImageSharp warnings remain outside this phase.
+
+Package records: [EF SQLite](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite/10.0.13),
+[SQLitePCLRaw bundle](https://www.nuget.org/packages/SQLitePCLRaw.bundle_e_sqlite3/3.0.5).
+
 ---
 
 ## Meilisearch Community Edition (binary)

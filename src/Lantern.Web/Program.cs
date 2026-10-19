@@ -1,11 +1,14 @@
 using Lantern.Infrastructure;
 using Lantern.Web.Components;
+using Lantern.Web.Administration;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddLanternInfrastructure(builder.Configuration);
+builder.AddLanternAdministration();
 
 var app = builder.Build();
+await app.InitializeAdministrationAsync();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -15,8 +18,14 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
+app.MapAdministrationEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();
+
+public partial class Program;

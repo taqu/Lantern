@@ -1,6 +1,7 @@
+@inject Lantern.Core.Administration.IApplicationSettingsService ApplicationSettings
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/search">Lantern</a>
+        <a class="navbar-brand" href="/search">@_displayName</a>
     </div>
 </div>
 
@@ -13,5 +14,17 @@
                 <span aria-hidden="true">&#128269;</span> Search
             </NavLink>
         </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/admin">Administration</NavLink>
+        </div>
     </nav>
 </div>
+
+@code {
+    private string _displayName = "Lantern";
+    protected override async Task OnInitializedAsync()
+    {
+        try { _displayName = (await ApplicationSettings.GetAsync()).DisplayName; }
+        catch (Microsoft.Data.Sqlite.SqliteException) { }
+    }
+}

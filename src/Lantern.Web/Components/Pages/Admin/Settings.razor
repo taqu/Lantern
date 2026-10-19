@@ -1,0 +1,50 @@
+@page "/admin/settings"
+@using Lantern.Infrastructure.Search
+@using Microsoft.Extensions.Options
+@inject AdministrationService Administration
+@inject IOptions<MeilisearchOptions> SearchOptions
+@inject ILogger<Settings> Logger
+
+<PageTitle>Settings · Lantern Administration</PageTitle>
+<h1>Settings</h1>
+@if (Saved) { <p class="alert alert-success" role="status">Settings saved.</p> }
+@if (Error != null) { <p class="alert alert-danger" role="alert">@(Error == "validation" ? "Enter an application name of 1–80 characters without control characters." : "Settings could not be saved. Check database access.")</p> }
+@if (_settings == null)
+{
+    <p role="alert">Settings could not be loaded. Check database access.</p>
+}
+else
+{
+    <form method="post" action="/admin/actions/settings" data-enhance="false" class="my-4" style="max-width: 36rem">
+        <AntiforgeryToken />
+        <label class="form-label" for="displayName">Application display name</label>
+        <input class="form-control" id="displayName" name="displayName" value="@_settings.DisplayName" required maxlength="80" />
+        <p class="form-text">Updates the application name in navigation immediately.</p>
+        <button class="btn btn-primary" type="submit">Save settings</button>
+    </form>
+}
+<h2 class="h5">Deployment configuration (read-only)</h2>
+<p>Change these values in server configuration and restart Lantern.</p>
+<dl class="row">
+    <dt class="col-sm-3">Search endpoint</dt><dd class="col-sm-9">@Endpoint</dd>
+    <dt class="col-sm-3">Active index</dt><dd class="col-sm-9">@SearchOptions.Value.IndexName</dd>
+    <dt class="col-sm-3">Meilisearch API key</dt><dd class="col-sm-9">@(string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("MEILI_API_KEY")) ? "Not configured" : "Configured")</dd>
+</dl>
+<form method="post" action="/admin/actions/test-connection" data-enhance="false">
+    <AntiforgeryToken />
+    <button class="btn btn-outline-primary" type="submit">Test connection</button>
+</form>
+
+@code {
+    [SupplyParameterFromQuery] public bool Saved { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    private ApplicationSetting? _settings;
+    private string Endpoint => Uri.TryCreate(SearchOptions.Value.Url, UriKind.Absolute, out var uri)
+        ? uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.SafeUnescaped) : "Invalid endpoint configuration";
+    protected override async Task OnInitializedAsync()
+    {
+        try { _settings = await Administration.GetSettingsAsync(); }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        { Logger.LogError("Unable to load application settings ({ErrorType})", ex.GetType().Name); }
+    }
+}

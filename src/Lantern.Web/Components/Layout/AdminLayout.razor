@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+
+<div class="container py-4">
+    <header class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+        <a class="h4 text-decoration-none" href="/admin">Lantern Administration</a>
+        <form method="post" action="/admin/actions/logout" data-enhance="false">
+            <AntiforgeryToken />
+            <a href="/search" class="me-3">Public search</a>
+            <button class="btn btn-outline-secondary" type="submit">Sign out</button>
+        </form>
+    </header>
+    <nav class="nav nav-pills gap-2 mb-4" aria-label="Administration">
+        <NavLink class="nav-link" href="/admin" Match="NavLinkMatch.All">Overview</NavLink>
+        <NavLink class="nav-link" href="/admin/crawlers">Crawlers</NavLink>
+        <NavLink class="nav-link" href="/admin/jobs">Jobs</NavLink>
+        <NavLink class="nav-link" href="/admin/index">Search Index</NavLink>
+        <NavLink class="nav-link" href="/admin/settings">Settings</NavLink>
+        <NavLink class="nav-link" href="/admin/system">System Status</NavLink>
+    </nav>
+    <main>@Body</main>
+</div>
