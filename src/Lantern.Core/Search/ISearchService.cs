@@ -11,6 +11,9 @@ public interface ISearchService
         int page,
         CancellationToken cancellationToken = default);
 
+    // Phase 3.5: hybrid search over chunk index
+    Task<SearchPageResponse> SearchChunksPageAsync(string query, int page, SearchMode mode, CancellationToken cancellationToken = default);
+
     // Phase 0 methods kept for compatibility
     Task<SearchResult> SearchAsync(string indexUid, string query, CancellationToken cancellationToken = default);
     Task IndexDocumentAsync(string indexUid, SearchDocument document, CancellationToken cancellationToken = default);

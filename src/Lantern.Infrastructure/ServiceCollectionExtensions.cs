@@ -19,6 +19,10 @@ public static class ServiceCollectionExtensions
     {
         services.Configure<MeilisearchOptions>(
             configuration.GetSection(MeilisearchOptions.SectionName));
+        services.Configure<ChunkingOptions>(
+            configuration.GetSection(ChunkingOptions.SectionName));
+        services.Configure<HybridSearchOptions>(
+            configuration.GetSection(HybridSearchOptions.SectionName));
 
         services.AddSingleton(sp => new Meilisearch.MeilisearchClient(
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value.Url,
@@ -37,8 +41,13 @@ public static class ServiceCollectionExtensions
             var options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
             var apiKey = Environment.GetEnvironmentVariable("MEILI_API_KEY") ?? "";
             var logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
-            return new MeilisearchSearchService(options, apiKey, logger, sp.GetRequiredService<IDocumentIndexingService>());
+            var hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
+            return new MeilisearchSearchService(options, apiKey, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);
         });
+
+        services.AddSingleton<ITextChunkingService, TextChunkingService>();
+        services.AddSingleton<IChunkIndexingService, MeilisearchChunkIndexingService>();
+        services.AddSingleton<EmbedderConfigurationService>();
 
         return services;
     }

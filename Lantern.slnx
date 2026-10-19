@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Lantern.Core/Lantern.Core.csproj" />
     <Project Path="src/Lantern.Crawling/Lantern.Crawling.csproj" />
+    <Project Path="src/Lantern.Embedding/Lantern.Embedding.csproj" />
     <Project Path="src/Lantern.Infrastructure/Lantern.Infrastructure.csproj" />
     <Project Path="src/Lantern.Web/Lantern.Web.csproj" />
   </Folder>

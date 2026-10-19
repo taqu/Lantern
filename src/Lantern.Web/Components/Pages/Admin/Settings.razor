@@ -1,8 +1,10 @@
 @page "/admin/settings"
+@using Lantern.Core.Search
 @using Lantern.Infrastructure.Search
 @using Microsoft.Extensions.Options
 @inject AdministrationService Administration
 @inject IOptions<MeilisearchOptions> SearchOptions
+@inject IOptions<HybridSearchOptions> HybridSearchOptions
 @inject ILogger<Settings> Logger
 
 <PageTitle>Settings · Lantern Administration</PageTitle>
@@ -34,6 +36,15 @@ else
     <AntiforgeryToken />
     <button class="btn btn-outline-primary" type="submit">Test connection</button>
 </form>
+
+<h2 class="h5 mt-4">Hybrid search configuration (read-only)</h2>
+<p>Change these values in server configuration and restart Lantern.</p>
+<dl class="row">
+    <dt class="col-sm-3">Hybrid search</dt><dd class="col-sm-9">@(HybridSearchOptions.Value.Enabled ? "Enabled" : "Disabled")</dd>
+    <dt class="col-sm-3">Embedder name</dt><dd class="col-sm-9">@HybridSearchOptions.Value.EmbedderName</dd>
+    <dt class="col-sm-3">Chunk index</dt><dd class="col-sm-9">@HybridSearchOptions.Value.ChunkIndexName</dd>
+    <dt class="col-sm-3">Semantic ratio</dt><dd class="col-sm-9">@HybridSearchOptions.Value.SemanticRatio.ToString("P0")</dd>
+</dl>
 
 @code {
     [SupplyParameterFromQuery] public bool Saved { get; set; }
