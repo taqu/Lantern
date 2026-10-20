@@ -48,6 +48,11 @@ public sealed class DirectoryEnumerator(ILogger<DirectoryEnumerator> logger)
                     logger.LogDebug("Skipping inaccessible file {File}: {Message}", file, ex.Message);
                     continue;
                 }
+                if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    logger.LogDebug("Skipping reparse point (file): {File}", file);
+                    continue;
+                }
                 if (!filter.ShouldIncludeFile(info)) continue;
                 string canonical;
                 try { canonical = DocumentIdentity.FilePath(file); }
@@ -82,6 +87,12 @@ public sealed class DirectoryEnumerator(ILogger<DirectoryEnumerator> logger)
                 catch { continue; }
 
                 if (filter.ShouldExcludeDirectory(dirInfo)) continue;
+
+                if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    logger.LogDebug("Skipping reparse point (directory): {Directory}", subdir);
+                    continue;
+                }
 
                 string canonicalSub;
                 try { canonicalSub = DocumentIdentity.FilePath(subdir); }

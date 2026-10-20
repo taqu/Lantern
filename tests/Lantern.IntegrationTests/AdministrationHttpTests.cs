@@ -140,6 +140,45 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Redirect, (await replay.GetAsync("/admin/settings")).StatusCode);
     }
 
+    [Fact]
+    public async Task SecurityHeadersAreSetOnEveryResponse()
+    {
+        foreach (string path in new[] { "/search", "/account/login" })
+        {
+            HttpResponseMessage response = await _client.GetAsync(path);
+            Assert.True(response.Headers.TryGetValues("X-Content-Type-Options", out IEnumerable<string>? xct));
+            Assert.Equal("nosniff", xct!.First());
+            Assert.True(response.Headers.TryGetValues("X-Frame-Options", out IEnumerable<string>? xfo));
+            Assert.Equal("DENY", xfo!.First());
+            Assert.True(response.Headers.TryGetValues("Referrer-Policy", out IEnumerable<string>? rp));
+            Assert.Equal("strict-origin-when-cross-origin", rp!.First());
+            Assert.True(response.Headers.TryGetValues("X-Permitted-Cross-Domain-Policies", out IEnumerable<string>? xpcdp));
+            Assert.Equal("none", xpcdp!.First());
+        }
+    }
+
+    [Fact]
+    public async Task OpenRedirect_LoginReturnUrlIsRestricted()
+    {
+        // A login redirect to an external URL must be rejected.
+        HttpResponseMessage response = await _client.GetAsync("/account/login?returnUrl=https%3A%2F%2Fevil.example.com%2F");
+        // The page must load (not redirect externally), and the dangerous returnUrl must not appear in the redirect.
+        Assert.NotEqual(HttpStatusCode.Redirect, response.StatusCode);
+        string html = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("evil.example.com", html);
+    }
+
+    [Fact]
+    public async Task CategoryAdminRequiresAuthentication()
+    {
+        foreach (string path in new[] { "/admin/categories", "/admin/categories/create" })
+        {
+            HttpResponseMessage response = await _client.GetAsync(path);
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.StartsWith("https://localhost/account/login", response.Headers.Location!.ToString());
+        }
+    }
+
     private sealed class AdministrationFactory(string directory) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
