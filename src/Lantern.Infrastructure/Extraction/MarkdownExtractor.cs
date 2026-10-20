@@ -13,7 +13,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         rawText = TextNormalizer.NormalizeAll(rawText);
 
         string title = ExtractMarkdownTitle(input, rawText);
-        var blocks = ParseMarkdownBlocks(rawText);
+        IReadOnlyList<ExtractedBlock> blocks = ParseMarkdownBlocks(rawText);
 
         return new ExtractedDocument
         {
@@ -27,7 +27,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
     {
         if (input.FilePath != null)
         {
-            var bytes = await File.ReadAllBytesAsync(input.FilePath, ct);
+            byte[] bytes = await File.ReadAllBytesAsync(input.FilePath, ct);
             return DetectAndDecode(bytes);
         }
         if (input.Stream != null)
@@ -50,10 +50,10 @@ public sealed class MarkdownExtractor : IDocumentExtractor
     private static string ExtractMarkdownTitle(DocumentInput input, string text)
     {
         // Try to find first H1
-        var lines = text.Split('\n');
-        foreach (var line in lines)
+        string[] lines = text.Split('\n');
+        foreach (string line in lines)
         {
-            var trimmed = line.TrimStart();
+            string trimmed = line.TrimStart();
             if (trimmed.StartsWith("# "))
                 return trimmed[2..].Trim();
         }
@@ -65,7 +65,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
         if (string.IsNullOrWhiteSpace(text)) return [];
 
         var blocks = new List<ExtractedBlock>();
-        var lines = text.Split('\n');
+        string[] lines = text.Split('\n');
         string? currentSection = null;
         var currentParagraph = new StringBuilder();
         int currentOffset = 0;
@@ -73,13 +73,13 @@ public sealed class MarkdownExtractor : IDocumentExtractor
 
         void FlushParagraph()
         {
-            var content = currentParagraph.ToString().Trim();
+            string content = currentParagraph.ToString().Trim();
             if (!string.IsNullOrEmpty(content))
                 blocks.Add(new ExtractedBlock(BlockType.Paragraph, content, SectionTitle: currentSection, StartOffset: currentOffset, EndOffset: currentOffset + content.Length));
             currentParagraph.Clear();
         }
 
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             string trimmed = line.TrimStart();
 
@@ -112,7 +112,7 @@ public sealed class MarkdownExtractor : IDocumentExtractor
             {
                 // Code fence delimiter - include first line content if any
                 if (currentParagraph.Length == 0) currentOffset = offset;
-                var codeContent = trimmed[3..].Trim();
+                string codeContent = trimmed[3..].Trim();
                 if (!string.IsNullOrEmpty(codeContent))
                 {
                     if (currentParagraph.Length > 0) currentParagraph.Append('\n');

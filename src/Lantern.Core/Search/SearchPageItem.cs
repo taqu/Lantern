@@ -16,4 +16,5 @@ public sealed record SearchPageItem(
     string? MimeType = null,
     long? Size = null,
     DateTimeOffset? ModifiedAt = null,
-    DateTimeOffset? IndexedAt = null);
+    DateTimeOffset? IndexedAt = null,
+    string[]? CategoryIds = null);

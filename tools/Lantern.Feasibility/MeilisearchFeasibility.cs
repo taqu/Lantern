@@ -41,7 +41,7 @@ internal sealed class MeilisearchFeasibility
         Console.Write("  [1] Health check ... ");
         try
         {
-            var health = await client.HealthAsync();
+            MeiliSearchHealth health = await client.HealthAsync();
             if (health.Status != "available")
             {
                 Fail($"Unexpected status: {health.Status}");
@@ -60,10 +60,10 @@ internal sealed class MeilisearchFeasibility
         Console.Write("  [2] Ensure clean index ... ");
         try
         {
-            var existingIndexes = await client.GetAllIndexesAsync();
+            ResourceResults<IEnumerable<Meilisearch.Index>> existingIndexes = await client.GetAllIndexesAsync();
             if (existingIndexes.Results.Any(i => i.Uid == IndexUid))
             {
-                var deleteTask = await client.DeleteIndexAsync(IndexUid);
+                TaskInfo deleteTask = await client.DeleteIndexAsync(IndexUid);
                 await client.WaitForTaskAsync(deleteTask.TaskUid, timeoutMs: TimeoutMs);
             }
             Pass();
@@ -78,7 +78,7 @@ internal sealed class MeilisearchFeasibility
         Console.Write("  [3] Create index ... ");
         try
         {
-            var createTask = await client.CreateIndexAsync(IndexUid, "id");
+            TaskInfo createTask = await client.CreateIndexAsync(IndexUid, "id");
             await client.WaitForTaskAsync(createTask.TaskUid, timeoutMs: TimeoutMs);
             Pass();
         }
@@ -88,11 +88,11 @@ internal sealed class MeilisearchFeasibility
             return false;
         }
 
-        var index = client.Index(IndexUid);
+        Meilisearch.Index index = client.Index(IndexUid);
 
         // 4. Index documents
         Console.Write("  [4] Index documents ... ");
-        var documents = new[]
+        SampleDocument[] documents = new[]
         {
             new SampleDocument { Id = 1, Title = "Lantern Introduction",  Content = "Lantern is a lightweight full-text search platform." },
             new SampleDocument { Id = 2, Title = "Document Extraction",   Content = "PDF and Office documents can be indexed." },
@@ -101,7 +101,7 @@ internal sealed class MeilisearchFeasibility
 
         try
         {
-            var addTask = await index.AddDocumentsAsync(documents);
+            TaskInfo addTask = await index.AddDocumentsAsync(documents);
             await client.WaitForTaskAsync(addTask.TaskUid, timeoutMs: TimeoutMs);
             Pass();
         }
@@ -116,7 +116,7 @@ internal sealed class MeilisearchFeasibility
         Console.Write("  [5] Search for \"lightweight\" ... ");
         try
         {
-            var results = await index.SearchAsync<SampleDocument>("lightweight");
+            ISearchable<SampleDocument> results = await index.SearchAsync<SampleDocument>("lightweight");
             if (results.Hits.Count == 0)
             {
                 Fail("No results returned");
@@ -124,7 +124,7 @@ internal sealed class MeilisearchFeasibility
                 return false;
             }
 
-            var hit = results.Hits.FirstOrDefault(h => h.Id == 1);
+            SampleDocument? hit = results.Hits.FirstOrDefault(h => h.Id == 1);
             if (hit == null)
             {
                 Fail($"Expected document id=1 in results, got ids: {string.Join(", ", results.Hits.Select(h => h.Id))}");
@@ -145,7 +145,7 @@ internal sealed class MeilisearchFeasibility
         Console.Write("  [6] Search for \"indexed\" ... ");
         try
         {
-            var results = await index.SearchAsync<SampleDocument>("indexed");
+            ISearchable<SampleDocument> results = await index.SearchAsync<SampleDocument>("indexed");
             Console.Write($"(found {results.Hits.Count} hit(s)) ");
             Pass();
         }
@@ -178,7 +178,7 @@ internal sealed class MeilisearchFeasibility
     {
         try
         {
-            var deleteTask = await client.DeleteIndexAsync(IndexUid);
+            TaskInfo deleteTask = await client.DeleteIndexAsync(IndexUid);
             await client.WaitForTaskAsync(deleteTask.TaskUid, timeoutMs: TimeoutMs);
         }
         catch

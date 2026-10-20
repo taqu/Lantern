@@ -19,4 +19,7 @@ public sealed class SearchChunk
     [JsonPropertyName("endOffset")] public int? EndOffset { get; init; }
     [JsonPropertyName("uri")] public string Uri { get; init; } = "";
     [JsonPropertyName("extension")] public string? Extension { get; init; }
+    [JsonPropertyName("startLine")] public int? StartLine { get; init; }
+    [JsonPropertyName("endLine")] public int? EndLine { get; init; }
+    [JsonPropertyName("categoryIds")] public string[] CategoryIds { get; init; } = [];
 }

@@ -31,10 +31,10 @@ internal static class Seeder
         try
         {
             // Verify connectivity
-            var health = await client.HealthAsync();
+            MeiliSearchHealth health = await client.HealthAsync();
             Console.WriteLine($"  Meilisearch health: {health.Status}");
 
-            var documents = BuildSeedDocuments();
+            List<SeedDocument> documents = BuildSeedDocuments();
             var indexing = new MeilisearchIndexingService(client, new MeilisearchOptions { IndexName = IndexName },
                 NullLogger<MeilisearchIndexingService>.Instance);
             await indexing.UpsertBatchAsync(documents.Select(d => new SearchDocument

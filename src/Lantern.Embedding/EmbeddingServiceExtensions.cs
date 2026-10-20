@@ -12,7 +12,7 @@ public static class EmbeddingServiceExtensions
         services.AddSingleton<EmbeddingServiceStatus>();
         services.AddSingleton<InferenceQueue>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<EmbeddingOptions>>().Value;
+            EmbeddingOptions options = sp.GetRequiredService<IOptions<EmbeddingOptions>>().Value;
             return new InferenceQueue(options.QueueCapacity);
         });
         services.AddHostedService<InferenceWorker>();

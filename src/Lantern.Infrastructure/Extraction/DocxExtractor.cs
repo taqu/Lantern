@@ -32,7 +32,7 @@ public sealed class DocxExtractor : IDocumentExtractor
         try
         {
             using var doc = WordprocessingDocument.Open(stream, isEditable: false);
-            var body = doc.MainDocumentPart?.Document?.Body;
+            Body? body = doc.MainDocumentPart?.Document?.Body;
             if (body == null)
                 return EmptyDocument(input, DocFormat.Docx);
 
@@ -46,7 +46,7 @@ public sealed class DocxExtractor : IDocumentExtractor
             string? docTitle = null;
             try
             {
-                var props = doc.PackageProperties;
+                IPackageProperties? props = doc.PackageProperties;
                 author = props?.Creator;
                 docTitle = props?.Title?.Trim();
                 if (props?.Created is DateTime createdDt) created = new DateTimeOffset(createdDt);
@@ -54,15 +54,15 @@ public sealed class DocxExtractor : IDocumentExtractor
             }
             catch { /* Ignore properties errors */ }
 
-            foreach (var element in body.ChildElements)
+            foreach (DocumentFormat.OpenXml.OpenXmlElement element in body.ChildElements)
             {
                 if (element is Paragraph para)
                 {
-                    var text = GetParagraphText(para);
+                    string text = GetParagraphText(para);
                     if (string.IsNullOrWhiteSpace(text)) continue;
 
                     text = TextNormalizer.Normalize(text.Trim());
-                    var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value ?? "";
+                    string styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value ?? "";
                     bool isHeading = styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) ||
                                      styleId.StartsWith("heading", StringComparison.OrdinalIgnoreCase);
 
@@ -110,9 +110,9 @@ public sealed class DocxExtractor : IDocumentExtractor
     private static string GetParagraphText(Paragraph para)
     {
         var sb = new StringBuilder();
-        foreach (var run in para.Descendants<Run>())
+        foreach (Run run in para.Descendants<Run>())
         {
-            foreach (var text in run.Descendants<Text>())
+            foreach (Text text in run.Descendants<Text>())
                 sb.Append(text.Text);
         }
         return sb.ToString();
@@ -121,9 +121,9 @@ public sealed class DocxExtractor : IDocumentExtractor
     private static string ExtractTableText(Table table)
     {
         var sb = new StringBuilder();
-        foreach (var row in table.Descendants<TableRow>())
+        foreach (TableRow row in table.Descendants<TableRow>())
         {
-            var cells = row.Descendants<TableCell>().Select(c => c.InnerText.Trim());
+            IEnumerable<string> cells = row.Descendants<TableCell>().Select(c => c.InnerText.Trim());
             sb.AppendLine(string.Join(" | ", cells));
         }
         return sb.ToString().Trim();

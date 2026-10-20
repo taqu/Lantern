@@ -43,7 +43,7 @@ public static class TextNormalizer
     // Trim individual lines of trailing whitespace
     public static string TrimLineEnds(string text)
     {
-        var lines = text.Split('\n');
+        string[] lines = text.Split('\n');
         for (int i = 0; i < lines.Length; i++)
             lines[i] = lines[i].TrimEnd();
         return string.Join('\n', lines);

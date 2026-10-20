@@ -42,12 +42,12 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Skip.If(_key == null, "Set MEILI_MASTER_KEY to run against a real Meilisearch instance.");
         await _service.EnsureIndexAsync();
         await _service.EnsureIndexAsync();
-        var index = await _client.GetIndexAsync(_name);
+        Meilisearch.Index index = await _client.GetIndexAsync(_name);
         Assert.Equal("id", index.PrimaryKey);
-        var settings = await index.GetSettingsAsync();
+        Settings settings = await index.GetSettingsAsync();
         Assert.Equal(new[] { "title", "content" }, settings.SearchableAttributes);
         Assert.Equal(new[] { "indexedAt", "modifiedAt", "size" }, settings.SortableAttributes!.Order());
-        Assert.Equal(4, settings.FilterableAttributes!.Count());
+        Assert.Equal(5, settings.FilterableAttributes!.Count());
         await _service.UpsertAsync(Doc(0));
         var reinitialize = new MeilisearchIndexingService(_client, new MeilisearchOptions { IndexName = _name }, NullLogger<MeilisearchIndexingService>.Instance);
         await reinitialize.EnsureIndexAsync();
@@ -55,12 +55,12 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         await _service.UpsertBatchAsync(Enumerable.Range(1, 5).Select(i => Doc(i)));
         await _service.UpsertAsync(Doc(0, "replacement content"));
         Assert.Equal(6L, (await index.GetStatsAsync()).NumberOfDocuments);
-        var health = await new MeilisearchHealthService(_client, new MeilisearchOptions { IndexName = _name }).GetAsync(true);
+        Core.Administration.SearchEngineStatus health = await new MeilisearchHealthService(_client, new MeilisearchOptions { IndexName = _name }).GetAsync(true);
         Assert.True(health.Available);
         Assert.Equal(6L, health.DocumentCount);
         Assert.Equal(_name, health.IndexName);
-        var found = await index.SearchAsync<SearchDocument>("replacement");
-        var hit = Assert.Single(found.Hits);
+        ISearchable<SearchDocument> found = await index.SearchAsync<SearchDocument>("replacement");
+        SearchDocument hit = Assert.Single(found.Hits);
         Assert.Equal("test", hit.SourceId);
         Assert.Equal("https://example.com/0", hit.Uri);
         Assert.Equal("web", hit.SourceType);
@@ -68,7 +68,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         var search = new MeilisearchSearchService(new MeilisearchOptions
         { Url = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", IndexName = _name }, _key,
             NullLogger<MeilisearchSearchService>.Instance, _service);
-        var page = await search.SearchPageAsync("replacement", 1);
+        SearchPageResponse page = await search.SearchPageAsync("replacement", 1);
         Assert.Equal(hit.Uri, Assert.Single(page.Items).Url);
         Assert.Equal("test", page.Items[0].SourceId);
         Assert.Equal("text/html", page.Items[0].MimeType);
@@ -84,7 +84,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Assert.Single((await index.SearchAsync<SearchDocument>("rebuilt")).Hits);
         await _service.UpsertAsync(Doc(11));
         Assert.Equal(2L, (await index.GetStatsAsync()).NumberOfDocuments);
-        var indexes = await _client.GetAllIndexesAsync();
+        ResourceResults<IEnumerable<Meilisearch.Index>> indexes = await _client.GetAllIndexesAsync();
         Assert.DoesNotContain(indexes.Results, i => i.Uid.StartsWith(_name + "-rebuild-", StringComparison.Ordinal));
     }
 
@@ -93,8 +93,8 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
     {
         Skip.If(_key == null, "Set MEILI_MASTER_KEY to run against a real Meilisearch instance.");
         await _service.EnsureIndexAsync();
-        var task = await _client.Index(_name).AddDocumentsAsync(new[] { new { id = "invalid id with spaces" } });
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.WaitAsync(task.TaskUid, "invalid document"));
+        TaskInfo task = await _client.Index(_name).AddDocumentsAsync(new[] { new { id = "invalid id with spaces" } });
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.WaitAsync(task.TaskUid, "invalid document"));
         Assert.Contains(task.TaskUid.ToString(), error.Message);
         Assert.Contains("invalid_document_id", error.Message);
     }

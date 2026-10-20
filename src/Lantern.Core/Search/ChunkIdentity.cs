@@ -9,7 +9,7 @@ public static class ChunkIdentity
     // Note: index-based IDs can change when earlier content is inserted.
     public static string Generate(string documentId, int chunkIndex)
     {
-        var components = new[] { documentId, chunkIndex.ToString() };
+        string[] components = new[] { documentId, chunkIndex.ToString() };
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(components);
         return Convert.ToHexStringLower(SHA256.HashData(bytes));
     }

@@ -1,7 +1,10 @@
 using Lantern.Core.Administration;
+using Lantern.Core.Crawling;
 using Lantern.Core.Extraction;
+using Lantern.Core.Jobs;
 using Lantern.Core.Search;
 using Lantern.Infrastructure.Extraction;
+using Lantern.Infrastructure.Persistence;
 using Lantern.Infrastructure.Search;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,10 +43,10 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ISearchService>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            var apiKey = Environment.GetEnvironmentVariable("MEILI_API_KEY") ?? "";
-            var logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
-            var hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
+            MeilisearchOptions options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
+            string apiKey = Environment.GetEnvironmentVariable("MEILI_API_KEY") ?? "";
+            ILogger<MeilisearchSearchService> logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
+            HybridSearchOptions hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
             return new MeilisearchSearchService(options, apiKey, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);
         });
 
@@ -61,9 +64,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDocumentExtractor, DocxExtractor>();
         services.AddSingleton<IDocumentExtractor, XlsxExtractor>();
         services.AddSingleton<IDocumentExtractor, PptxExtractor>();
+        services.AddSingleton<IDocumentExtractor, GeneralTextExtractor>();
+        services.AddSingleton<EncodingDetector>();
         services.AddSingleton<DocumentExtractionDispatcher>();
         services.AddSingleton<StructureAwareChunker>();
         services.AddSingleton<IDocumentProcessingService, DocumentProcessingService>();
+
+        services.AddSingleton<ICrawlStateRepository, CrawlStateRepository>();
+        services.AddSingleton<ICrawlerJobRepository, CrawlerJobRepository>();
+        services.AddSingleton<ICrawlerScheduleRepository, CrawlerScheduleRepository>();
+        services.AddSingleton<ICrawledUrlStateRepository, CrawledUrlStateRepository>();
+        services.AddSingleton<ISearchCategoryRepository, SearchCategoryRepository>();
+        services.AddSingleton<ICrawlerCategoryResolver, CrawlerCategoryResolver>();
 
         return services;
     }

@@ -13,7 +13,7 @@ public sealed class TaskCompletionTests
         using var http = new HttpClient(new ProcessingTaskHandler()) { BaseAddress = new Uri("http://localhost:7700") };
         var service = new MeilisearchIndexingService(new MeilisearchClient(http, ""),
             new MeilisearchOptions { TaskTimeoutSeconds = 1 }, NullLogger<MeilisearchIndexingService>.Instance);
-        var error = await Assert.ThrowsAsync<TimeoutException>(() => service.WaitAsync(7, "upsert"));
+        TimeoutException error = await Assert.ThrowsAsync<TimeoutException>(() => service.WaitAsync(7, "upsert"));
         Assert.Contains("7", error.Message);
         Assert.Contains("upsert", error.Message);
     }

@@ -39,7 +39,7 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
         if (_rawClient == null) return;
         try
         {
-            var task = await _rawClient.DeleteIndexAsync(IndexName);
+            TaskInfo task = await _rawClient.DeleteIndexAsync(IndexName);
             await _rawClient.WaitForTaskAsync(task.TaskUid, timeoutMs: TimeoutMs);
         }
         catch
@@ -63,21 +63,21 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
         // Drop any leftover index
         try
         {
-            var indexes = await _rawClient!.GetAllIndexesAsync();
+            ResourceResults<IEnumerable<Meilisearch.Index>> indexes = await _rawClient!.GetAllIndexesAsync();
             if (indexes.Results.Any(i => i.Uid == IndexName))
             {
-                var del = await _rawClient.DeleteIndexAsync(IndexName);
+                TaskInfo del = await _rawClient.DeleteIndexAsync(IndexName);
                 await _rawClient.WaitForTaskAsync(del.TaskUid, timeoutMs: TimeoutMs);
             }
         }
         catch { }
 
         // Create fresh
-        var create = await _rawClient!.CreateIndexAsync(IndexName, "id");
+        TaskInfo create = await _rawClient!.CreateIndexAsync(IndexName, "id");
         await _rawClient.WaitForTaskAsync(create.TaskUid, timeoutMs: TimeoutMs);
 
-        var index = _rawClient.Index(IndexName);
-        var add = await index.AddDocumentsAsync(documents);
+        Meilisearch.Index index = _rawClient.Index(IndexName);
+        TaskInfo add = await index.AddDocumentsAsync(documents);
         await _rawClient.WaitForTaskAsync(add.TaskUid, timeoutMs: TimeoutMs);
     }
 
@@ -93,8 +93,8 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
         };
         await EnsureIndexReadyAsync(docs);
 
-        var service = CreateService();
-        var response = await service.SearchPageAsync("lightweight", 1);
+        MeilisearchSearchService service = CreateService();
+        SearchPageResponse response = await service.SearchPageAsync("lightweight", 1);
 
         Assert.NotNull(response);
         Assert.NotEmpty(response.Items);
@@ -108,9 +108,9 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
     {
         Skip.If(_masterKey == null, "MEILI_MASTER_KEY not set — skipping integration test.");
 
-        var service = CreateService();
+        MeilisearchSearchService service = CreateService();
 
-        var response = await service.SearchPageAsync("", 1);
+        SearchPageResponse response = await service.SearchPageAsync("", 1);
 
         Assert.NotNull(response);
         Assert.Empty(response.Items);
@@ -122,8 +122,8 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
     {
         Skip.If(_masterKey == null, "MEILI_MASTER_KEY not set — skipping integration test.");
 
-        var service = CreateService();
-        var response = await service.SearchPageAsync("   ", 1);
+        MeilisearchSearchService service = CreateService();
+        SearchPageResponse response = await service.SearchPageAsync("   ", 1);
 
         Assert.NotNull(response);
         Assert.Empty(response.Items);
@@ -146,10 +146,10 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
         }).ToArray();
         await EnsureIndexReadyAsync(docs);
 
-        var service = CreateService();
+        MeilisearchSearchService service = CreateService();
 
-        var page1 = await service.SearchPageAsync("platform", 1);
-        var page2 = await service.SearchPageAsync("platform", 2);
+        SearchPageResponse page1 = await service.SearchPageAsync("platform", 1);
+        SearchPageResponse page2 = await service.SearchPageAsync("platform", 2);
 
         Assert.Equal(1, page1.Page);
         Assert.Equal(2, page2.Page);

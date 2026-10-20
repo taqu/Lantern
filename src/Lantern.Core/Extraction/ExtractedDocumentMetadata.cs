@@ -8,4 +8,5 @@ public sealed record ExtractedDocumentMetadata(
     DocumentFormat Format = DocumentFormat.Unknown,
     int? PageCount = null,
     int? SlideCount = null,
-    IReadOnlyList<string>? WorksheetNames = null);
+    IReadOnlyList<string>? WorksheetNames = null,
+    string? DetectedEncoding = null);

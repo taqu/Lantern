@@ -25,7 +25,7 @@ public sealed class AdministrationModelTests
     public void CrawlerValidationPreservesStableIdentityAndUtc()
     {
         var crawler = new CrawlerDefinition { Name = "  Documents  ", CrawlerType = "web", CreatedAt = DateTimeOffset.Now };
-        var id = crawler.Id;
+        Guid id = crawler.Id;
         crawler.Validate();
         Assert.Equal(id, crawler.Id);
         Assert.Equal("Documents", crawler.Name);

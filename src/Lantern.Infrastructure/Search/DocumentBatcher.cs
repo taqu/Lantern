@@ -13,9 +13,9 @@ public static class DocumentBatcher
         if (maxCount <= 0 || maxBytes < 2) throw new ArgumentOutOfRangeException(nameof(maxCount));
         var batch = new List<T>();
         long bytes = 2;
-        foreach (var item in items)
+        foreach (T? item in items)
         {
-            var size = JsonSerializer.SerializeToUtf8Bytes(item, JsonOptions).Length;
+            int size = JsonSerializer.SerializeToUtf8Bytes(item, JsonOptions).Length;
             if ((long)size + 2 > maxBytes) throw new ArgumentException($"An individual item exceeds the {maxBytes}-byte batch payload limit.");
             if (batch.Count == maxCount || bytes + size + (batch.Count == 0 ? 0 : 1) > maxBytes)
             {

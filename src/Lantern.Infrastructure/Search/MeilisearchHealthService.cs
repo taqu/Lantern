@@ -19,13 +19,13 @@ public sealed class MeilisearchHealthService(MeilisearchClient client, Meilisear
             deadline.CancelAfter(TimeSpan.FromSeconds(5));
             try
             {
-                var health = await client.HealthAsync(deadline.Token);
+                MeiliSearchHealth health = await client.HealthAsync(deadline.Token);
                 if (health.Status != "available") _cached = new(false, options.IndexName, null, "The search engine reports an unhealthy state.");
                 else
                 {
                     try
                     {
-                        var stats = await client.Index(options.IndexName).GetStatsAsync(deadline.Token);
+                        IndexStats stats = await client.Index(options.IndexName).GetStatsAsync(deadline.Token);
                         _cached = new(true, options.IndexName, stats.NumberOfDocuments, "Connected");
                     }
                     catch (MeilisearchApiError ex) when (ex.Code == "index_not_found")

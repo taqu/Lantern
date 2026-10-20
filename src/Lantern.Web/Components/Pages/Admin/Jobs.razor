@@ -1,4 +1,161 @@
 @page "/admin/jobs"
+@rendermode InteractiveServer
+@using Lantern.Core.Jobs
+@using Lantern.Crawling.Jobs
+@inject CrawlerJobService JobService
+@inject ILogger<JobDetails> Logger
+
 <PageTitle>Jobs · Lantern Administration</PageTitle>
-<h1>Jobs</h1>
-<p>Crawler execution management is not available in this phase.</p>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Jobs</h1>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-auto">
+        <select class="form-select form-select-sm" @onchange="OnStatusFilterChanged">
+            <option value="">All statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="Running">Running</option>
+            <option value="Completed">Completed</option>
+            <option value="Failed">Failed</option>
+            <option value="Canceled">Canceled</option>
+        </select>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_loadError)
+{
+    <p class="alert alert-danger" role="alert">Could not load jobs. Check database access.</p>
+}
+else if (_items.Count == 0)
+{
+    <div class="border rounded p-5 text-center">
+        <p class="lead mb-0">No jobs found.</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Crawler</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Duration</th>
+                    <th>Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var job in _items)
+                {
+                    <tr>
+                        <td><a href="/admin/jobs/@job.Id">@job.CrawlerName</a></td>
+                        <td>@job.Trigger</td>
+                        <td><span class="badge @StatusBadgeClass(job.Status)">@job.Status</span></td>
+                        <td class="text-nowrap">@job.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@FormatDuration(job)</td>
+                        <td>@FormatResult(job)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_totalCount > PageSize)
+    {
+        <nav aria-label="Job list pagination">
+            <ul class="pagination pagination-sm">
+                <li class="page-item @(_page == 1 ? "disabled" : "")">
+                    <button class="page-link" @onclick="PrevPage">Previous</button>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">@_page / @TotalPages</span>
+                </li>
+                <li class="page-item @(_page >= TotalPages ? "disabled" : "")">
+                    <button class="page-link" @onclick="NextPage">Next</button>
+                </li>
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private const int PageSize = 25;
+
+    private List<CrawlerJob> _items = [];
+    private int _totalCount;
+    private int _page = 1;
+    private JobStatus? _statusFilter;
+    private bool _loading = true;
+    private bool _loadError;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _loadError = false;
+        try
+        {
+            (IReadOnlyList<CrawlerJob> items, int total) = await JobService.GetJobsPagedAsync(_page, PageSize, status: _statusFilter);
+            _items = [.. items];
+            _totalCount = total;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load jobs");
+            _loadError = true;
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        _statusFilter = string.IsNullOrEmpty(e.Value?.ToString())
+            ? null
+            : Enum.TryParse<JobStatus>(e.Value.ToString(), out JobStatus s) ? s : null;
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task PrevPage() { if (_page > 1) { _page--; await LoadAsync(); } }
+    private async Task NextPage() { if (_page < TotalPages) { _page++; await LoadAsync(); } }
+
+    private static string StatusBadgeClass(JobStatus s) => s switch
+    {
+        JobStatus.Running => "bg-primary",
+        JobStatus.Pending => "bg-secondary",
+        JobStatus.Completed => "bg-success",
+        JobStatus.Failed => "bg-danger",
+        JobStatus.Canceled => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private static string FormatDuration(CrawlerJob job)
+    {
+        if (job.Duration is not TimeSpan d) return "—";
+        return d.TotalHours >= 1
+            ? $"{(int)d.TotalHours}h {d.Minutes}m"
+            : d.TotalMinutes >= 1
+                ? $"{(int)d.TotalMinutes}m {d.Seconds}s"
+                : $"{d.TotalSeconds:F1}s";
+    }
+
+    private static string FormatResult(CrawlerJob job) => job.Status switch
+    {
+        JobStatus.Pending => "—",
+        JobStatus.Running => $"{job.Progress.ProcessedFiles} processed",
+        JobStatus.Completed => job.Progress.FailedFiles > 0 ? "Completed with errors" : "Completed",
+        JobStatus.Failed => "Failed",
+        JobStatus.Canceled => "Canceled",
+        _ => "—"
+    };
+}

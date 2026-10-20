@@ -20,7 +20,7 @@ public sealed class HtmlExtractor : IDocumentExtractor
         RemoveNonContentNodes(htmlDoc);
 
         string title = ExtractTitle(htmlDoc, input);
-        var blocks = ExtractBlocks(htmlDoc);
+        IReadOnlyList<ExtractedBlock> blocks = ExtractBlocks(htmlDoc);
 
         return new ExtractedDocument
         {
@@ -34,7 +34,7 @@ public sealed class HtmlExtractor : IDocumentExtractor
     {
         if (input.FilePath != null)
         {
-            var bytes = await File.ReadAllBytesAsync(input.FilePath, ct);
+            byte[] bytes = await File.ReadAllBytesAsync(input.FilePath, ct);
             return DecodeHtml(bytes);
         }
         if (input.Stream != null)
@@ -56,33 +56,33 @@ public sealed class HtmlExtractor : IDocumentExtractor
 
     private static void RemoveNonContentNodes(HtmlDocument htmlDoc)
     {
-        var removeXPaths = new[]
+        string[] removeXPaths = new[]
         {
             "//script", "//style", "//nav", "//footer", "//header",
             "//noscript", "//iframe", "//object", "//embed",
             "//comment()"
         };
-        foreach (var xpath in removeXPaths)
+        foreach (string? xpath in removeXPaths)
         {
-            var nodes = htmlDoc.DocumentNode.SelectNodes(xpath);
+            HtmlNodeCollection? nodes = htmlDoc.DocumentNode.SelectNodes(xpath);
             if (nodes != null)
-                foreach (var node in nodes.ToList())
+                foreach (HtmlNode? node in nodes.ToList())
                     node.Remove();
         }
     }
 
     private static string ExtractTitle(HtmlDocument htmlDoc, DocumentInput input)
     {
-        var titleNode = htmlDoc.DocumentNode.SelectSingleNode("//title");
+        HtmlNode? titleNode = htmlDoc.DocumentNode.SelectSingleNode("//title");
         if (titleNode != null)
         {
-            var t = WebUtility.HtmlDecode(titleNode.InnerText).Trim();
+            string t = WebUtility.HtmlDecode(titleNode.InnerText).Trim();
             if (!string.IsNullOrEmpty(t)) return t;
         }
-        var h1 = htmlDoc.DocumentNode.SelectSingleNode("//h1");
+        HtmlNode? h1 = htmlDoc.DocumentNode.SelectSingleNode("//h1");
         if (h1 != null)
         {
-            var t = WebUtility.HtmlDecode(h1.InnerText).Trim();
+            string t = WebUtility.HtmlDecode(h1.InnerText).Trim();
             if (!string.IsNullOrEmpty(t)) return t;
         }
         return input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Untitled";
@@ -93,14 +93,14 @@ public sealed class HtmlExtractor : IDocumentExtractor
         var blocks = new List<ExtractedBlock>();
         string? currentSection = null;
 
-        var body = htmlDoc.DocumentNode.SelectSingleNode("//body") ?? htmlDoc.DocumentNode;
+        HtmlNode body = htmlDoc.DocumentNode.SelectSingleNode("//body") ?? htmlDoc.DocumentNode;
         WalkNode(body, blocks, ref currentSection);
         return blocks;
     }
 
     private static void WalkNode(HtmlNode node, List<ExtractedBlock> blocks, ref string? currentSection)
     {
-        foreach (var child in node.ChildNodes)
+        foreach (HtmlNode? child in node.ChildNodes)
         {
             string name = child.Name.ToLowerInvariant();
             switch (name)
@@ -133,7 +133,7 @@ public sealed class HtmlExtractor : IDocumentExtractor
                 case "ol":
                 {
                     var sb = new StringBuilder();
-                    foreach (var li in child.ChildNodes.Where(n => n.Name == "li"))
+                    foreach (HtmlNode? li in child.ChildNodes.Where(n => n.Name == "li"))
                     {
                         string liText = WebUtility.HtmlDecode(li.InnerText).Trim();
                         if (!string.IsNullOrEmpty(liText))
@@ -178,9 +178,9 @@ public sealed class HtmlExtractor : IDocumentExtractor
     private static string ExtractTableText(HtmlNode tableNode)
     {
         var sb = new StringBuilder();
-        foreach (var row in tableNode.Descendants("tr"))
+        foreach (HtmlNode? row in tableNode.Descendants("tr"))
         {
-            var cells = row.ChildNodes
+            IEnumerable<string> cells = row.ChildNodes
                 .Where(n => n.Name == "td" || n.Name == "th")
                 .Select(n => WebUtility.HtmlDecode(n.InnerText).Trim());
             sb.AppendLine(string.Join(" | ", cells));

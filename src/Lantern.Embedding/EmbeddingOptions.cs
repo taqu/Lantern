@@ -1,5 +1,8 @@
 namespace Lantern.Embedding;
 
+/// <summary>
+/// Embedding Options
+/// </summary>
 public sealed class EmbeddingOptions
 {
     public const string SectionName = "Embedding";

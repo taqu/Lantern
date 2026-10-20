@@ -31,7 +31,7 @@ public sealed class DocumentNormalizationTests
     [Fact]
     public void NormalizePreservesTextAndDisplayPathAndConvertsMetadata()
     {
-        var doc = DocumentNormalizer.Normalize(new SearchDocument
+        SearchDocument doc = DocumentNormalizer.Normalize(new SearchDocument
         {
             SourceId = "files", SourceType = "file", Path = @"C:\Docs\日本語.TXT",
             Title = "  日本語 Title\0  ", Content = "日本語 English\r\n  punctuation！\t\0next\rline",

@@ -37,7 +37,7 @@ internal static class DocumentGenerator
         try
         {
             using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
-            var mainPart = doc.AddMainDocumentPart();
+            MainDocumentPart mainPart = doc.AddMainDocumentPart();
             mainPart.Document = new DocumentFormat.OpenXml.Wordprocessing.Document(
                 new DocumentFormat.OpenXml.Wordprocessing.Body(
                     // English paragraphs
@@ -72,10 +72,10 @@ internal static class DocumentGenerator
         try
         {
             using var doc = SpreadsheetDocument.Create(path, SpreadsheetDocumentType.Workbook);
-            var workbookPart = doc.AddWorkbookPart();
+            WorkbookPart workbookPart = doc.AddWorkbookPart();
             workbookPart.Workbook = new Workbook();
 
-            var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+            WorksheetPart worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
             var sheetData = new SheetData();
 
             // Header row
@@ -88,7 +88,7 @@ internal static class DocumentGenerator
 
             worksheetPart.Worksheet = new Worksheet(sheetData);
 
-            var sheets = workbookPart.Workbook.AppendChild(new Sheets());
+            Sheets sheets = workbookPart.Workbook.AppendChild(new Sheets());
             sheets.Append(new Sheet
             {
                 Id = workbookPart.GetIdOfPart(worksheetPart),
@@ -112,12 +112,12 @@ internal static class DocumentGenerator
         {
             using var prs = PresentationDocument.Create(path, PresentationDocumentType.Presentation);
 
-            var presentationPart = prs.AddPresentationPart();
+            PresentationPart presentationPart = prs.AddPresentationPart();
             presentationPart.Presentation = new P.Presentation();
 
-            var slideLayoutPart = CreateSlideLayoutPart(presentationPart);
+            SlideLayoutPart slideLayoutPart = CreateSlideLayoutPart(presentationPart);
 
-            var slideContents = new[]
+            (string, string)[] slideContents = new[]
             {
                 ("Lantern Feasibility Test", "This presentation tests PPTX extraction with Toxy."),
                 ("English Content", "Lantern is a lightweight full-text search platform for Windows."),
@@ -128,9 +128,9 @@ internal static class DocumentGenerator
             var slideIds = new SlideIdList();
             uint slideIdBase = 256;
 
-            foreach (var (title, body) in slideContents)
+            foreach ((string title, string body) in slideContents)
             {
-                var slidePart = presentationPart.AddNewPart<SlidePart>();
+                SlidePart slidePart = presentationPart.AddNewPart<SlidePart>();
                 slidePart.Slide = BuildSlide(title, body);
                 slidePart.AddPart(slideLayoutPart);
 
@@ -162,7 +162,7 @@ internal static class DocumentGenerator
     private static DocumentFormat.OpenXml.Wordprocessing.Table MakeTable(string[][] rows)
     {
         var table = new DocumentFormat.OpenXml.Wordprocessing.Table();
-        foreach (var rowData in rows)
+        foreach (string[] rowData in rows)
         {
             var row = new DocumentFormat.OpenXml.Wordprocessing.TableRow();
             foreach (string cellText in rowData)
@@ -200,7 +200,7 @@ internal static class DocumentGenerator
 
     private static SlideLayoutPart CreateSlideLayoutPart(PresentationPart presentationPart)
     {
-        var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
+        SlideMasterPart slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
         slideMasterPart.SlideMaster = new P.SlideMaster();
         slideMasterPart.SlideMaster.AppendChild(
             new P.CommonSlideData(
@@ -228,7 +228,7 @@ internal static class DocumentGenerator
             });
         slideMasterPart.SlideMaster.AppendChild(new P.SlideLayoutIdList());
 
-        var slideLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>();
+        SlideLayoutPart slideLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>();
         slideLayoutPart.SlideLayout = new P.SlideLayout();
         slideLayoutPart.SlideLayout.AppendChild(
             new P.CommonSlideData(
@@ -249,10 +249,10 @@ internal static class DocumentGenerator
 
     private static P.Slide BuildSlide(string title, string body)
     {
-        var titleShape = MakeTextShape(2U, "Title", title,
+        Shape titleShape = MakeTextShape(2U, "Title", title,
             x: 457200, y: 274638, cx: 8229600, cy: 1143000);
 
-        var bodyShape = MakeTextShape(3U, "Content Placeholder", body,
+        Shape bodyShape = MakeTextShape(3U, "Content Placeholder", body,
             x: 457200, y: 1600200, cx: 8229600, cy: 3400200);
 
         var slide = new P.Slide();
@@ -273,7 +273,7 @@ internal static class DocumentGenerator
     private static P.Shape MakeTextShape(uint id, string name, string text,
         long x, long y, long cx, long cy)
     {
-        var lines = text.Split('\n');
+        string[] lines = text.Split('\n');
 
         var textBody = new P.TextBody(
             new A.BodyProperties(),

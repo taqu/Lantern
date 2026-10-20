@@ -46,15 +46,15 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         string indexName = _hybridOptions.ChunkIndexName;
         _logger.LogInformation("Configuring chunk index '{IndexName}'", indexName);
 
-        var task = await _client.CreateIndexAsync(indexName, "id");
+        TaskInfo task = await _client.CreateIndexAsync(indexName, "id");
         await WaitAsync(task.TaskUid, cancellationToken);
 
-        var index = _client.Index(indexName);
+        Meilisearch.Index index = _client.Index(indexName);
 
-        var settingsTask = await index.UpdateSettingsAsync(new Settings
+        TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings
         {
             SearchableAttributes = ["title", "sectionTitle", "content"],
-            FilterableAttributes = ["documentId", "sourceId", "sourceType", "extension"],
+            FilterableAttributes = ["documentId", "sourceId", "sourceType", "extension", "categoryIds"],
             DisplayedAttributes = ["*"]
         });
         await WaitAsync(settingsTask.TaskUid, cancellationToken);
@@ -64,11 +64,11 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     public async Task UpsertChunksAsync(IEnumerable<SearchChunk> chunks, CancellationToken cancellationToken = default)
     {
         await EnsureIndexAsync(cancellationToken);
-        var index = _client.Index(_hybridOptions.ChunkIndexName);
+        Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         var batch = chunks.ToList();
         if (batch.Count == 0) return;
 
-        var task = await index.AddDocumentsAsync(batch, primaryKey: "id");
+        TaskInfo task = await index.AddDocumentsAsync(batch, primaryKey: "id");
         await WaitAsync(task.TaskUid, cancellationToken);
         _logger.LogDebug("Upserted {Count} chunks", batch.Count);
     }
@@ -76,9 +76,9 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     public async Task DeleteChunksByDocumentAsync(string documentId, CancellationToken cancellationToken = default)
     {
         await EnsureIndexAsync(cancellationToken);
-        var index = _client.Index(_hybridOptions.ChunkIndexName);
+        Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         var query = new Meilisearch.QueryParameters.DeleteDocumentsQuery { Filter = $"documentId = \"{documentId}\"" };
-        var task = await index.DeleteDocumentsAsync(query, cancellationToken);
+        TaskInfo task = await index.DeleteDocumentsAsync(query, cancellationToken);
         await WaitAsync(task.TaskUid, cancellationToken);
     }
 
@@ -97,8 +97,8 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     public async Task DeleteChunkAsync(string chunkId, CancellationToken cancellationToken = default)
     {
         await EnsureIndexAsync(cancellationToken);
-        var index = _client.Index(_hybridOptions.ChunkIndexName);
-        var task = await index.DeleteOneDocumentAsync(chunkId);
+        Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
+        TaskInfo task = await index.DeleteOneDocumentAsync(chunkId);
         await WaitAsync(task.TaskUid, cancellationToken);
     }
 

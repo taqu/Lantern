@@ -91,7 +91,7 @@ public sealed class DocumentProcessingService : IDocumentProcessingService
                     "No extractable text found in document");
             }
 
-            var chunks = _chunker.Chunk(
+            IReadOnlyList<SearchChunk> chunks = _chunker.Chunk(
                 documentId, title, uri, input.Extension, sourceId, sourceType, extracted.Blocks);
 
             _logger.LogInformation("Processed {FileName}: {Blocks} blocks -> {Chunks} chunks",

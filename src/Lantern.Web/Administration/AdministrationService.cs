@@ -13,7 +13,7 @@ public sealed class AdministrationService(
 {
     private async Task DemandAsync()
     {
-        var user = accessor.HttpContext?.User;
+        System.Security.Claims.ClaimsPrincipal? user = accessor.HttpContext?.User;
         if (user == null || !(await authorization.AuthorizeAsync(user, null, AdministratorAuthentication.Policy)).Succeeded)
             throw new UnauthorizedAccessException("Administrator authorization is required.");
     }
@@ -30,14 +30,14 @@ public sealed class AdministrationService(
     public async Task<bool> DatabaseAvailableAsync(CancellationToken ct = default)
     {
         await DemandAsync();
-        await using var db = await factory.CreateDbContextAsync(ct);
+        await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         return await db.Database.CanConnectAsync(ct);
     }
 
     public async Task<List<CrawlerDefinition>> GetCrawlersAsync(CancellationToken ct = default)
     {
         await DemandAsync();
-        await using var db = await factory.CreateDbContextAsync(ct);
+        await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         return await db.CrawlerDefinitions.AsNoTracking().OrderBy(c => c.Name).ToListAsync(ct);
     }
 }

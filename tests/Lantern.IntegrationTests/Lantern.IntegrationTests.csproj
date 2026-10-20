@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lantern.Core\Lantern.Core.csproj" />
+    <ProjectReference Include="..\..\src\Lantern.Crawling\Lantern.Crawling.csproj" />
     <ProjectReference Include="..\..\src\Lantern.Infrastructure\Lantern.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Lantern.Web\Lantern.Web.csproj" />
   </ItemGroup>

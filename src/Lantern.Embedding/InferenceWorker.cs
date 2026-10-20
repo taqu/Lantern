@@ -72,7 +72,7 @@ public sealed class InferenceWorker : BackgroundService
 
         try
         {
-            await foreach (var request in _queue.Reader.ReadAllAsync(stoppingToken))
+            await foreach (EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken))
             {
                 if (request.CancellationToken.IsCancellationRequested)
                 {
@@ -82,14 +82,14 @@ public sealed class InferenceWorker : BackgroundService
 
                 try
                 {
-                    var embeddings = client.GetEmbedding(request.Text, overlap: 0);
+                    List<float[]> embeddings = client.GetEmbedding(request.Text, overlap: 0);
                     if (embeddings.Count == 0)
                     {
                         request.Result.TrySetException(new InvalidOperationException("Empty embedding result"));
                         continue;
                     }
 
-                    var vector = embeddings[0]; // Use first chunk's embedding
+                    float[] vector = embeddings[0]; // Use first chunk's embedding
 
                     if (vector.Length != ExpectedDimensions)
                     {
@@ -100,7 +100,7 @@ public sealed class InferenceWorker : BackgroundService
 
                     // Validate finite values
                     bool hasNonFinite = false;
-                    foreach (var f in vector)
+                    foreach (float f in vector)
                     {
                         if (!float.IsFinite(f)) { hasNonFinite = true; break; }
                     }
@@ -141,7 +141,7 @@ public sealed class InferenceWorker : BackgroundService
         {
             try
             {
-                await foreach (var request in _queue.Reader.ReadAllAsync(stoppingToken))
+                await foreach (EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken))
                 {
                     request.Result.TrySetException(new InvalidOperationException(message));
                 }

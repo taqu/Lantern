@@ -31,7 +31,7 @@ public sealed class EmbedderConfigurationService
 
         _logger.LogInformation("Configuring REST embedder '{EmbedderName}' on index '{IndexName}'", embedderName, indexName);
 
-        var index = _client.Index(indexName);
+        Meilisearch.Index index = _client.Index(indexName);
 
         var embedders = new Dictionary<string, Embedder>
         {
@@ -49,7 +49,7 @@ public sealed class EmbedderConfigurationService
 
         try
         {
-            var task = await index.UpdateEmbeddersAsync(embedders, cancellationToken);
+            TaskInfo task = await index.UpdateEmbeddersAsync(embedders, cancellationToken);
             await WaitAsync(task.TaskUid, cancellationToken);
             _logger.LogInformation("Embedder '{EmbedderName}' configured on index '{IndexName}'", embedderName, indexName);
         }

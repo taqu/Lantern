@@ -20,18 +20,18 @@ public sealed class XlsxExtractor : IDocumentExtractor
             throw new ArgumentException("XlsxExtractor requires FilePath");
 
         var context = new ParserContext(filePath);
-        var parser = ParserFactory.CreateSpreadsheet(context);
+        ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
         if (parser == null)
             throw new InvalidOperationException($"No Toxy spreadsheet parser for {input.Extension}");
 
-        var spreadsheet = parser.Parse();
+        ToxySpreadsheet spreadsheet = parser.Parse();
         if (spreadsheet?.Tables == null)
             return EmptyDocument(input, DocFormat.Xlsx);
 
         var blocks = new List<ExtractedBlock>();
         var worksheetNames = new List<string>();
 
-        foreach (var table in spreadsheet.Tables)
+        foreach (ToxyTable? table in spreadsheet.Tables)
         {
             string sheetName = table.Name ?? "Sheet";
             worksheetNames.Add(sheetName);
@@ -43,7 +43,7 @@ public sealed class XlsxExtractor : IDocumentExtractor
             sb.AppendLine($"[{sheetName}]");
 
             bool hasContent = false;
-            foreach (var row in table.Rows)
+            foreach (ToxyRow? row in table.Rows)
             {
                 if (row?.Cells == null) continue;
                 var cellValues = row.Cells

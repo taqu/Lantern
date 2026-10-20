@@ -25,14 +25,14 @@ public sealed class SearchQueryValidatorTests
     [Fact]
     public void IsValid_ExactMaxLength_ReturnsTrue()
     {
-        var query = new string('a', SearchQueryValidator.MaxQueryLength);
+        string query = new string('a', SearchQueryValidator.MaxQueryLength);
         Assert.True(SearchQueryValidator.IsValid(query));
     }
 
     [Fact]
     public void IsValid_ExceedsMaxLength_ReturnsFalse()
     {
-        var query = new string('a', SearchQueryValidator.MaxQueryLength + 1);
+        string query = new string('a', SearchQueryValidator.MaxQueryLength + 1);
         Assert.False(SearchQueryValidator.IsValid(query));
     }
 

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Lantern.Core\Lantern.Core.csproj" />
+    <ProjectReference Include="..\Lantern.Crawling\Lantern.Crawling.csproj" />
     <ProjectReference Include="..\Lantern.Embedding\Lantern.Embedding.csproj" />
     <ProjectReference Include="..\Lantern.Infrastructure\Lantern.Infrastructure.csproj" />
   </ItemGroup>

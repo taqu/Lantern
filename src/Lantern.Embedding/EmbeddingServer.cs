@@ -31,16 +31,16 @@ public sealed class EmbeddingServer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var url = $"http://{_options.ListenAddress}:{_options.Port}";
+        string url = $"http://{_options.ListenAddress}:{_options.Port}";
         _logger.LogInformation("Starting embedding server on {Url}", url);
 
-        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
             Args = new[] { "--urls", url }
         });
         builder.Logging.ClearProviders(); // Avoid log duplication
 
-        var app = builder.Build();
+        WebApplication app = builder.Build();
 
         app.MapPost("/embed", (Delegate)HandleEmbedAsync);
         app.MapGet("/health", (Delegate)HandleHealth);
@@ -86,14 +86,14 @@ public sealed class EmbeddingServer : BackgroundService
         cts.CancelAfter(TimeSpan.FromSeconds(_options.RequestTimeoutSeconds));
 
         var item = new EmbeddingRequestItem(request.Text, tcs, cts.Token);
-        var enqueued = await _queue.TryEnqueueAsync(item, TimeSpan.FromSeconds(5), cts.Token);
+        bool enqueued = await _queue.TryEnqueueAsync(item, TimeSpan.FromSeconds(5), cts.Token);
 
         if (!enqueued)
             return Results.StatusCode(503); // Queue full
 
         try
         {
-            var vector = await tcs.Task.WaitAsync(cts.Token);
+            float[] vector = await tcs.Task.WaitAsync(cts.Token);
             return Results.Ok(new EmbedResponse(vector));
         }
         catch (OperationCanceledException)

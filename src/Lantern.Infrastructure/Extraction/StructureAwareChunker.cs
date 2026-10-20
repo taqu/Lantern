@@ -26,18 +26,18 @@ public sealed class StructureAwareChunker
         IReadOnlyList<ExtractedBlock> blocks,
         ChunkingOptions? options = null)
     {
-        var opts = options ?? _defaultOptions;
+        ChunkingOptions opts = options ?? _defaultOptions;
         if (blocks.Count == 0) return [];
 
         var chunks = new List<SearchChunk>();
         int chunkIndex = 0;
 
         // Group blocks so page/slide/sheet boundaries prevent merging
-        var groups = GroupBlocks(blocks);
+        List<List<ExtractedBlock>> groups = GroupBlocks(blocks);
 
-        foreach (var group in groups)
+        foreach (List<ExtractedBlock> group in groups)
         {
-            var groupChunks = ChunkGroup(
+            List<SearchChunk> groupChunks = ChunkGroup(
                 documentId, title, uri, extension, sourceId, sourceType,
                 group, opts, ref chunkIndex);
             chunks.AddRange(groupChunks);
@@ -54,10 +54,10 @@ public sealed class StructureAwareChunker
 
         for (int i = 0; i < blocks.Count; i++)
         {
-            var block = blocks[i];
+            ExtractedBlock block = blocks[i];
             if (current.Count > 0)
             {
-                var prev = current[^1];
+                ExtractedBlock prev = current[^1];
                 // Start new group on page/slide/sheet boundary change
                 bool newPage = block.PageNumber.HasValue && prev.PageNumber.HasValue && block.PageNumber != prev.PageNumber;
                 bool newSlide = block.SlideNumber.HasValue && prev.SlideNumber.HasValue && block.SlideNumber != prev.SlideNumber;
@@ -91,6 +91,8 @@ public sealed class StructureAwareChunker
         var buffer = new StringBuilder();
         string? bufferSection = null;
         int bufferStart = 0;
+        int? bufferStartLine = null;
+        int? bufferEndLine = null;
 
         // Use a local (non-ref) counter so local function can capture it
         int localChunkIndex = chunkIndex;
@@ -115,13 +117,17 @@ public sealed class StructureAwareChunker
                 SlideNumber = slideNumber,
                 SheetName = sheetName,
                 Uri = uri,
-                Extension = extension
+                Extension = extension,
+                StartLine = bufferStartLine,
+                EndLine = bufferEndLine
             });
             buffer.Clear();
             bufferSection = null;
+            bufferStartLine = null;
+            bufferEndLine = null;
         }
 
-        foreach (var block in group)
+        foreach (ExtractedBlock block in group)
         {
             if (block.Type == BlockType.Heading)
             {
@@ -150,6 +156,9 @@ public sealed class StructureAwareChunker
             if (block.PageNumber.HasValue) pageNumber = block.PageNumber;
             if (block.SlideNumber.HasValue) slideNumber = block.SlideNumber;
             if (block.SheetName != null) sheetName = block.SheetName;
+            // Track line range across buffer
+            if (block.StartLine.HasValue && bufferStartLine == null) bufferStartLine = block.StartLine;
+            if (block.EndLine.HasValue) bufferEndLine = block.EndLine;
 
             int blockTokens = _textChunker.CountTokens(blockText);
 
@@ -158,8 +167,8 @@ public sealed class StructureAwareChunker
                 // Flush current buffer first
                 FlushBuffer();
                 // Split oversized block using text chunker
-                var subChunks = _textChunker.Chunk(blockText, opts);
-                foreach (var sc in subChunks)
+                IReadOnlyList<TextChunk> subChunks = _textChunker.Chunk(blockText, opts);
+                foreach (TextChunk sc in subChunks)
                 {
                     string subId = ChunkIdentity.Generate(documentId, localChunkIndex);
                     chunks.Add(new SearchChunk
@@ -190,12 +199,16 @@ public sealed class StructureAwareChunker
                 FlushBuffer();
                 bufferSection = currentSection;
                 bufferStart = block.StartOffset ?? 0;
+                bufferStartLine = block.StartLine;
+                bufferEndLine = block.EndLine;
             }
 
             if (buffer.Length == 0)
             {
                 bufferSection = currentSection;
                 bufferStart = block.StartOffset ?? 0;
+                bufferStartLine = block.StartLine;
+                bufferEndLine = block.EndLine;
             }
             else
             {

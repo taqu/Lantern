@@ -19,11 +19,11 @@ public sealed class PptxExtractor : IDocumentExtractor
             throw new ArgumentException("PptxExtractor requires FilePath");
 
         var context = new ParserContext(filePath);
-        var parser = ParserFactory.CreateSlideshow(context);
+        ISlideshowParser parser = ParserFactory.CreateSlideshow(context);
         if (parser == null)
             throw new InvalidOperationException($"No Toxy slideshow parser for {input.Extension}");
 
-        var slideshow = parser.Parse();
+        ToxySlideshow slideshow = parser.Parse();
         if (slideshow?.Slides == null)
             return EmptyDocument(input);
 
@@ -32,7 +32,7 @@ public sealed class PptxExtractor : IDocumentExtractor
 
         for (int i = 0; i < slideshow.Slides.Count; i++)
         {
-            var slide = slideshow.Slides[i];
+            ToxySlide slide = slideshow.Slides[i];
             int slideNumber = i + 1;
             if (slide?.Texts == null || slide.Texts.Count == 0) continue;
 

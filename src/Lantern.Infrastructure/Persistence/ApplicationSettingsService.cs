@@ -7,7 +7,7 @@ public sealed class ApplicationSettingsService(IDbContextFactory<LanternDbContex
 {
     public async Task<ApplicationSetting> GetAsync(CancellationToken cancellationToken = default)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken);
+        await using LanternDbContext db = await factory.CreateDbContextAsync(cancellationToken);
         return await db.ApplicationSettings.AsNoTracking().SingleOrDefaultAsync(cancellationToken) ?? new ApplicationSetting();
     }
 
@@ -15,8 +15,8 @@ public sealed class ApplicationSettingsService(IDbContextFactory<LanternDbContex
     {
         ArgumentNullException.ThrowIfNull(settings);
         settings.Validate();
-        await using var db = await factory.CreateDbContextAsync(cancellationToken);
-        var current = await db.ApplicationSettings.SingleOrDefaultAsync(cancellationToken);
+        await using LanternDbContext db = await factory.CreateDbContextAsync(cancellationToken);
+        ApplicationSetting? current = await db.ApplicationSettings.SingleOrDefaultAsync(cancellationToken);
         if (current == null) db.ApplicationSettings.Add(new ApplicationSetting { DisplayName = settings.DisplayName });
         else current.DisplayName = settings.DisplayName;
         await db.SaveChangesAsync(cancellationToken);

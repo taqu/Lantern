@@ -28,15 +28,15 @@ public sealed class ExtractionTests
 
     private static string? GetSamplePath(string filename)
     {
-        var dir = FindSamplesDir();
+        string? dir = FindSamplesDir();
         if (dir == null) return null;
-        var path = Path.Combine(dir, filename);
+        string path = Path.Combine(dir, filename);
         return File.Exists(path) ? path : null;
     }
 
     private static StructureAwareChunker CreateChunker()
     {
-        var options = Options.Create(new ChunkingOptions { TargetTokens = 512, MaxTokens = 768, OverlapTokens = 64 });
+        IOptions<ChunkingOptions> options = Options.Create(new ChunkingOptions { TargetTokens = 512, MaxTokens = 768, OverlapTokens = 64 });
         var textChunker = new TextChunkingService(options);
         return new StructureAwareChunker(textChunker, options);
     }
@@ -44,12 +44,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task PlainText_ExtractsContent()
     {
-        var path = GetSamplePath("sample.txt");
+        string? path = GetSamplePath("sample.txt");
         if (path == null) return; // Skip if no fixture
 
         var extractor = new PlainTextExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
         Assert.True(result.Blocks.Sum(b => b.Text.Length) > 0);
@@ -59,12 +59,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task PlainText_HasTitle()
     {
-        var path = GetSamplePath("sample.txt");
+        string? path = GetSamplePath("sample.txt");
         if (path == null) return;
 
         var extractor = new PlainTextExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Title);
         Assert.Equal("sample", result.Title); // filename without extension
@@ -73,15 +73,15 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Html_ExtractsTextWithoutMarkup()
     {
-        var path = GetSamplePath("sample.html");
+        string? path = GetSamplePath("sample.html");
         if (path == null) return;
 
         var extractor = new HtmlExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
-        var allText = string.Join(" ", result.Blocks.Select(b => b.Text));
+        string allText = string.Join(" ", result.Blocks.Select(b => b.Text));
         Assert.DoesNotContain("<script", allText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<style", allText, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(DocFormat.Html, result.Metadata.Format);
@@ -90,12 +90,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Docx_ExtractsContentWithBlocks()
     {
-        var path = GetSamplePath("sample.docx");
+        string? path = GetSamplePath("sample.docx");
         if (path == null) return;
 
         var extractor = new DocxExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
         Assert.True(result.Blocks.Sum(b => b.Text.Length) > 0);
@@ -105,12 +105,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Xlsx_ExtractsSheets()
     {
-        var path = GetSamplePath("sample.xlsx");
+        string? path = GetSamplePath("sample.xlsx");
         if (path == null) return;
 
         var extractor = new XlsxExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
         Assert.NotNull(result.Metadata.WorksheetNames);
@@ -122,12 +122,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Pptx_ExtractsSlides()
     {
-        var path = GetSamplePath("sample.pptx");
+        string? path = GetSamplePath("sample.pptx");
         if (path == null) return;
 
         var extractor = new PptxExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
         Assert.Equal(DocFormat.Pptx, result.Metadata.Format);
@@ -150,15 +150,15 @@ public sealed class ExtractionTests
     [Fact]
     public async Task StructureAwareChunker_ProducesChunksFromTxt()
     {
-        var path = GetSamplePath("sample.txt");
+        string? path = GetSamplePath("sample.txt");
         if (path == null) return;
 
         var extractor = new PlainTextExtractor();
         var input = DocumentInput.FromFile(path);
-        var extracted = await extractor.ExtractAsync(input);
+        ExtractedDocument extracted = await extractor.ExtractAsync(input);
 
-        var chunker = CreateChunker();
-        var chunks = chunker.Chunk("doc-id", "Test Document", "file:///test.txt", ".txt", "test-source", "file", extracted.Blocks);
+        StructureAwareChunker chunker = CreateChunker();
+        IReadOnlyList<SearchChunk> chunks = chunker.Chunk("doc-id", "Test Document", "file:///test.txt", ".txt", "test-source", "file", extracted.Blocks);
 
         Assert.NotEmpty(chunks);
         Assert.All(chunks, c =>
@@ -175,15 +175,15 @@ public sealed class ExtractionTests
     [Fact]
     public async Task StructureAwareChunker_ProducesChunksFromDocx()
     {
-        var path = GetSamplePath("sample.docx");
+        string? path = GetSamplePath("sample.docx");
         if (path == null) return;
 
         var extractor = new DocxExtractor();
         var input = DocumentInput.FromFile(path);
-        var extracted = await extractor.ExtractAsync(input);
+        ExtractedDocument extracted = await extractor.ExtractAsync(input);
 
-        var chunker = CreateChunker();
-        var chunks = chunker.Chunk("test-doc-id", "Test Document", "file:///test.docx", ".docx", "test-source", "file", extracted.Blocks);
+        StructureAwareChunker chunker = CreateChunker();
+        IReadOnlyList<SearchChunk> chunks = chunker.Chunk("test-doc-id", "Test Document", "file:///test.docx", ".docx", "test-source", "file", extracted.Blocks);
 
         Assert.NotEmpty(chunks);
         Assert.All(chunks, c =>
@@ -199,15 +199,15 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Pptx_ChunksPreserveSlideNumbers()
     {
-        var path = GetSamplePath("sample.pptx");
+        string? path = GetSamplePath("sample.pptx");
         if (path == null) return;
 
         var extractor = new PptxExtractor();
         var input = DocumentInput.FromFile(path);
-        var extracted = await extractor.ExtractAsync(input);
+        ExtractedDocument extracted = await extractor.ExtractAsync(input);
 
-        var chunker = CreateChunker();
-        var chunks = chunker.Chunk("doc-id", "Presentation", "file:///test.pptx", ".pptx", "src", "file", extracted.Blocks);
+        StructureAwareChunker chunker = CreateChunker();
+        IReadOnlyList<SearchChunk> chunks = chunker.Chunk("doc-id", "Presentation", "file:///test.pptx", ".pptx", "src", "file", extracted.Blocks);
 
         var chunksWithSlide = chunks.Where(c => c.SlideNumber.HasValue).ToList();
         if (chunksWithSlide.Any())
@@ -217,15 +217,15 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Xlsx_ChunksPreserveSheetNames()
     {
-        var path = GetSamplePath("sample.xlsx");
+        string? path = GetSamplePath("sample.xlsx");
         if (path == null) return;
 
         var extractor = new XlsxExtractor();
         var input = DocumentInput.FromFile(path);
-        var extracted = await extractor.ExtractAsync(input);
+        ExtractedDocument extracted = await extractor.ExtractAsync(input);
 
-        var chunker = CreateChunker();
-        var chunks = chunker.Chunk("doc-id", "Spreadsheet", "file:///test.xlsx", ".xlsx", "src", "file", extracted.Blocks);
+        StructureAwareChunker chunker = CreateChunker();
+        IReadOnlyList<SearchChunk> chunks = chunker.Chunk("doc-id", "Spreadsheet", "file:///test.xlsx", ".xlsx", "src", "file", extracted.Blocks);
 
         if (chunks.Any())
             Assert.All(chunks, c => Assert.NotNull(c.SheetName));
@@ -242,11 +242,11 @@ public sealed class ExtractionTests
         var detector = new DocumentFormatDetector();
         var dispatcher = new DocumentExtractionDispatcher(extractors, detector, NullLogger<DocumentExtractionDispatcher>.Instance);
 
-        var path = GetSamplePath("sample.txt");
+        string? path = GetSamplePath("sample.txt");
         if (path == null) return;
 
         var input = DocumentInput.FromFile(path);
-        var result = await dispatcher.ExtractAsync(input);
+        ExtractedDocument result = await dispatcher.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
     }
@@ -292,12 +292,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Html_ExtractsHeadings()
     {
-        var path = GetSamplePath("sample.html");
+        string? path = GetSamplePath("sample.html");
         if (path == null) return;
 
         var extractor = new HtmlExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         var headings = result.Blocks.Where(b => b.Type == BlockType.Heading).ToList();
         Assert.NotEmpty(headings);
@@ -306,12 +306,12 @@ public sealed class ExtractionTests
     [Fact]
     public async Task Docx_BlocksHaveNonEmptyText()
     {
-        var path = GetSamplePath("sample.docx");
+        string? path = GetSamplePath("sample.docx");
         if (path == null) return;
 
         var extractor = new DocxExtractor();
         var input = DocumentInput.FromFile(path);
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.All(result.Blocks, b => Assert.False(string.IsNullOrWhiteSpace(b.Text)));
     }
@@ -324,7 +324,7 @@ public sealed class ExtractionTests
         var input = DocumentInput.FromStream(ms, ".md", "test.md");
 
         var extractor = new MarkdownExtractor();
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.NotEmpty(result.Blocks);
         Assert.Equal("Hello World", result.Title);
@@ -341,7 +341,7 @@ public sealed class ExtractionTests
         var input = DocumentInput.FromStream(ms, ".txt", "inline.txt");
 
         var extractor = new PlainTextExtractor();
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.True(result.Blocks.Count >= 2);
     }
@@ -354,7 +354,7 @@ public sealed class ExtractionTests
         var input = DocumentInput.FromStream(ms, ".html", "test.html");
 
         var extractor = new HtmlExtractor();
-        var result = await extractor.ExtractAsync(input);
+        ExtractedDocument result = await extractor.ExtractAsync(input);
 
         Assert.Equal("My Page", result.Title);
         Assert.NotEmpty(result.Blocks);
@@ -363,8 +363,8 @@ public sealed class ExtractionTests
     [Fact]
     public async Task StructureAwareChunker_EmptyBlocksReturnsEmpty()
     {
-        var chunker = CreateChunker();
-        var chunks = chunker.Chunk("doc-id", "Title", "uri", ".txt", null, null, []);
+        StructureAwareChunker chunker = CreateChunker();
+        IReadOnlyList<SearchChunk> chunks = chunker.Chunk("doc-id", "Title", "uri", ".txt", null, null, []);
         Assert.Empty(chunks);
     }
 }

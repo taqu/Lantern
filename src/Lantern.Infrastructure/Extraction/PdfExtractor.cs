@@ -54,7 +54,7 @@ public sealed class PdfExtractor : IDocumentExtractor
                 ct.ThrowIfCancellationRequested();
                 try
                 {
-                    var page = pdf.GetPage(pageNum);
+                    UglyToad.PdfPig.Content.Page page = pdf.GetPage(pageNum);
                     string pageText;
                     try
                     {
@@ -69,8 +69,8 @@ public sealed class PdfExtractor : IDocumentExtractor
                     pageText = TextNormalizer.NormalizeAll(pageText ?? string.Empty);
                     if (string.IsNullOrWhiteSpace(pageText)) continue;
 
-                    var paragraphs = pageText.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    foreach (var para in paragraphs)
+                    string[] paragraphs = pageText.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    foreach (string para in paragraphs)
                     {
                         if (!string.IsNullOrWhiteSpace(para))
                             blocks.Add(new ExtractedBlock(BlockType.Paragraph, para.Trim(), PageNumber: pageNum));

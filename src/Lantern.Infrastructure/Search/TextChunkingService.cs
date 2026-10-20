@@ -24,11 +24,11 @@ public sealed class TextChunkingService : ITextChunkingService
 
     public IReadOnlyList<TextChunk> Chunk(string text, ChunkingOptions? options = null)
     {
-        var opts = options ?? _defaultOptions;
+        ChunkingOptions opts = options ?? _defaultOptions;
         if (string.IsNullOrWhiteSpace(text)) return [];
 
         var result = new List<TextChunk>();
-        var segments = SplitIntoSegments(text);
+        List<(string Text, int Offset, string? Section)> segments = SplitIntoSegments(text);
         BuildChunks(segments, opts, result);
         return result;
     }
@@ -39,8 +39,8 @@ public sealed class TextChunkingService : ITextChunkingService
         var segments = new List<(string Text, int Offset, string? Section)>();
         string? currentSection = null;
 
-        var paragraphs = SplitByParagraph(text);
-        foreach (var (para, paraOffset) in paragraphs)
+        List<(string Text, int Offset)> paragraphs = SplitByParagraph(text);
+        foreach ((string para, int paraOffset) in paragraphs)
         {
             if (string.IsNullOrWhiteSpace(para)) continue;
 
@@ -56,7 +56,7 @@ public sealed class TextChunkingService : ITextChunkingService
 
     private static bool IsHeading(string text)
     {
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         return trimmed.StartsWith('#');
     }
 
@@ -92,15 +92,15 @@ public sealed class TextChunkingService : ITextChunkingService
 
         void FlushChunk()
         {
-            var content = currentContent.ToString().Trim();
+            string content = currentContent.ToString().Trim();
             if (string.IsNullOrEmpty(content)) return;
             result.Add(new TextChunk(content, chunkIndex++, currentStart, currentStart + content.Length, currentSection));
             currentContent.Clear();
         }
 
-        foreach (var (text, offset, section) in segments)
+        foreach ((string text, int offset, string section) in segments)
         {
-            var trimmed = text.Trim();
+            string trimmed = text.Trim();
             if (string.IsNullOrEmpty(trimmed)) continue;
 
             int segTokens = CountTokens(trimmed);
@@ -110,10 +110,10 @@ public sealed class TextChunkingService : ITextChunkingService
             {
                 // Flush current and split this large segment into sentences
                 FlushChunk();
-                var sentences = SplitIntoSentences(trimmed, offset);
-                foreach (var (sentence, sentOffset) in sentences)
+                List<(string Text, int Offset)> sentences = SplitIntoSentences(trimmed, offset);
+                foreach ((string sentence, int sentOffset) in sentences)
                 {
-                    var sentTrimmed = sentence.Trim();
+                    string sentTrimmed = sentence.Trim();
                     if (string.IsNullOrEmpty(sentTrimmed)) continue;
                     int sentTokens = CountTokens(sentTrimmed);
                     int bufferedTokens = currentContent.Length > 0 ? CountTokens(currentContent.ToString()) : 0;

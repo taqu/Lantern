@@ -14,7 +14,7 @@ public sealed class PlainTextExtractor : IDocumentExtractor
         text = TextNormalizer.NormalizeAll(text);
 
         string title = ExtractTitle(input, text);
-        var blocks = SplitIntoBlocks(text);
+        IReadOnlyList<ExtractedBlock> blocks = SplitIntoBlocks(text);
 
         return new ExtractedDocument
         {
@@ -28,7 +28,7 @@ public sealed class PlainTextExtractor : IDocumentExtractor
     {
         if (input.FilePath != null)
         {
-            var bytes = await File.ReadAllBytesAsync(input.FilePath, ct);
+            byte[] bytes = await File.ReadAllBytesAsync(input.FilePath, ct);
             return DetectAndDecode(bytes);
         }
         if (input.Stream != null)
@@ -58,7 +58,7 @@ public sealed class PlainTextExtractor : IDocumentExtractor
         if (input.FileName != null)
             return Path.GetFileNameWithoutExtension(input.FileName);
         // Use first non-empty line as title
-        var firstLine = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        string? firstLine = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
         return firstLine?.Length > 80 ? firstLine[..80] : firstLine ?? "Untitled";
     }
 
@@ -66,9 +66,9 @@ public sealed class PlainTextExtractor : IDocumentExtractor
     {
         if (string.IsNullOrWhiteSpace(text)) return [];
         var blocks = new List<ExtractedBlock>();
-        var paragraphs = text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] paragraphs = text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         int offset = 0;
-        foreach (var para in paragraphs)
+        foreach (string para in paragraphs)
         {
             if (!string.IsNullOrWhiteSpace(para))
                 blocks.Add(new ExtractedBlock(BlockType.PlainText, para.Trim(), StartOffset: offset, EndOffset: offset + para.Length));

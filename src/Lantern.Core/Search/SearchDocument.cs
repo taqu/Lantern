@@ -23,4 +23,5 @@ public sealed class SearchDocument
     [JsonIgnore] public string? Url { get; init; }
     [JsonIgnore] public string? DocumentType { get; init; }
     [JsonPropertyName("indexedAt")] public DateTimeOffset IndexedAt { get; init; } = DateTimeOffset.UtcNow;
+    [JsonPropertyName("categoryIds")] public string[] CategoryIds { get; init; } = [];
 }

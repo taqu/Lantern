@@ -2,6 +2,7 @@ using Lantern.Core.Search;
 using Meilisearch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Collections.Generic;
 
 namespace Lantern.Infrastructure.Search;
 
@@ -52,14 +53,14 @@ public sealed class MeilisearchSearchService : ISearchService
         try
         {
             await _indexing.EnsureIndexAsync(cancellationToken);
-            var index = _client.Index(_indexName);
+            Meilisearch.Index index = _client.Index(_indexName);
             var searchQuery = new SearchQuery
             {
                 Limit = PageSize,
                 Offset = offset,
             };
 
-            var searchable = await index.SearchAsync<MeiliDocument>(query, searchQuery, cancellationToken);
+            ISearchable<MeiliDocument> searchable = await index.SearchAsync<MeiliDocument>(query, searchQuery, cancellationToken);
             var results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
 
             var items = results.Hits.Select(h => new SearchPageItem(
@@ -103,10 +104,18 @@ public sealed class MeilisearchSearchService : ISearchService
     // Phase 3.5: hybrid search over chunk index
     // -----------------------------------------------------------------------
 
+    public Task<SearchPageResponse> SearchChunksPageAsync(
+        string query,
+        int page,
+        SearchMode mode,
+        CancellationToken cancellationToken = default)
+        => SearchChunksPageAsync(query, page, mode, null, cancellationToken);
+
     public async Task<SearchPageResponse> SearchChunksPageAsync(
         string query,
         int page,
         SearchMode mode,
+        SearchFilters? filters,
         CancellationToken cancellationToken = default)
     {
         if (!SearchQueryValidator.IsValid(query))
@@ -117,12 +126,23 @@ public sealed class MeilisearchSearchService : ISearchService
 
         try
         {
-            var index = _client.Index(_hybridOptions.ChunkIndexName);
+            Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
             var searchQuery = new SearchQuery
             {
                 Limit = PageSize,
                 Offset = offset,
             };
+
+            // Build filter expression
+            var filterParts = new List<string>();
+            if (!string.IsNullOrEmpty(filters?.CategoryKey))
+                filterParts.Add($"categoryIds = '{EscapeFilterValue(filters.CategoryKey)}'");
+            if (!string.IsNullOrEmpty(filters?.SourceType))
+                filterParts.Add($"sourceType = '{EscapeFilterValue(filters.SourceType)}'");
+            if (!string.IsNullOrEmpty(filters?.Extension))
+                filterParts.Add($"extension = '{EscapeFilterValue(filters.Extension)}'");
+            if (filterParts.Count > 0)
+                searchQuery.Filter = string.Join(" AND ", filterParts);
 
             if (mode == SearchMode.Hybrid && _hybridOptions.Enabled)
             {
@@ -133,7 +153,7 @@ public sealed class MeilisearchSearchService : ISearchService
                 };
             }
 
-            var searchable = await index.SearchAsync<MeiliChunkDocument>(query, searchQuery, cancellationToken);
+            ISearchable<MeiliChunkDocument> searchable = await index.SearchAsync<MeiliChunkDocument>(query, searchQuery, cancellationToken);
             var results = (Meilisearch.SearchResult<MeiliChunkDocument>)searchable;
 
             var items = results.Hits.Select(h => new SearchPageItem(
@@ -144,7 +164,8 @@ public sealed class MeilisearchSearchService : ISearchService
                 Snippet: BuildSnippet(h.Content),
                 DocumentType: h.Extension?.TrimStart('.').ToUpperInvariant(),
                 SourceId: h.SourceId, SourceType: h.SourceType, Extension: h.Extension,
-                MimeType: null, Size: null, ModifiedAt: null, IndexedAt: default
+                MimeType: null, Size: null, ModifiedAt: null, IndexedAt: default,
+                CategoryIds: h.CategoryIds
             )).ToList();
 
             long totalHits = results.EstimatedTotalHits;
@@ -168,6 +189,9 @@ public sealed class MeilisearchSearchService : ISearchService
         }
     }
 
+    private static string EscapeFilterValue(string value) =>
+        value.Replace("'", "\\'");
+
     // -----------------------------------------------------------------------
     // Phase 0: legacy methods
     // -----------------------------------------------------------------------
@@ -178,8 +202,8 @@ public sealed class MeilisearchSearchService : ISearchService
         CancellationToken cancellationToken = default)
     {
         if (indexUid == _indexName) await _indexing.EnsureIndexAsync(cancellationToken);
-        var index = _client.Index(indexUid);
-        var searchable = await index.SearchAsync<MeiliDocument>(query, cancellationToken: cancellationToken);
+        Meilisearch.Index index = _client.Index(indexUid);
+        ISearchable<MeiliDocument> searchable = await index.SearchAsync<MeiliDocument>(query, cancellationToken: cancellationToken);
         var results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
 
         return new SearchResult
@@ -215,8 +239,8 @@ public sealed class MeilisearchSearchService : ISearchService
 
     public async Task DeleteIndexAsync(string indexUid, CancellationToken cancellationToken = default)
     {
-        var task = await _client.DeleteIndexAsync(indexUid, cancellationToken);
-        var result = await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TaskTimeoutMs, cancellationToken: cancellationToken);
+        TaskInfo task = await _client.DeleteIndexAsync(indexUid, cancellationToken);
+        TaskResource result = await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TaskTimeoutMs, cancellationToken: cancellationToken);
         if (result.Status != TaskInfoStatus.Succeeded) throw new InvalidOperationException($"Delete index task {task.TaskUid} failed: {result.Error}");
     }
 
@@ -258,6 +282,7 @@ internal sealed class MeiliDocument
     public string? SourcePath { get; set; }
     public string? Url { get; set; }
     public string? DocumentType { get; set; }
+    public string[]? CategoryIds { get; set; }
 }
 
 /// <summary>
@@ -275,4 +300,5 @@ internal sealed class MeiliChunkDocument
     public string? SectionTitle { get; set; }
     public string? Uri { get; set; }
     public string? Extension { get; set; }
+    public string[]? CategoryIds { get; set; }
 }

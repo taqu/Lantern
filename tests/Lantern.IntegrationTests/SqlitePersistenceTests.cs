@@ -19,7 +19,7 @@ public sealed class SqlitePersistenceTests : IAsyncLifetime
         Directory.CreateDirectory(_directory);
         _services = new ServiceCollection().AddDbContextFactory<LanternDbContext>(options =>
             options.UseSqlite(new SqliteConnectionStringBuilder { DataSource = Path.Combine(_directory, "test.db"), Pooling = false }.ToString())).BuildServiceProvider();
-        await using var db = await Factory.CreateDbContextAsync();
+        await using LanternDbContext db = await Factory.CreateDbContextAsync();
         await db.Database.MigrateAsync();
     }
 
@@ -36,9 +36,9 @@ public sealed class SqlitePersistenceTests : IAsyncLifetime
         Assert.Equal("Lantern", (await service.GetAsync()).DisplayName);
         await service.SaveAsync(new ApplicationSetting { DisplayName = "First" });
         await service.SaveAsync(new ApplicationSetting { DisplayName = "社内 Lantern" });
-        await using (var db = await Factory.CreateDbContextAsync())
+        await using (LanternDbContext db = await Factory.CreateDbContextAsync())
         {
-            Assert.Single(await db.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(6, (await db.Database.GetAppliedMigrationsAsync()).Count());
             Assert.False(db.Database.HasPendingModelChanges());
             await db.Database.MigrateAsync();
         }
@@ -51,9 +51,9 @@ public sealed class SqlitePersistenceTests : IAsyncLifetime
     public async Task CrawlersPersistAndDatabaseConstraintsRejectInvalidData()
     {
         var crawler = new CrawlerDefinition { Name = "Network documents", CrawlerType = "file" };
-        await using (var db = await Factory.CreateDbContextAsync())
+        await using (LanternDbContext db = await Factory.CreateDbContextAsync())
         { db.CrawlerDefinitions.Add(crawler); await db.SaveChangesAsync(); }
-        await using (var db = await Factory.CreateDbContextAsync())
+        await using (LanternDbContext db = await Factory.CreateDbContextAsync())
         {
             Assert.Equal(crawler.Id, (await db.CrawlerDefinitions.SingleAsync()).Id);
             await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlRawAsync(
@@ -72,15 +72,15 @@ public sealed class SqlitePersistenceTests : IAsyncLifetime
         // Existing accounts cannot be taken over with new bootstrap configuration.
         await auth.ProvisionAsync("attacker", "a-different-initial-password");
         Assert.Null(await auth.ValidateAsync("attacker", "a-different-initial-password"));
-        var principal = await auth.ValidateAsync("admin", "a-long-initial-password");
+        System.Security.Claims.ClaimsPrincipal? principal = await auth.ValidateAsync("admin", "a-long-initial-password");
         Assert.NotNull(principal);
         Assert.True(await auth.IsSessionValidAsync(principal));
         await auth.RevokeAsync();
         Assert.False(await auth.IsSessionValidAsync(principal));
-        for (var i = 0; i < 5; i++) Assert.Null(await auth.ValidateAsync("admin", "wrong-password"));
+        for (int i = 0; i < 5; i++) Assert.Null(await auth.ValidateAsync("admin", "wrong-password"));
         Assert.Null(await new AdministratorAuthentication(Factory).ValidateAsync("admin", "a-long-initial-password"));
-        await using var db = await Factory.CreateDbContextAsync();
-        var account = await db.AdministratorAccounts.SingleAsync();
+        await using LanternDbContext db = await Factory.CreateDbContextAsync();
+        AdministratorAccount account = await db.AdministratorAccounts.SingleAsync();
         Assert.NotEqual("a-long-initial-password", account.PasswordHash);
         Assert.NotNull(account.LockedUntil);
     }

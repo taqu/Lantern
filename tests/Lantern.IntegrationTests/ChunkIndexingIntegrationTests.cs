@@ -34,7 +34,7 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
         try
         {
             await _client.GetIndexAsync(_chunkIndex);
-            var task = await _client.DeleteIndexAsync(_chunkIndex);
+            TaskInfo task = await _client.DeleteIndexAsync(_chunkIndex);
             await _client.WaitForTaskAsync(task.TaskUid);
         }
         catch (MeilisearchApiError ex) when (ex.Code == "index_not_found") { }
@@ -47,7 +47,7 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
 
         await _service.EnsureIndexAsync();
 
-        var index = await _client.GetIndexAsync(_chunkIndex);
+        Meilisearch.Index index = await _client.GetIndexAsync(_chunkIndex);
         Assert.Equal(_chunkIndex, index.Uid);
     }
 
@@ -57,7 +57,7 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
         Skip.If(_key == null, "MEILI_MASTER_KEY not set; skipping integration test.");
 
         string docId = ChunkIdentity.Generate("test-doc", 0)[..16];
-        var chunks = new[]
+        SearchChunk[] chunks = new[]
         {
             new SearchChunk
             {
@@ -94,7 +94,7 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
         Skip.If(_key == null, "MEILI_MASTER_KEY not set; skipping integration test.");
 
         string docId = ChunkIdentity.Generate("replace-doc", 0)[..16];
-        var oldChunks = new[]
+        SearchChunk[] oldChunks = new[]
         {
             new SearchChunk
             {
@@ -107,7 +107,7 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
                 ChunkIndex = 0
             }
         };
-        var newChunks = new[]
+        SearchChunk[] newChunks = new[]
         {
             new SearchChunk
             {

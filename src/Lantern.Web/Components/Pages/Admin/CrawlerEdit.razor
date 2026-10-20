@@ -1,0 +1,225 @@
+@page "/admin/crawlers/{Id:guid}/edit"
+@rendermode InteractiveServer
+@using Lantern.Crawling
+@using Lantern.Core.Crawling
+@using Lantern.Core.Administration
+@inject CrawlerManagementService Management
+@inject CategoryManagementService CatService
+@inject PathTestService PathTest
+@inject NavigationManager Nav
+@inject ILogger<CrawlerEdit> Logger
+
+<PageTitle>Edit Crawler · Lantern Administration</PageTitle>
+<h1>Edit Crawler</h1>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_notFound)
+{
+    <p class="alert alert-warning">Crawler not found.</p>
+    <a href="/admin/crawlers">Back to crawlers</a>
+}
+else if (_saveError != null)
+{
+    <div class="alert alert-danger" role="alert">@_saveError</div>
+}
+
+@if (_model != null)
+{
+    @if (_rootPathChanged)
+    {
+        <div class="alert alert-warning" role="alert">
+            <strong>Root path changed.</strong>
+            The original root was <code>@_originalRootPath</code>. Previously indexed documents from the old path remain in the search index.
+            Crawl state records from the old root will no longer be reconciled by future scans from the new root.
+            Confirm by saving.
+        </div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="SaveAsync" class="mt-3" style="max-width:42rem">
+        <DataAnnotationsValidator />
+
+        <div class="mb-3">
+            <label class="form-label" for="name">Name <span class="text-danger" aria-hidden="true">*</span></label>
+            <InputText id="name" class="form-control" @bind-Value="_model.Name" aria-required="true" />
+            <ValidationMessage For="() => _model.Name" class="text-danger small" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="rootPath">Root Directory <span class="text-danger" aria-hidden="true">*</span></label>
+            <InputText id="rootPath" class="form-control font-monospace" @bind-Value="_model.RootPath"
+                aria-required="true" @oninput="OnRootPathInput" />
+            <ValidationMessage For="() => _model.RootPath" class="text-danger small" />
+            <div class="mt-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="TestPathAsync" disabled="@_testingPath">
+                    @(_testingPath ? "Testing…" : "Test Path")
+                </button>
+                @if (_pathTestResult != null)
+                {
+                    <span class="ms-2 small @(_pathTestResult.Success ? "text-success" : "text-danger")">
+                        @(_pathTestResult.Success ? "✓" : "✗") @_pathTestResult.Message
+                    </span>
+                }
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="form-check">
+                <InputCheckbox id="recursive" class="form-check-input" @bind-Value="_model.Recursive" />
+                <label class="form-check-label" for="recursive">Include subdirectories</label>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">File Types</label>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" id="allFormats" name="formatMode"
+                    checked="@_model.UseAllSupportedFormats" @onchange="() => _model.UseAllSupportedFormats = true" />
+                <label class="form-check-label" for="allFormats">All supported file types</label>
+                <div class="form-text">PDF, Office documents, plain text, Markdown, HTML, source code, JSON, XML, YAML, TOML, logs, and extensionless text files.</div>
+            </div>
+            <div class="form-check mt-1">
+                <input class="form-check-input" type="radio" id="selectedFormats" name="formatMode"
+                    checked="@(!_model.UseAllSupportedFormats)" @onchange="() => _model.UseAllSupportedFormats = false" />
+                <label class="form-check-label" for="selectedFormats">Only selected extensions</label>
+            </div>
+        </div>
+
+        @if (!_model.UseAllSupportedFormats)
+        {
+            <div class="mb-3">
+                <label class="form-label" for="included">Included Extensions</label>
+                <InputText id="included" class="form-control" @bind-Value="_model.IncludedExtensionsRaw" placeholder=".pdf, .docx, .txt" />
+                <div class="form-text">Comma-separated. Example: .pdf, .docx, .txt, .cs, .json</div>
+            </div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label" for="excluded">Excluded Directories</label>
+            <InputText id="excluded" class="form-control" @bind-Value="_model.ExcludedDirectoriesRaw" placeholder=".git, node_modules" />
+            <div class="form-text">Comma-separated directory names to skip during enumeration.</div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-sm-6">
+                <label class="form-label" for="maxSize">Maximum File Size (MB)</label>
+                <InputNumber id="maxSize" class="form-control" @bind-Value="_model.MaxFileSizeMB" min="1" max="10000" />
+                <ValidationMessage For="() => _model.MaxFileSizeMB" class="text-danger small" />
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label" for="maxConcurrent">Maximum Concurrent Files</label>
+                <InputNumber id="maxConcurrent" class="form-control" @bind-Value="_model.MaxConcurrentFiles" min="1" max="32" />
+                <ValidationMessage For="() => _model.MaxConcurrentFiles" class="text-danger small" />
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="form-check">
+                <InputCheckbox id="enabled" class="form-check-input" @bind-Value="_model.Enabled" />
+                <label class="form-check-label" for="enabled">Enabled</label>
+            </div>
+        </div>
+
+        @if (_allCategories.Count > 0)
+        {
+            <div class="mb-3">
+                <label class="form-label">Search Categories</label>
+                <div class="form-text mb-1">Assign this crawler to one or more search categories.</div>
+                @foreach (var cat in _allCategories)
+                {
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="cat-@cat.Id"
+                               checked="@_selectedCategoryIds.Contains(cat.Id)"
+                               @onchange="e => ToggleCategory(cat.Id, (bool)e.Value!)" />
+                        <label class="form-check-label" for="cat-@cat.Id">@cat.Name</label>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit" disabled="@_saving">@(_saving ? "Saving\u2026" : "Save")</button>
+            <a class="btn btn-outline-secondary" href="/admin/crawlers/@Id">Cancel</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CrawlerFormModel? _model;
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _saving;
+    private bool _testingPath;
+    private PathTestResult? _pathTestResult;
+    private string? _saveError;
+    private string _originalRootPath = "";
+    private bool _rootPathChanged;
+    private IReadOnlyList<SearchCategory> _allCategories = [];
+    private readonly HashSet<int> _selectedCategoryIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _allCategories = await CatService.GetAllAsync();
+            CrawlerWithProfile? item = await Management.GetAsync(Id);
+            if (item == null || item.Profile == null) { _notFound = true; return; }
+            _originalRootPath = item.Profile.RootPath;
+            _model = CrawlerFormModel.From(item.Definition, item.Profile);
+            IReadOnlyList<string> assignedKeys = await CatService.GetCategoryKeysForCrawlerAsync(Id);
+            foreach (var cat in _allCategories.Where(c => assignedKeys.Contains(c.Key)))
+                _selectedCategoryIds.Add(cat.Id);
+        }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        {
+            Logger.LogError(ex, "Failed to load crawler {Id}", Id);
+            _notFound = true;
+        }
+        finally { _loading = false; }
+    }
+
+    private void ToggleCategory(int catId, bool selected)
+    {
+        if (selected) _selectedCategoryIds.Add(catId);
+        else _selectedCategoryIds.Remove(catId);
+    }
+
+    private void OnRootPathInput(ChangeEventArgs e)
+    {
+        string newPath = (e.Value as string ?? "").Trim();
+        _rootPathChanged = !string.IsNullOrEmpty(_originalRootPath) &&
+            !string.Equals(newPath, _originalRootPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task TestPathAsync()
+    {
+        _testingPath = true;
+        _pathTestResult = null;
+        try { _pathTestResult = await PathTest.TestAsync(_model?.RootPath ?? ""); }
+        catch { _pathTestResult = new PathTestResult(false, "Path test failed unexpectedly."); }
+        finally { _testingPath = false; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model == null) return;
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            await Management.UpdateAsync(Id, _model.Name, _model.Enabled, _model.ToProfile(Id));
+            await CatService.SetCrawlerCategoriesAsync(Id, _selectedCategoryIds.ToList());
+            Nav.NavigateTo($"/admin/crawlers/{Id}?saved=true");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update crawler {Id}", Id);
+            _saveError = "Could not save changes. Check that the configuration is valid and the database is accessible.";
+        }
+        finally { _saving = false; }
+    }
+}

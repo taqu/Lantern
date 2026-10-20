@@ -14,13 +14,13 @@ public static class AdministrationSetup
 {
     public static void AddLanternAdministration(this WebApplicationBuilder builder)
     {
-        var root = builder.Environment.IsDevelopment()
+        string root = builder.Environment.IsDevelopment()
             ? Path.Combine(builder.Environment.ContentRootPath, "App_Data")
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Lantern");
-        var dbPath = Path.GetFullPath(builder.Configuration["Storage:DatabasePath"] ?? Path.Combine(root, "database", "lantern.db"), builder.Environment.ContentRootPath);
-        var keyPath = Path.GetFullPath(builder.Configuration["Storage:DataProtectionKeysPath"] ?? Path.Combine(root, "keys"), builder.Environment.ContentRootPath);
-        var webRoot = Path.GetFullPath(builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"));
-        foreach (var path in new[] { dbPath, keyPath })
+        string dbPath = Path.GetFullPath(builder.Configuration["Storage:DatabasePath"] ?? Path.Combine(root, "database", "lantern.db"), builder.Environment.ContentRootPath);
+        string keyPath = Path.GetFullPath(builder.Configuration["Storage:DataProtectionKeysPath"] ?? Path.Combine(root, "keys"), builder.Environment.ContentRootPath);
+        string webRoot = Path.GetFullPath(builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"));
+        foreach (string? path in new[] { dbPath, keyPath })
             if (path.Equals(webRoot, StringComparison.OrdinalIgnoreCase) || path.StartsWith(webRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Database and authentication keys must be stored outside the web root.");
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
@@ -29,11 +29,14 @@ public static class AdministrationSetup
         builder.Services.AddDbContextFactory<LanternDbContext>(options => options.UseSqlite(connection.ToString()));
         builder.Services.AddSingleton<IApplicationSettingsService, ApplicationSettingsService>();
         builder.Services.AddSingleton<AdministratorAuthentication>();
+        builder.Services.AddSingleton<PathTestService>();
         builder.Services.AddScoped<AdministratorCookieEvents>();
         builder.Services.AddScoped<AdministrationService>();
+        builder.Services.AddScoped<CrawlerManagementService>();
+        builder.Services.AddScoped<CategoryManagementService>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddCascadingAuthenticationState();
-        var protection = builder.Services.AddDataProtection().SetApplicationName("Lantern").PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+        IDataProtectionBuilder protection = builder.Services.AddDataProtection().SetApplicationName("Lantern").PersistKeysToFileSystem(new DirectoryInfo(keyPath));
         if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
         builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
         {
@@ -72,8 +75,8 @@ public static class AdministrationSetup
     {
         try
         {
-            var factory = app.Services.GetRequiredService<IDbContextFactory<LanternDbContext>>();
-            await using var db = await factory.CreateDbContextAsync();
+            IDbContextFactory<LanternDbContext> factory = app.Services.GetRequiredService<IDbContextFactory<LanternDbContext>>();
+            await using LanternDbContext db = await factory.CreateDbContextAsync();
             await db.Database.MigrateAsync();
             await app.Services.GetRequiredService<AdministratorAuthentication>().ProvisionAsync(
                 Environment.GetEnvironmentVariable("LANTERN_ADMIN_USERNAME"), Environment.GetEnvironmentVariable("LANTERN_ADMIN_PASSWORD"));

@@ -1,9 +1,11 @@
 @page "/search"
 @rendermode InteractiveServer
 @using Lantern.Core.Search
+@using Lantern.Core.Administration
 @using Lantern.Infrastructure.Search
 @using Microsoft.Extensions.Options
 @inject ISearchService SearchService
+@inject ISearchCategoryRepository CategoryRepo
 @inject NavigationManager Nav
 @inject IOptions<HybridSearchOptions> HybridOptions
 
@@ -51,6 +53,21 @@
             }
         </form>
     </section>
+
+    @if (_categories.Count > 0 && !string.IsNullOrEmpty(_submittedQuery))
+    {
+        <nav class="search-category-tabs" aria-label="Search categories" role="tablist">
+            <a class="search-tab @(string.IsNullOrEmpty(_activeCategory) ? "active" : "")"
+               href="@BuildUrl(_submittedQuery, 1, null)"
+               role="tab" aria-selected="@(string.IsNullOrEmpty(_activeCategory) ? "true" : "false")">All</a>
+            @foreach (var cat in _categories)
+            {
+                <a class="search-tab @(_activeCategory == cat.Key ? "active" : "")"
+                   href="@BuildUrl(_submittedQuery, 1, cat.Key)"
+                   role="tab" aria-selected="@(_activeCategory == cat.Key ? "true" : "false")">@cat.Name</a>
+            }
+        </nav>
+    }
 
     @if (_errorMessage != null)
     {
@@ -133,6 +150,8 @@
 @code {
     [SupplyParameterFromQuery(Name = "q")] public string? QueryParam { get; set; }
     [SupplyParameterFromQuery(Name = "page")] public int? PageParam { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? CategoryParam { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")] public string? ModeParam { get; set; }
 
     private string _query = "";
     private string _submittedQuery = "";
@@ -141,18 +160,36 @@
     private SearchPageResponse? _response;
     private CancellationTokenSource? _cts;
     private SearchMode _searchMode = SearchMode.Keyword;
+    private IReadOnlyList<SearchCategory> _categories = Array.Empty<SearchCategory>();
+    private string? _activeCategory;
 
     private int CurrentPage => _response?.Page ?? 1;
     private int TotalPages => _response is null || _response.PageSize == 0
         ? 1
         : (int)Math.Ceiling((double)_response.TotalHits / _response.PageSize);
 
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _categories = await CategoryRepo.GetEnabledAsync();
+        }
+        catch
+        {
+            _categories = Array.Empty<SearchCategory>();
+        }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         var q = QueryParam?.Trim() ?? "";
         var page = PageParam is > 0 ? PageParam.Value : 1;
+        _activeCategory = CategoryParam;
 
-        if (q == _submittedQuery && page == CurrentPage && _response != null)
+        if (ModeParam == "hybrid" && HybridOptions.Value.Enabled)
+            _searchMode = SearchMode.Hybrid;
+
+        if (q == _submittedQuery && page == CurrentPage && _response != null && _activeCategory == CategoryParam)
             return;
 
         _query = q;
@@ -182,9 +219,15 @@
         try
         {
             if (_searchMode == SearchMode.Hybrid && HybridOptions.Value.Enabled)
-                _response = await SearchService.SearchChunksPageAsync(query, page, _searchMode, ct);
+            {
+                var filters = new SearchFilters(
+                    CategoryKey: string.IsNullOrEmpty(_activeCategory) ? null : _activeCategory);
+                _response = await SearchService.SearchChunksPageAsync(query, page, _searchMode, filters, ct);
+            }
             else
+            {
                 _response = await SearchService.SearchPageAsync(query, page, ct);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -204,6 +247,12 @@
         }
     }
 
-    private string BuildUrl(string q, int page)
-        => $"/search?q={Uri.EscapeDataString(q)}&page={page}";
+    private string BuildUrl(string q, int page, string? category = null)
+    {
+        var sb = new System.Text.StringBuilder($"/search?q={Uri.EscapeDataString(q)}&page={page}");
+        string? cat = category ?? _activeCategory;
+        if (!string.IsNullOrEmpty(cat)) sb.Append($"&category={Uri.EscapeDataString(cat)}");
+        if (_searchMode == SearchMode.Hybrid) sb.Append("&mode=hybrid");
+        return sb.ToString();
+    }
 }

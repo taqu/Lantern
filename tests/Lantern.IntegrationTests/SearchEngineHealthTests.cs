@@ -12,7 +12,7 @@ public sealed class SearchEngineHealthTests
         using var handler = new HealthHandler();
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:7700") };
         var service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
-        var status = await service.GetAsync();
+        Core.Administration.SearchEngineStatus status = await service.GetAsync();
         Assert.True(status.Available);
         Assert.Equal(0L, status.DocumentCount);
         Assert.Equal(status, await service.GetAsync());
@@ -27,7 +27,7 @@ public sealed class SearchEngineHealthTests
         using var http = new HttpClient(new HealthHandler { MissingIndex = true }) { BaseAddress = new Uri("http://localhost:7700") };
         var client = new MeilisearchClient(http, "");
         var service = new MeilisearchHealthService(client, new MeilisearchOptions());
-        var status = await service.GetAsync();
+        Core.Administration.SearchEngineStatus status = await service.GetAsync();
         Assert.True(status.Available);
         Assert.Null(status.DocumentCount);
         Assert.Contains("does not exist", status.Message);
@@ -38,7 +38,7 @@ public sealed class SearchEngineHealthTests
     {
         using var http = new HttpClient(new HealthHandler { Offline = true }) { BaseAddress = new Uri("http://localhost:7700") };
         var service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
-        var status = await service.GetAsync();
+        Core.Administration.SearchEngineStatus status = await service.GetAsync();
         Assert.False(status.Available);
         Assert.Null(status.DocumentCount);
         Assert.DoesNotContain("sensitive", status.Message);
@@ -64,7 +64,7 @@ public sealed class SearchEngineHealthTests
             Requests++;
             Assert.Equal(HttpMethod.Get, request.Method);
             if (Offline) throw new HttpRequestException("sensitive internal connection detail");
-            var health = request.RequestUri!.AbsolutePath == "/health";
+            bool health = request.RequestUri!.AbsolutePath == "/health";
             var response = new HttpResponseMessage(!health && MissingIndex ? HttpStatusCode.NotFound : HttpStatusCode.OK)
             {
                 Content = new StringContent(health ? """{"status":"available"}""" : MissingIndex

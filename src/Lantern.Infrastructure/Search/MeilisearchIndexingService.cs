@@ -43,15 +43,15 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         try { await _client.GetIndexAsync(name, ct); }
         catch (MeilisearchApiError ex) when (ex.Code == "index_not_found")
         {
-            var create = await _client.CreateIndexAsync(name, "id", ct);
+            TaskInfo create = await _client.CreateIndexAsync(name, "id", ct);
             await WaitAsync(create.TaskUid, "create index", ct);
         }
-        var index = await _client.GetIndexAsync(name, ct);
+        Meilisearch.Index index = await _client.GetIndexAsync(name, ct);
         if (index.PrimaryKey != "id") throw new InvalidOperationException($"Index {name} must use primary key id.");
-        var task = await index.UpdateSettingsAsync(new Settings
+        TaskInfo task = await index.UpdateSettingsAsync(new Settings
         {
             SearchableAttributes = new[] { "title", "content" },
-            FilterableAttributes = new FilterableAttribute[] { "sourceId", "sourceType", "extension", "mimeType" },
+            FilterableAttributes = new FilterableAttribute[] { "sourceId", "sourceType", "extension", "mimeType", "categoryIds" },
             SortableAttributes = new[] { "modifiedAt", "indexedAt", "size" },
             DisplayedAttributes = new[] { "*" }
         }, ct);
@@ -76,10 +76,10 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
 
     private async Task PopulateAsync(string name, IEnumerable<SearchDocument> documents, CancellationToken ct)
     {
-        foreach (var batch in DocumentBatcher.Split(documents.Select(DocumentNormalizer.Normalize), _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch))
+        foreach (IReadOnlyList<SearchDocument> batch in DocumentBatcher.Split(documents.Select(DocumentNormalizer.Normalize), _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch))
         {
             ct.ThrowIfCancellationRequested();
-            var task = await _client.Index(name).AddDocumentsAsync(batch, "id", ct);
+            TaskInfo task = await _client.Index(name).AddDocumentsAsync(batch, "id", ct);
             await WaitAsync(task.TaskUid, "upsert documents", ct);
         }
     }
@@ -101,10 +101,10 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         try
         {
             await InitializeAsync(cancellationToken);
-            var ids = documentIds.Select(id => { ArgumentException.ThrowIfNullOrWhiteSpace(id); return id; });
-            foreach (var batch in DocumentBatcher.Split(ids, _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch))
+            IEnumerable<string> ids = documentIds.Select(id => { ArgumentException.ThrowIfNullOrWhiteSpace(id); return id; });
+            foreach (IReadOnlyList<string> batch in DocumentBatcher.Split(ids, _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch))
             {
-                var task = await _client.Index(_options.IndexName).DeleteDocumentsAsync(batch, cancellationToken);
+                TaskInfo task = await _client.Index(_options.IndexName).DeleteDocumentsAsync(batch, cancellationToken);
                 await WaitAsync(task.TaskUid, "delete documents", cancellationToken);
             }
         }
@@ -115,9 +115,9 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
     {
         ArgumentNullException.ThrowIfNull(documents);
         await _gate.WaitAsync(cancellationToken);
-        var temporary = $"{_options.IndexName}-rebuild-{Guid.NewGuid():N}";
-        var promotionSubmitted = false;
-        var promotionConfirmed = false;
+        string temporary = $"{_options.IndexName}-rebuild-{Guid.NewGuid():N}";
+        bool promotionSubmitted = false;
+        bool promotionConfirmed = false;
         try
         {
             await ConfigureAsync(temporary, cancellationToken);
@@ -127,7 +127,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             // Retain the temporary index in that case; it may hold the old active data.
             cancellationToken.ThrowIfCancellationRequested();
             promotionSubmitted = true;
-            var swap = await _client.SwapIndexesAsync(new List<IndexSwap> { new(_options.IndexName, temporary) }, cancellationToken);
+            TaskInfo swap = await _client.SwapIndexesAsync(new List<IndexSwap> { new(_options.IndexName, temporary) }, cancellationToken);
             await WaitAsync(swap.TaskUid, "promote rebuilt index", cancellationToken);
             promotionConfirmed = true;
         }
@@ -137,7 +137,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             {
                 if (!promotionSubmitted || promotionConfirmed)
                 {
-                    var cleanup = await _client.DeleteIndexAsync(temporary, CancellationToken.None);
+                    TaskInfo cleanup = await _client.DeleteIndexAsync(temporary, CancellationToken.None);
                     await WaitAsync(cleanup.TaskUid, "remove temporary index", CancellationToken.None);
                 }
                 else _logger.LogWarning("Rebuild promotion outcome uncertain; retained index {Index} for inspection", temporary);

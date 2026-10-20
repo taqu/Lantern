@@ -9,4 +9,6 @@ public sealed record ExtractedBlock(
     string? SheetName = null,
     int? StartOffset = null,
     int? EndOffset = null,
-    int HeadingLevel = 0);
+    int HeadingLevel = 0,
+    int? StartLine = null,
+    int? EndLine = null);

@@ -89,7 +89,7 @@ internal sealed class DocumentExtractionFeasibility
                 case ".HTML":
                 case ".HTM":
                 {
-                    var parser = ParserFactory.CreateText(context);
+                        ITextParser parser = ParserFactory.CreateText(context);
                     if (parser != null)
                     {
                         text = parser.Parse();
@@ -102,10 +102,10 @@ internal sealed class DocumentExtractionFeasibility
                 case ".RTF":
                 case ".EPUB":
                 {
-                    var parser = ParserFactory.CreateDocument(context);
+                        IDocumentParser parser = ParserFactory.CreateDocument(context);
                     if (parser != null)
                     {
-                        var doc = parser.Parse();
+                            ToxyDocument doc = parser.Parse();
                         if (doc?.Paragraphs != null)
                         {
                             text = string.Join("\n", doc.Paragraphs.Select(p => p.Text ?? ""));
@@ -118,19 +118,19 @@ internal sealed class DocumentExtractionFeasibility
                 case ".XLS":
                 case ".CSV":
                 {
-                    var parser = ParserFactory.CreateSpreadsheet(context);
+                        ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
                     if (parser != null)
                     {
-                        var spreadsheet = parser.Parse();
+                            ToxySpreadsheet spreadsheet = parser.Parse();
                         if (spreadsheet?.Tables != null)
                         {
                             var sb = new System.Text.StringBuilder();
-                            foreach (var table in spreadsheet.Tables)
+                            foreach (ToxyTable? table in spreadsheet.Tables)
                             {
                                 sb.AppendLine($"[Sheet: {table.Name}]");
                                 if (table.Rows != null)
                                 {
-                                    foreach (var row in table.Rows)
+                                    foreach (ToxyRow? row in table.Rows)
                                     {
                                         if (row?.Cells != null)
                                             sb.AppendLine(string.Join("\t", row.Cells.Select(c => c?.Value ?? "")));
@@ -146,15 +146,15 @@ internal sealed class DocumentExtractionFeasibility
                 case ".PPTX":
                 case ".PPT":
                 {
-                    var parser = ParserFactory.CreateSlideshow(context);
+                        ISlideshowParser parser = ParserFactory.CreateSlideshow(context);
                     if (parser != null)
                     {
-                        var slideshow = parser.Parse();
+                            ToxySlideshow slideshow = parser.Parse();
                         if (slideshow?.Slides != null)
                         {
                             var sb = new System.Text.StringBuilder();
                             int slideNum = 1;
-                            foreach (var slide in slideshow.Slides)
+                            foreach (ToxySlide? slide in slideshow.Slides)
                             {
                                 sb.AppendLine($"[Slide {slideNum++}]");
                                 if (slide?.Texts != null)
@@ -171,8 +171,8 @@ internal sealed class DocumentExtractionFeasibility
                 }
                 default:
                 {
-                    // Try text parser as fallback
-                    var parser = ParserFactory.CreateText(context);
+                        // Try text parser as fallback
+                        ITextParser parser = ParserFactory.CreateText(context);
                     if (parser != null)
                     {
                         text = parser.Parse();
