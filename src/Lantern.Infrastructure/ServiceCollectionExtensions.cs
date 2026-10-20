@@ -1,10 +1,12 @@
+using Lantern.Core.Administration;
+using Lantern.Core.Extraction;
 using Lantern.Core.Search;
+using Lantern.Infrastructure.Extraction;
 using Lantern.Infrastructure.Search;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Lantern.Core.Administration;
 
 namespace Lantern.Infrastructure;
 
@@ -48,6 +50,20 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITextChunkingService, TextChunkingService>();
         services.AddSingleton<IChunkIndexingService, MeilisearchChunkIndexingService>();
         services.AddSingleton<EmbedderConfigurationService>();
+
+        // Document extraction services
+        services.Configure<ExtractionOptions>(configuration.GetSection(ExtractionOptions.SectionName));
+        services.AddSingleton<DocumentFormatDetector>();
+        services.AddSingleton<IDocumentExtractor, PlainTextExtractor>();
+        services.AddSingleton<IDocumentExtractor, MarkdownExtractor>();
+        services.AddSingleton<IDocumentExtractor, HtmlExtractor>();
+        services.AddSingleton<IDocumentExtractor, PdfExtractor>();
+        services.AddSingleton<IDocumentExtractor, DocxExtractor>();
+        services.AddSingleton<IDocumentExtractor, XlsxExtractor>();
+        services.AddSingleton<IDocumentExtractor, PptxExtractor>();
+        services.AddSingleton<DocumentExtractionDispatcher>();
+        services.AddSingleton<StructureAwareChunker>();
+        services.AddSingleton<IDocumentProcessingService, DocumentProcessingService>();
 
         return services;
     }
