@@ -64,11 +64,18 @@ public static class DocumentNormalizer
         if (!string.IsNullOrEmpty(extension)) extension = "." + extension.TrimStart('.').ToLowerInvariant();
         return new SearchDocument
         {
-            Id = id, SourceId = document.SourceId, SourceType = document.SourceType,
-            Title = title, Content = Clean(document.Content), Uri = uri, Path = path,
+            Id = id,
+            SourceId = document.SourceId,
+            SourceType = document.SourceType,
+            Title = title,
+            Content = Clean(document.Content),
+            Uri = uri,
+            Path = path,
             Extension = string.IsNullOrEmpty(extension) ? null : extension,
             MimeType = string.IsNullOrWhiteSpace(document.MimeType) ? null : document.MimeType.Trim().ToLowerInvariant(),
-            Size = document.Size, ModifiedAt = document.ModifiedAt?.ToUniversalTime(), IndexedAt = document.IndexedAt.ToUniversalTime(),
+            Size = document.Size,
+            ModifiedAt = document.ModifiedAt?.ToUniversalTime(),
+            IndexedAt = document.IndexedAt.ToUniversalTime(),
             CategoryIds = document.CategoryIds
         };
     }

@@ -87,15 +87,60 @@ Toxy bundles PdfPig and DocumentFormat.OpenXml as dependencies.
 | SixLabors.ImageSharp | 2.1.11 | Apache 2.0 / Six Labors Split | Image handling |
 | OpenMcdf | 3.1.0 | MPL 2.0 | OLE2 container reading |
 
-**Security notes (as of October 2026):**
-NuGet vulnerability advisories flag several Toxy transitive packages:
-- `SixLabors.ImageSharp` 2.1.11: known medium/high severity CVEs
-- `OpenMcdf` 3.1.0: known medium severity CVEs
-- `System.Security.Cryptography.Pkcs` / `Xml`: known high severity CVEs (from NPOI indirect dep)
+### Known Vulnerability Assessment (October 2026)
 
-These vulnerabilities are in transitive dependencies of Toxy 2.6.0.
-They do not affect text extraction from trusted local documents in the intended usage scenario,
-but should be monitored. Upgrading Toxy when a patched version is released is recommended.
+The following vulnerabilities are reported by `dotnet list package --vulnerable --include-transitive`
+against the current dependency graph. All are transitive — they cannot be resolved without Toxy
+providing updated dependencies.
+
+| Package | Version | Severity | CVEs | Assessment |
+|---------|---------|----------|------|------------|
+| `SixLabors.ImageSharp` | 2.1.11 | HIGH | GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w | Image loading vulnerabilities (OOB read, heap buffer overflow). Lantern does not process user-supplied images through ImageSharp; Toxy uses it for internal document rendering only with trusted intranet files. Exploitability in this context is assessed as low. **Monitor for Toxy upgrade.** |
+| `SixLabors.ImageSharp` | 2.1.11 | MEDIUM | GHSA-gwg2-r3hj-4w44, GHSA-wmxv-xphr-5c9g | Same library, additional CVEs. Same assessment as above. |
+| `OpenMcdf` | 3.1.0 | MEDIUM | GHSA-5qwm-7pvp-w988, GHSA-jxpf-xq2m-q525 | OLE2 compound file parsing. Used for legacy DOC/XLS support via NPOI. Only triggered on files from trusted intranet sources. Assessed as acceptable until Toxy updates. |
+| `System.Security.Cryptography.Xml` | 8.0.2 | HIGH | Multiple (GHSA-23rf-6693-g89p, et al.) | XML cryptography library; not called directly by Lantern code. Indirect dep via NPOI → System.Security.Cryptography.Xml path. No Lantern component signs or verifies XML digital signatures. Assessed as not exploitable in this usage. **Resolve before general release by upgrading NPOI or replacing Toxy.** |
+| `System.Security.Cryptography.Pkcs` | 9.0.2 | HIGH | GHSA-846f-f764-76mx | PKCS cryptography; same indirect path. Same assessment. |
+| `System.Security.Cryptography.Pkcs` | 9.0.2 | MEDIUM | GHSA-2fmv-rv2c-59x7 | Same library, additional CVE. |
+
+**Release qualification requirement:** These HIGH findings must be resolved or re-assessed
+before Phase 12 packaging. Acceptable resolutions include: upgrading Toxy to a version that
+removes the vulnerable dependencies, replacing Toxy with an alternative extraction library,
+or receiving documented approval from the project owner that the risk is accepted for the
+specific deployment scenario.
+
+---
+
+## LlamaPure (NuGet)
+
+| Property | Value |
+|---|---|
+| NuGet ID | `LlamaPure` |
+| Version | 1.0.4 |
+| License | MIT (verify against current package metadata) |
+| Usage | Native llama.cpp inference for GGUF models |
+| Platform | Windows x64 (native DLLs bundled) |
+| Redistribution | Permitted under MIT; verify native DLL provenance |
+
+LlamaPure wraps the llama.cpp native library. The NuGet package includes pre-built x64
+Windows DLLs (`llama.dll`, `ggml*.dll`). Verify the source commit and build provenance of
+the bundled native binaries before public distribution.
+
+---
+
+## IBM Granite Embedding 97M Multilingual R2 (GGUF model)
+
+| Property | Value |
+|---|---|
+| File | `granite-embedding-97M-multilingual-r2.gguf` |
+| Model family | IBM Granite |
+| License | Apache 2.0 |
+| Source | IBM / HuggingFace model hub |
+| Dimensions | 384 |
+| Redistribution | Permitted under Apache 2.0 |
+
+The model license is Apache 2.0, independent of the inference library license.
+Verify the license of the exact artifact file before distribution, as different
+quantizations may have different provenance.
 
 ---
 

@@ -1,6 +1,6 @@
+using System.Runtime.CompilerServices;
 using Lantern.Core.Search;
 using Microsoft.Extensions.Logging;
-using System.Runtime.CompilerServices;
 
 namespace Lantern.Crawling.Files;
 

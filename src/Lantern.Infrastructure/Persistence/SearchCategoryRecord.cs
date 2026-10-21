@@ -13,13 +13,25 @@ public sealed class SearchCategoryRecord
 
     public Lantern.Core.Administration.SearchCategory ToDomain() => new()
     {
-        Id = Id, Key = Key, Name = Name, Description = Description,
-        SortOrder = SortOrder, Enabled = Enabled, CreatedAt = CreatedAt, UpdatedAt = UpdatedAt
+        Id = Id,
+        Key = Key,
+        Name = Name,
+        Description = Description,
+        SortOrder = SortOrder,
+        Enabled = Enabled,
+        CreatedAt = CreatedAt,
+        UpdatedAt = UpdatedAt
     };
 
     public static SearchCategoryRecord FromDomain(Lantern.Core.Administration.SearchCategory d) => new()
     {
-        Id = d.Id, Key = d.Key, Name = d.Name, Description = d.Description,
-        SortOrder = d.SortOrder, Enabled = d.Enabled, CreatedAt = d.CreatedAt, UpdatedAt = d.UpdatedAt
+        Id = d.Id,
+        Key = d.Key,
+        Name = d.Name,
+        Description = d.Description,
+        SortOrder = d.SortOrder,
+        Enabled = d.Enabled,
+        CreatedAt = d.CreatedAt,
+        UpdatedAt = d.UpdatedAt
     };
 }

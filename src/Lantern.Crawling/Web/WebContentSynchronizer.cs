@@ -1,10 +1,10 @@
+using System.Security.Cryptography;
+using System.Text;
 using Lantern.Core.Administration;
 using Lantern.Core.Crawling;
 using Lantern.Core.Extraction;
 using Lantern.Core.Search;
 using Microsoft.Extensions.Logging;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Lantern.Crawling.Web;
 
@@ -116,11 +116,24 @@ public sealed class WebContentSynchronizer(
         IReadOnlyList<SearchChunk> chunks = categoryIds.Length > 0
             ? (result.Chunks ?? []).Select(c => new SearchChunk
             {
-                Id = c.Id, DocumentId = c.DocumentId, SourceId = c.SourceId, SourceType = c.SourceType,
-                Title = c.Title, Content = c.Content, ChunkIndex = c.ChunkIndex, SectionTitle = c.SectionTitle,
-                PageNumber = c.PageNumber, SlideNumber = c.SlideNumber, SheetName = c.SheetName,
-                StartOffset = c.StartOffset, EndOffset = c.EndOffset, Uri = c.Uri, Extension = c.Extension,
-                StartLine = c.StartLine, EndLine = c.EndLine, CategoryIds = categoryIds
+                Id = c.Id,
+                DocumentId = c.DocumentId,
+                SourceId = c.SourceId,
+                SourceType = c.SourceType,
+                Title = c.Title,
+                Content = c.Content,
+                ChunkIndex = c.ChunkIndex,
+                SectionTitle = c.SectionTitle,
+                PageNumber = c.PageNumber,
+                SlideNumber = c.SlideNumber,
+                SheetName = c.SheetName,
+                StartOffset = c.StartOffset,
+                EndOffset = c.EndOffset,
+                Uri = c.Uri,
+                Extension = c.Extension,
+                StartLine = c.StartLine,
+                EndLine = c.EndLine,
+                CategoryIds = categoryIds
             }).ToList()
             : result.Chunks ?? [];
 

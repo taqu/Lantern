@@ -1,6 +1,6 @@
-using HtmlAgilityPack;
 using System.Net;
 using System.Text;
+using HtmlAgilityPack;
 
 namespace Lantern.Crawling.Web;
 

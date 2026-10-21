@@ -98,15 +98,23 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "old", CanonicalPath = @"C:\old.txt",
-            FileSize = 10, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = oldScan, SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "old",
+            CanonicalPath = @"C:\old.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = oldScan,
+            SyncStatus = CrawlSyncStatus.Indexed
         });
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "current", CanonicalPath = @"C:\current.txt",
-            FileSize = 10, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = newScan, SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "current",
+            CanonicalPath = @"C:\current.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = newScan,
+            SyncStatus = CrawlSyncStatus.Indexed
         });
 
         IReadOnlyList<FileState> notSeen = await repo.GetNotSeenInScanAsync(crawlerId, newScan);
@@ -125,9 +133,13 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "failed", CanonicalPath = @"C:\failed.txt",
-            FileSize = 10, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = oldScan, SyncStatus = CrawlSyncStatus.Failed
+            CrawlerId = crawlerId,
+            DocumentId = "failed",
+            CanonicalPath = @"C:\failed.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = oldScan,
+            SyncStatus = CrawlSyncStatus.Failed
         });
 
         IReadOnlyList<FileState> notSeen = await repo.GetNotSeenInScanAsync(crawlerId, newScan);
@@ -141,9 +153,13 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
         CrawlStateRepository repo = CreateRepo();
         var state = new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "doc", CanonicalPath = @"C:\del.txt",
-            FileSize = 10, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = Guid.NewGuid(), SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "doc",
+            CanonicalPath = @"C:\del.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Indexed
         };
         await repo.SaveAsync(state);
         Assert.True(state.Id > 0);
@@ -161,9 +177,13 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
 
         await CreateRepo().SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "doc", CanonicalPath = path,
-            FileSize = 42, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = Guid.NewGuid(), SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "doc",
+            CanonicalPath = path,
+            FileSize = 42,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Indexed
         });
 
         FileState? found = await CreateRepo().FindAsync(crawlerId, path);
@@ -182,15 +202,23 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawler1, DocumentId = "doc1", CanonicalPath = @"C:\a.txt",
-            FileSize = 10, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = oldScan, SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawler1,
+            DocumentId = "doc1",
+            CanonicalPath = @"C:\a.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = oldScan,
+            SyncStatus = CrawlSyncStatus.Indexed
         });
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawler2, DocumentId = "doc2", CanonicalPath = @"C:\b.txt",
-            FileSize = 10, LastWriteTimeUtc = DateTimeOffset.UtcNow,
-            LastSeenScanId = oldScan, SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawler2,
+            DocumentId = "doc2",
+            CanonicalPath = @"C:\b.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = oldScan,
+            SyncStatus = CrawlSyncStatus.Indexed
         });
 
         IReadOnlyList<FileState> notSeen = await repo.GetNotSeenInScanAsync(crawler1, newScan);

@@ -1,7 +1,7 @@
+using System.Collections.Concurrent;
 using Lantern.Core.Crawling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
 
 namespace Lantern.Crawling;
 

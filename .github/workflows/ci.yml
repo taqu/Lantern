@@ -1,0 +1,515 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded PR runs; never cancel pushes to main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  # Meilisearch Community Edition v1.55.0 (Windows x64)
+  # SHA-256 verified against local binary. Update both when upgrading.
+  MEILISEARCH_VERSION: '1.55.0'
+  MEILISEARCH_SHA256: '948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A'
+  MEILISEARCH_PORT: '17700'
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. Restore and Build
+  # ──────────────────────────────────────────────────────────────────────────
+  build:
+    name: Restore and Build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build --configuration Release --no-restore
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. Formatting and Static Analysis
+  # ──────────────────────────────────────────────────────────────────────────
+  format:
+    name: Formatting and Static Analysis
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Check formatting
+        run: dotnet format --verify-no-changes --verbosity diagnostic
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. Unit Tests (Lantern.Core.Tests — no external dependencies)
+  # ──────────────────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Run unit tests
+        run: >
+          dotnet test tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=unit-results.trx"
+          --results-directory artifacts/test-results/unit
+          --collect:"XPlat Code Coverage"
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: artifacts/test-results/unit/
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4. Integration Tests (SQLite + Meilisearch + Crawler + Extraction + Security)
+  # ──────────────────────────────────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # Cache the Meilisearch binary; key includes the version so upgrades bypass the cache.
+      - name: Cache Meilisearch binary
+        id: cache-meilisearch
+        uses: actions/cache@v4
+        with:
+          path: tools/meilisearch/meilisearch.exe
+          key: meilisearch-windows-amd64-${{ env.MEILISEARCH_VERSION }}
+
+      - name: Download Meilisearch
+        if: steps.cache-meilisearch.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dir = "tools/meilisearch"
+          $exe = "$dir/meilisearch.exe"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $url = "https://github.com/meilisearch/meilisearch/releases/download/v${{ env.MEILISEARCH_VERSION }}/meilisearch-windows-amd64.exe"
+          Write-Host "Downloading Meilisearch v${{ env.MEILISEARCH_VERSION }} ..."
+          Invoke-WebRequest -Uri $url -OutFile $exe
+          Write-Host "Download complete."
+
+      - name: Verify Meilisearch checksum
+        shell: pwsh
+        run: |
+          $exe     = "tools/meilisearch/meilisearch.exe"
+          $expected = "${{ env.MEILISEARCH_SHA256 }}".ToUpper()
+          $actual   = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToUpper()
+          if ($actual -ne $expected) {
+            Write-Error "Meilisearch SHA-256 mismatch.`n  Expected : $expected`n  Actual   : $actual"
+            exit 1
+          }
+          Write-Host "Meilisearch checksum OK: $actual"
+
+      - name: Generate ephemeral Meilisearch master key
+        id: meili-key
+        shell: pwsh
+        run: |
+          # Not a secret — ephemeral key used only within this CI run.
+          $key = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 48 | ForEach-Object { [char]$_ })
+          echo "key=$key" >> $env:GITHUB_OUTPUT
+
+      - name: Start Meilisearch
+        id: start-meili
+        shell: pwsh
+        env:
+          MEILI_MASTER_KEY: ${{ steps.meili-key.outputs.key }}
+        run: |
+          $dataDir = Join-Path $env:RUNNER_TEMP ("meili-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          echo "MEILI_DATA_DIR=$dataDir" >> $env:GITHUB_ENV
+
+          $proc = Start-Process `
+            -FilePath "tools/meilisearch/meilisearch.exe" `
+            -ArgumentList @(
+              "--master-key", $env:MEILI_MASTER_KEY,
+              "--db-path",    $dataDir,
+              "--http-addr",  "127.0.0.1:${{ env.MEILISEARCH_PORT }}",
+              "--no-analytics"
+            ) `
+            -PassThru `
+            -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP "meili-out.log") `
+            -RedirectStandardError  (Join-Path $env:RUNNER_TEMP "meili-err.log")
+
+          echo "MEILI_PID=$($proc.Id)" >> $env:GITHUB_ENV
+
+          # Wait up to 60 s for /health to return 200.
+          $healthUrl = "http://127.0.0.1:${{ env.MEILISEARCH_PORT }}/health"
+          $deadline  = (Get-Date).AddSeconds(60)
+          $ready     = $false
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            if ($proc.HasExited) {
+              Write-Error "Meilisearch process exited unexpectedly (exit code $($proc.ExitCode))."
+              Get-Content (Join-Path $env:RUNNER_TEMP "meili-err.log") -ErrorAction SilentlyContinue
+              exit 1
+            }
+            try {
+              $r = Invoke-WebRequest -Uri $healthUrl -TimeoutSec 3 -ErrorAction Stop
+              if ($r.StatusCode -eq 200) { $ready = $true; break }
+            } catch {}
+          }
+          if (-not $ready) {
+            Write-Error "Meilisearch did not become ready within 60 s."
+            Get-Content (Join-Path $env:RUNNER_TEMP "meili-err.log") -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "Meilisearch is ready on port ${{ env.MEILISEARCH_PORT }}."
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Run integration tests
+        env:
+          MEILI_MASTER_KEY: ${{ steps.meili-key.outputs.key }}
+          MEILI_HOST: http://127.0.0.1:${{ env.MEILISEARCH_PORT }}
+        run: >
+          dotnet test tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=integration-results.trx"
+          --results-directory artifacts/test-results/integration
+          --collect:"XPlat Code Coverage"
+
+      - name: Print Meilisearch logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $outLog = Join-Path $env:RUNNER_TEMP "meili-out.log"
+          $errLog = Join-Path $env:RUNNER_TEMP "meili-err.log"
+          Write-Host "=== Meilisearch stdout ==="
+          Get-Content $outLog -ErrorAction SilentlyContinue
+          Write-Host "=== Meilisearch stderr ==="
+          Get-Content $errLog -ErrorAction SilentlyContinue
+
+      - name: Stop Meilisearch
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:MEILI_PID) {
+            $proc = Get-Process -Id $env:MEILI_PID -ErrorAction SilentlyContinue
+            if ($proc -and -not $proc.HasExited) {
+              $proc.CloseMainWindow() | Out-Null
+              if (-not $proc.WaitForExit(5000)) { $proc.Kill() }
+              Write-Host "Meilisearch stopped."
+            }
+          }
+          if ($env:MEILI_DATA_DIR -and (Test-Path $env:MEILI_DATA_DIR)) {
+            Remove-Item -Recurse -Force $env:MEILI_DATA_DIR -ErrorAction SilentlyContinue
+            Write-Host "Meilisearch data directory removed."
+          }
+
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: artifacts/test-results/integration/
+          retention-days: 30
+
+      - name: Upload Meilisearch logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meilisearch-logs
+          path: |
+            ${{ runner.temp }}/meili-out.log
+            ${{ runner.temp }}/meili-err.log
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 5. Dependency Vulnerability Audit
+  # ──────────────────────────────────────────────────────────────────────────
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Audit NuGet packages
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/security-reports | Out-Null
+          $output = dotnet list package --vulnerable --include-transitive 2>&1
+          $output | Out-File -FilePath artifacts/security-reports/nuget-audit.txt -Encoding utf8
+          Write-Host $output
+
+          # Critical severity: always a release blocker.
+          if ($output -match "\bCritical\b") {
+            Write-Error "CRITICAL severity NuGet vulnerability detected. Review artifacts/security-reports/nuget-audit.txt."
+            exit 1
+          }
+
+          # High severity: warn and surface for mandatory pre-release review.
+          # Known HIGH findings from Toxy transitive dependencies are assessed in docs/dependencies.md.
+          # Any NEW high-severity finding not covered there is a release blocker.
+          if ($output -match "\bHigh\b") {
+            Write-Warning "HIGH severity NuGet vulnerabilities detected. Review artifacts/security-reports/nuget-audit.txt before release."
+            Write-Warning "Known assessed findings are documented in docs/dependencies.md."
+            Write-Warning "Unassessed HIGH vulnerabilities must be resolved or explicitly accepted before release qualification."
+          } else {
+            Write-Host "No critical or high severity vulnerabilities found."
+          }
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: artifacts/security-reports/
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6. Windows x64 Publish Validation + Smoke Test
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-validation:
+    name: Windows x64 Publish Validation
+    runs-on: windows-latest
+    needs: [unit-tests, integration-tests]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Restore for win-x64
+        run: dotnet restore src/Lantern.Web/Lantern.Web.csproj --runtime win-x64
+
+      - name: Publish win-x64 self-contained
+        run: >
+          dotnet publish src/Lantern.Web/Lantern.Web.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifacts/publish/win-x64
+          --no-restore
+
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $dir = "artifacts/publish/win-x64"
+
+          # Main executable
+          $exe = Get-Item "$dir/Lantern.Web.exe" -ErrorAction SilentlyContinue
+          if (-not $exe) { Write-Error "Lantern.Web.exe not found in publish output."; exit 1 }
+          Write-Host "Executable : $($exe.FullName) ($([math]::Round($exe.Length / 1MB, 2)) MB)"
+
+          # Static web assets
+          if (-not (Test-Path "$dir/wwwroot")) {
+            Write-Error "wwwroot directory is missing from publish output."; exit 1
+          }
+          Write-Host "wwwroot    : present"
+
+          # Native LlamaPure libraries
+          $llama = Get-ChildItem $dir -Filter "*.dll" | Where-Object Name -match "llama|ggml"
+          if ($llama) {
+            Write-Host "Native DLLs:"
+            $llama | ForEach-Object { Write-Host "  $($_.Name)" }
+          } else {
+            Write-Warning "No llama/ggml native DLLs detected. Verify LlamaPure is included."
+          }
+
+          # Record total file count
+          $count = (Get-ChildItem $dir -Recurse -File).Count
+          Write-Host "Total files in publish output: $count"
+
+      - name: Smoke test — start published application
+        id: smoke-start
+        shell: pwsh
+        run: |
+          $dir      = Resolve-Path "artifacts/publish/win-x64"
+          $exe      = Join-Path $dir "Lantern.Web.exe"
+          $appPort  = 18080
+          $outLog   = Join-Path $env:RUNNER_TEMP "lantern-out.log"
+          $errLog   = Join-Path $env:RUNNER_TEMP "lantern-err.log"
+
+          $env:ASPNETCORE_ENVIRONMENT           = "Development"
+          $env:ASPNETCORE_URLS                  = "http://127.0.0.1:$appPort"
+          # Point at a non-existent Meilisearch; app must start gracefully without it.
+          $env:Meilisearch__Url                 = "http://127.0.0.1:1"
+          $env:LANTERN_ADMIN_USERNAME           = "smoketest"
+          $env:LANTERN_ADMIN_PASSWORD           = "Sm0keTest!CI2024"
+
+          $proc = Start-Process -FilePath $exe `
+            -WorkingDirectory $dir `
+            -PassThru `
+            -RedirectStandardOutput $outLog `
+            -RedirectStandardError  $errLog
+
+          echo "SMOKE_PID=$($proc.Id)" >> $env:GITHUB_ENV
+
+          # Accept any HTTP response (incl. 307 HTTPS redirect) as proof of startup.
+          $deadline = (Get-Date).AddSeconds(45)
+          $started  = $false
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            if ($proc.HasExited) {
+              Write-Error "Lantern process exited unexpectedly (exit code $($proc.ExitCode))."
+              break
+            }
+            try {
+              $req = [Net.HttpWebRequest]::Create("http://127.0.0.1:$appPort/")
+              $req.AllowAutoRedirect = $false
+              $req.Timeout = 3000
+              $resp = $req.GetResponse()
+              $resp.Close()
+              $started = $true; break
+            } catch [Net.WebException] {
+              if ($null -ne $_.Exception.Response) {
+                # Any HTTP response from the app counts.
+                $_.Exception.Response.Close()
+                $started = $true; break
+              }
+            } catch {}
+          }
+
+          if (-not $started) {
+            Write-Error "Lantern did not respond within 45 s."
+            Write-Host "--- stdout ---"
+            Get-Content $outLog -ErrorAction SilentlyContinue
+            Write-Host "--- stderr ---"
+            Get-Content $errLog -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "Lantern smoke test passed: application responded on port $appPort."
+
+      - name: Stop smoke test application
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:SMOKE_PID) {
+            $proc = Get-Process -Id $env:SMOKE_PID -ErrorAction SilentlyContinue
+            if ($proc -and -not $proc.HasExited) {
+              $proc.Kill()
+              Write-Host "Smoke test process stopped."
+            }
+          }
+
+      - name: Upload publish output (executable + wwwroot)
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-win-x64
+          path: |
+            artifacts/publish/win-x64/Lantern.Web.exe
+            artifacts/publish/win-x64/wwwroot/
+          retention-days: 7
+
+      - name: Upload smoke test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs
+          path: |
+            ${{ runner.temp }}/lantern-out.log
+            ${{ runner.temp }}/lantern-err.log
+          retention-days: 7

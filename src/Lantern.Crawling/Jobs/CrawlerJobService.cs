@@ -1,7 +1,7 @@
+using System.Text.Json;
 using Lantern.Core.Crawling;
 using Lantern.Core.Jobs;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace Lantern.Crawling.Jobs;
 

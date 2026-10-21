@@ -1,8 +1,8 @@
+using System.Collections.Generic;
 using Lantern.Core.Search;
 using Meilisearch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Collections.Generic;
 
 namespace Lantern.Infrastructure.Search;
 
@@ -220,10 +220,15 @@ public sealed class MeilisearchSearchService : ISearchService
                 SourcePath = h.SourcePath,
                 Url = h.Url,
                 DocumentType = h.DocumentType,
-                Uri = h.Uri ?? h.Url ?? "", Path = h.Path ?? h.SourcePath,
-                SourceId = h.SourceId ?? "", SourceType = h.SourceType ?? "",
-                Extension = h.Extension, MimeType = h.MimeType, Size = h.Size,
-                ModifiedAt = h.ModifiedAt, IndexedAt = h.IndexedAt,
+                Uri = h.Uri ?? h.Url ?? "",
+                Path = h.Path ?? h.SourcePath,
+                SourceId = h.SourceId ?? "",
+                SourceType = h.SourceType ?? "",
+                Extension = h.Extension,
+                MimeType = h.MimeType,
+                Size = h.Size,
+                ModifiedAt = h.ModifiedAt,
+                IndexedAt = h.IndexedAt,
             }).ToList()
         };
     }

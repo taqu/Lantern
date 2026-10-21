@@ -1,0 +1,225 @@
+name: Native Embedding Tests
+
+# This workflow validates LlamaPure and IBM Granite Embedding 97M inference.
+# It is REQUIRED for release qualification but is NOT run on every pull request
+# because the GGUF model (~370 MB) is not available on every GitHub-hosted runner.
+#
+# Run this workflow:
+#   - Manually via workflow_dispatch before tagging a release candidate.
+#   - Automatically when a release branch is created (optional, see trigger below).
+#
+# The workflow FAILS if the model file is absent. Missing model resources must
+# not silently skip real inference tests.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: >
+          Path to granite-embedding-97M-multilingual-r2.gguf relative to the
+          repository root. Leave blank to use the default resources/ location.
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  MEILISEARCH_VERSION: '1.55.0'
+  MEILISEARCH_SHA256: '948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A'
+  MEILISEARCH_PORT: '17700'
+  # Default model path (relative to repository root).
+  DEFAULT_MODEL_PATH: resources/granite-embedding-97M-multilingual-r2.gguf
+
+jobs:
+  embedding-tests:
+    name: LlamaPure / Granite Embedding Tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # ── Resolve and validate the GGUF model ──────────────────────────────
+      - name: Resolve model path
+        id: model
+        shell: pwsh
+        run: |
+          $inputPath = "${{ github.event.inputs.model_path }}"
+          $resolved  = if ($inputPath) { $inputPath } else { "${{ env.DEFAULT_MODEL_PATH }}" }
+          echo "path=$resolved" >> $env:GITHUB_OUTPUT
+          Write-Host "Model path: $resolved"
+
+      - name: Verify GGUF model exists
+        shell: pwsh
+        run: |
+          $model = "${{ steps.model.outputs.path }}"
+          if (-not (Test-Path $model)) {
+            Write-Error @"
+GGUF model not found: $model
+
+This workflow requires the IBM Granite Embedding 97M Multilingual R2 model.
+Options:
+  1. Self-hosted runner: place the model at ${{ env.DEFAULT_MODEL_PATH }}
+  2. Cache: restore it from a GitHub Actions cache seeded separately
+  3. Explicit path: pass model_path when triggering via workflow_dispatch
+
+The model file must be present. Missing model resources fail release qualification.
+"@
+            exit 1
+          }
+          $size = (Get-Item $model).Length
+          Write-Host "Model found: $model ($([math]::Round($size/1MB,1)) MB)"
+          echo "MODEL_PATH=$model" >> $env:GITHUB_ENV
+
+      # ── Meilisearch setup (for hybrid search tests) ───────────────────────
+      - name: Cache Meilisearch binary
+        id: cache-meilisearch
+        uses: actions/cache@v4
+        with:
+          path: tools/meilisearch/meilisearch.exe
+          key: meilisearch-windows-amd64-${{ env.MEILISEARCH_VERSION }}
+
+      - name: Download Meilisearch
+        if: steps.cache-meilisearch.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dir = "tools/meilisearch"
+          $exe = "$dir/meilisearch.exe"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $url = "https://github.com/meilisearch/meilisearch/releases/download/v${{ env.MEILISEARCH_VERSION }}/meilisearch-windows-amd64.exe"
+          Write-Host "Downloading Meilisearch v${{ env.MEILISEARCH_VERSION }} ..."
+          Invoke-WebRequest -Uri $url -OutFile $exe
+
+      - name: Verify Meilisearch checksum
+        shell: pwsh
+        run: |
+          $exe      = "tools/meilisearch/meilisearch.exe"
+          $expected = "${{ env.MEILISEARCH_SHA256 }}".ToUpper()
+          $actual   = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToUpper()
+          if ($actual -ne $expected) {
+            Write-Error "Meilisearch SHA-256 mismatch.`n  Expected : $expected`n  Actual   : $actual"
+            exit 1
+          }
+          Write-Host "Meilisearch checksum OK."
+
+      - name: Generate ephemeral Meilisearch master key
+        id: meili-key
+        shell: pwsh
+        run: |
+          $key = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 48 | ForEach-Object { [char]$_ })
+          echo "key=$key" >> $env:GITHUB_OUTPUT
+
+      - name: Start Meilisearch
+        shell: pwsh
+        env:
+          MEILI_MASTER_KEY: ${{ steps.meili-key.outputs.key }}
+        run: |
+          $dataDir = Join-Path $env:RUNNER_TEMP ("meili-emb-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          echo "MEILI_DATA_DIR=$dataDir" >> $env:GITHUB_ENV
+
+          $proc = Start-Process `
+            -FilePath "tools/meilisearch/meilisearch.exe" `
+            -ArgumentList @(
+              "--master-key", $env:MEILI_MASTER_KEY,
+              "--db-path",    $dataDir,
+              "--http-addr",  "127.0.0.1:${{ env.MEILISEARCH_PORT }}",
+              "--no-analytics"
+            ) `
+            -PassThru `
+            -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP "meili-emb-out.log") `
+            -RedirectStandardError  (Join-Path $env:RUNNER_TEMP "meili-emb-err.log")
+
+          echo "MEILI_PID=$($proc.Id)" >> $env:GITHUB_ENV
+
+          $healthUrl = "http://127.0.0.1:${{ env.MEILISEARCH_PORT }}/health"
+          $deadline  = (Get-Date).AddSeconds(60)
+          $ready     = $false
+          while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            if ($proc.HasExited) {
+              Write-Error "Meilisearch exited unexpectedly."
+              exit 1
+            }
+            try {
+              if ((Invoke-WebRequest -Uri $healthUrl -TimeoutSec 3 -ErrorAction Stop).StatusCode -eq 200) {
+                $ready = $true; break
+              }
+            } catch {}
+          }
+          if (-not $ready) { Write-Error "Meilisearch not ready in 60 s."; exit 1 }
+          Write-Host "Meilisearch ready."
+
+      # ── Build and run embedding tests ─────────────────────────────────────
+      - name: Restore
+        run: dotnet restore
+
+      - name: Run embedding and hybrid search tests
+        env:
+          MEILI_MASTER_KEY: ${{ steps.meili-key.outputs.key }}
+          MEILI_HOST: http://127.0.0.1:${{ env.MEILISEARCH_PORT }}
+          # Override the embedding model path so the running tests locate the GGUF file.
+          Embedding__ModelPath: ${{ steps.model.outputs.path }}
+          Embedding__Enabled: 'true'
+        run: >
+          dotnet test tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=embedding-results.trx"
+          --results-directory artifacts/test-results/embedding
+          --collect:"XPlat Code Coverage"
+
+      # ── Cleanup ───────────────────────────────────────────────────────────
+      - name: Print Meilisearch logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Content (Join-Path $env:RUNNER_TEMP "meili-emb-err.log") -ErrorAction SilentlyContinue
+
+      - name: Stop Meilisearch
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:MEILI_PID) {
+            $proc = Get-Process -Id $env:MEILI_PID -ErrorAction SilentlyContinue
+            if ($proc -and -not $proc.HasExited) {
+              $proc.CloseMainWindow() | Out-Null
+              if (-not $proc.WaitForExit(5000)) { $proc.Kill() }
+            }
+          }
+          if ($env:MEILI_DATA_DIR -and (Test-Path $env:MEILI_DATA_DIR)) {
+            Remove-Item -Recurse -Force $env:MEILI_DATA_DIR -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedding-test-results
+          path: artifacts/test-results/embedding/
+          retention-days: 30
+
+      - name: Upload Meilisearch logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedding-meilisearch-logs
+          path: |
+            ${{ runner.temp }}/meili-emb-out.log
+            ${{ runner.temp }}/meili-emb-err.log
+          retention-days: 7

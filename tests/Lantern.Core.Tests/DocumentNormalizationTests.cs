@@ -33,9 +33,13 @@ public sealed class DocumentNormalizationTests
     {
         SearchDocument doc = DocumentNormalizer.Normalize(new SearchDocument
         {
-            SourceId = "files", SourceType = "file", Path = @"C:\Docs\日本語.TXT",
-            Title = "  日本語 Title\0  ", Content = "日本語 English\r\n  punctuation！\t\0next\rline",
-            MimeType = " TEXT/PLAIN ", Size = 10,
+            SourceId = "files",
+            SourceType = "file",
+            Path = @"C:\Docs\日本語.TXT",
+            Title = "  日本語 Title\0  ",
+            Content = "日本語 English\r\n  punctuation！\t\0next\rline",
+            MimeType = " TEXT/PLAIN ",
+            Size = 10,
             ModifiedAt = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.FromHours(9))
         });
         Assert.Equal("日本語 Title", doc.Title);

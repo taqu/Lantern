@@ -1,6 +1,6 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.Data.Sqlite;
 
 namespace Lantern.Infrastructure.Persistence;
 

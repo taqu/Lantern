@@ -1,11 +1,11 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Threading.Channels;
 using Lantern.Core.Crawling;
 using Lantern.Core.Jobs;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
-using System.Text.Json;
-using System.Threading.Channels;
 
 namespace Lantern.Crawling.Jobs;
 

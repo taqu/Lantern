@@ -1,7 +1,7 @@
+using System.Text;
 using Lantern.Core.Extraction;
 using Lantern.Core.Search;
 using Microsoft.Extensions.Options;
-using System.Text;
 
 namespace Lantern.Infrastructure.Extraction;
 

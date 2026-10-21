@@ -1,6 +1,6 @@
-using Meilisearch;
 using Lantern.Core.Search;
 using Lantern.Infrastructure.Search;
+using Meilisearch;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Lantern.Feasibility;
@@ -39,8 +39,12 @@ internal static class Seeder
                 NullLogger<MeilisearchIndexingService>.Instance);
             await indexing.UpsertBatchAsync(documents.Select(d => new SearchDocument
             {
-                SourceId = "development-seed", SourceType = d.SourcePath != null ? "file" : "web",
-                Path = d.SourcePath, Uri = d.Url ?? "", Title = d.Title, Content = d.Content,
+                SourceId = "development-seed",
+                SourceType = d.SourcePath != null ? "file" : "web",
+                Path = d.SourcePath,
+                Uri = d.Url ?? "",
+                Title = d.Title,
+                Content = d.Content,
                 MimeType = d.SourcePath == null ? "text/html" : null
             }));
 

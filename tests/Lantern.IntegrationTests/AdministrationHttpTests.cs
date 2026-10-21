@@ -189,7 +189,8 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
             builder.UseSetting("Storage:DataProtectionKeysPath", Path.Combine(directory, "keys"));
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Meilisearch:Url"] = "http://127.0.0.1:1", ["Meilisearch:IndexName"] = "http-test-index"
+                ["Meilisearch:Url"] = "http://127.0.0.1:1",
+                ["Meilisearch:IndexName"] = "http-test-index"
             }));
         }
     }

@@ -88,98 +88,98 @@ internal sealed class DocumentExtractionFeasibility
                 case ".TXT":
                 case ".HTML":
                 case ".HTM":
-                {
-                        ITextParser parser = ParserFactory.CreateText(context);
-                    if (parser != null)
                     {
-                        text = parser.Parse();
-                        parserKind = "text";
+                        ITextParser parser = ParserFactory.CreateText(context);
+                        if (parser != null)
+                        {
+                            text = parser.Parse();
+                            parserKind = "text";
+                        }
+                        break;
                     }
-                    break;
-                }
                 case ".DOCX":
                 case ".PDF":
                 case ".RTF":
                 case ".EPUB":
-                {
-                        IDocumentParser parser = ParserFactory.CreateDocument(context);
-                    if (parser != null)
                     {
-                            ToxyDocument doc = parser.Parse();
-                        if (doc?.Paragraphs != null)
+                        IDocumentParser parser = ParserFactory.CreateDocument(context);
+                        if (parser != null)
                         {
-                            text = string.Join("\n", doc.Paragraphs.Select(p => p.Text ?? ""));
+                            ToxyDocument doc = parser.Parse();
+                            if (doc?.Paragraphs != null)
+                            {
+                                text = string.Join("\n", doc.Paragraphs.Select(p => p.Text ?? ""));
+                            }
+                            parserKind = "document";
                         }
-                        parserKind = "document";
+                        break;
                     }
-                    break;
-                }
                 case ".XLSX":
                 case ".XLS":
                 case ".CSV":
-                {
-                        ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
-                    if (parser != null)
                     {
-                            ToxySpreadsheet spreadsheet = parser.Parse();
-                        if (spreadsheet?.Tables != null)
+                        ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
+                        if (parser != null)
                         {
-                            var sb = new System.Text.StringBuilder();
-                            foreach (ToxyTable? table in spreadsheet.Tables)
+                            ToxySpreadsheet spreadsheet = parser.Parse();
+                            if (spreadsheet?.Tables != null)
                             {
-                                sb.AppendLine($"[Sheet: {table.Name}]");
-                                if (table.Rows != null)
+                                var sb = new System.Text.StringBuilder();
+                                foreach (ToxyTable? table in spreadsheet.Tables)
                                 {
-                                    foreach (ToxyRow? row in table.Rows)
+                                    sb.AppendLine($"[Sheet: {table.Name}]");
+                                    if (table.Rows != null)
                                     {
-                                        if (row?.Cells != null)
-                                            sb.AppendLine(string.Join("\t", row.Cells.Select(c => c?.Value ?? "")));
+                                        foreach (ToxyRow? row in table.Rows)
+                                        {
+                                            if (row?.Cells != null)
+                                                sb.AppendLine(string.Join("\t", row.Cells.Select(c => c?.Value ?? "")));
+                                        }
                                     }
                                 }
+                                text = sb.ToString();
                             }
-                            text = sb.ToString();
+                            parserKind = "spreadsheet";
                         }
-                        parserKind = "spreadsheet";
+                        break;
                     }
-                    break;
-                }
                 case ".PPTX":
                 case ".PPT":
-                {
-                        ISlideshowParser parser = ParserFactory.CreateSlideshow(context);
-                    if (parser != null)
                     {
-                            ToxySlideshow slideshow = parser.Parse();
-                        if (slideshow?.Slides != null)
+                        ISlideshowParser parser = ParserFactory.CreateSlideshow(context);
+                        if (parser != null)
                         {
-                            var sb = new System.Text.StringBuilder();
-                            int slideNum = 1;
-                            foreach (ToxySlide? slide in slideshow.Slides)
+                            ToxySlideshow slideshow = parser.Parse();
+                            if (slideshow?.Slides != null)
                             {
-                                sb.AppendLine($"[Slide {slideNum++}]");
-                                if (slide?.Texts != null)
+                                var sb = new System.Text.StringBuilder();
+                                int slideNum = 1;
+                                foreach (ToxySlide? slide in slideshow.Slides)
                                 {
-                                    foreach (string t in slide.Texts)
-                                        sb.AppendLine(t);
+                                    sb.AppendLine($"[Slide {slideNum++}]");
+                                    if (slide?.Texts != null)
+                                    {
+                                        foreach (string t in slide.Texts)
+                                            sb.AppendLine(t);
+                                    }
                                 }
+                                text = sb.ToString();
                             }
-                            text = sb.ToString();
+                            parserKind = "slideshow";
                         }
-                        parserKind = "slideshow";
+                        break;
                     }
-                    break;
-                }
                 default:
-                {
+                    {
                         // Try text parser as fallback
                         ITextParser parser = ParserFactory.CreateText(context);
-                    if (parser != null)
-                    {
-                        text = parser.Parse();
-                        parserKind = "text (fallback)";
+                        if (parser != null)
+                        {
+                            text = parser.Parse();
+                            parserKind = "text (fallback)";
+                        }
+                        break;
                     }
-                    break;
-                }
             }
 
             if (text == null)

@@ -1,6 +1,6 @@
-using Lantern.Core.Crawling;
 using System.Net;
 using System.Net.Sockets;
+using Lantern.Core.Crawling;
 
 namespace Lantern.Crawling.Web;
 

@@ -1,6 +1,6 @@
 using Lantern.Core.Crawling;
-using Lantern.Infrastructure.Persistence;
 using Lantern.Crawling.Files;
+using Lantern.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,9 +58,13 @@ public sealed class FileFingerprintTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "doc", CanonicalPath = path,
-            FileSize = size, LastWriteTimeUtc = lastWrite,
-            LastSeenScanId = Guid.NewGuid(), SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "doc",
+            CanonicalPath = path,
+            FileSize = size,
+            LastWriteTimeUtc = lastWrite,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Indexed
         });
 
         var discovered = new DiscoveredFile(path, size, lastWrite);
@@ -83,9 +87,13 @@ public sealed class FileFingerprintTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "doc", CanonicalPath = path,
-            FileSize = 1000, LastWriteTimeUtc = lastWrite,
-            LastSeenScanId = Guid.NewGuid(), SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "doc",
+            CanonicalPath = path,
+            FileSize = 1000,
+            LastWriteTimeUtc = lastWrite,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Indexed
         });
 
         var discovered = new DiscoveredFile(path, 2000, lastWrite); // different size
@@ -108,9 +116,13 @@ public sealed class FileFingerprintTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "doc", CanonicalPath = path,
-            FileSize = size, LastWriteTimeUtc = DateTimeOffset.UtcNow.AddHours(-2),
-            LastSeenScanId = Guid.NewGuid(), SyncStatus = CrawlSyncStatus.Indexed
+            CrawlerId = crawlerId,
+            DocumentId = "doc",
+            CanonicalPath = path,
+            FileSize = size,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow.AddHours(-2),
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Indexed
         });
 
         var discovered = new DiscoveredFile(path, size, DateTimeOffset.UtcNow.AddHours(-1));
@@ -134,9 +146,13 @@ public sealed class FileFingerprintTests : IAsyncLifetime
 
         await repo.SaveAsync(new FileState
         {
-            CrawlerId = crawlerId, DocumentId = "doc", CanonicalPath = path,
-            FileSize = size, LastWriteTimeUtc = lastWrite,
-            LastSeenScanId = Guid.NewGuid(), SyncStatus = CrawlSyncStatus.Failed,
+            CrawlerId = crawlerId,
+            DocumentId = "doc",
+            CanonicalPath = path,
+            FileSize = size,
+            LastWriteTimeUtc = lastWrite,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Failed,
             LastError = "Previous failure"
         });
 

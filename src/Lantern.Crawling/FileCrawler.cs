@@ -1,10 +1,10 @@
+using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Lantern.Core.Crawling;
 using Lantern.Core.Search;
 using Lantern.Crawling.Files;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
-using System.Threading.Channels;
 
 namespace Lantern.Crawling;
 
@@ -99,13 +99,13 @@ public sealed class FileCrawler(
                         switch (outcome)
                         {
                             case FileSyncOutcome.Unchanged: Interlocked.Increment(ref unchanged); break;
-                            case FileSyncOutcome.Indexed:   Interlocked.Increment(ref indexed);   break;
-                            case FileSyncOutcome.Updated:   Interlocked.Increment(ref updated);   break;
+                            case FileSyncOutcome.Indexed: Interlocked.Increment(ref indexed); break;
+                            case FileSyncOutcome.Updated: Interlocked.Increment(ref updated); break;
                             case FileSyncOutcome.Failed:
                                 Interlocked.Increment(ref failed);
                                 if (error != null) errors.Add($"{file.CanonicalPath}: {error}");
                                 break;
-                            case FileSyncOutcome.Skipped:   Interlocked.Increment(ref skipped);   break;
+                            case FileSyncOutcome.Skipped: Interlocked.Increment(ref skipped); break;
                         }
                     }
                     catch (OperationCanceledException) { break; }

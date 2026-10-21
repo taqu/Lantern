@@ -151,7 +151,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         DiscoveredFile file = Assert.Single(files);
         Assert.Equal(info.Length, file.FileSize);
         Assert.Equal(info.LastWriteTimeUtc, file.LastWriteTimeUtc);
-        Assert.True(file.CanonicalPath.EndsWith("test.txt", StringComparison.OrdinalIgnoreCase));
+        Assert.EndsWith("test.txt", file.CanonicalPath, StringComparison.OrdinalIgnoreCase);
     }
 }
 

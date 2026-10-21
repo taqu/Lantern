@@ -1,7 +1,7 @@
+using System.Text;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Lantern.Core.Extraction;
-using System.Text;
 
 namespace Lantern.Infrastructure.Extraction;
 

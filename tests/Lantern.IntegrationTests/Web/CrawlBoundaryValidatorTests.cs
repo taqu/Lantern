@@ -9,14 +9,14 @@ public class CrawlBoundaryValidatorTests
         string[]? hosts = null,
         string[]? pathPrefixes = null,
         string[]? excludePatterns = null) => new()
-    {
-        CrawlerId = Guid.NewGuid(),
-        Name = "test",
-        StartUrls = ["https://example.com/"],
-        AllowedHosts = hosts ?? ["example.com"],
-        AllowedPathPrefixes = pathPrefixes ?? ["/"],
-        ExcludeUrlPatterns = excludePatterns ?? [],
-    };
+        {
+            CrawlerId = Guid.NewGuid(),
+            Name = "test",
+            StartUrls = ["https://example.com/"],
+            AllowedHosts = hosts ?? ["example.com"],
+            AllowedPathPrefixes = pathPrefixes ?? ["/"],
+            ExcludeUrlPatterns = excludePatterns ?? [],
+        };
 
     // --- IsHostAllowed ---
 

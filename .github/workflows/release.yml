@@ -1,0 +1,355 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+env:
+  MEILISEARCH_VERSION: '1.55.0'
+  MEILISEARCH_SHA256:  '948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A'
+  DOTNET_NOLOGO:        'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  # ── 1. Build, test, and validate ──────────────────────────────────────────
+
+  qualify:
+    name: Build and Qualify
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit:  ${{ steps.version.outputs.commit }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          $c = git rev-parse --short HEAD
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+          echo "commit=$c"  >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v  Commit: $c"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Format check
+        run: dotnet format --verify-no-changes
+
+      - name: Unit tests
+        run: >
+          dotnet test --configuration Release --no-build
+          --filter "Category!=Integration"
+          --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: '**/*.trx'
+
+  # ── 2. Integration tests (with Meilisearch) ──────────────────────────────
+
+  integration:
+    name: Integration Tests
+    runs-on: windows-latest
+    needs: qualify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Cache Meilisearch binary
+        id: cache-meili
+        uses: actions/cache@v4
+        with:
+          path: C:\meilisearch\meilisearch.exe
+          key: meilisearch-windows-amd64-${{ env.MEILISEARCH_VERSION }}
+
+      - name: Download Meilisearch
+        if: steps.cache-meili.outputs.cache-hit != 'true'
+        run: |
+          $dir = 'C:\meilisearch'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $url = "https://github.com/meilisearch/meilisearch/releases/download/v${{ env.MEILISEARCH_VERSION }}/meilisearch-windows-amd64.exe"
+          Invoke-WebRequest -Uri $url -OutFile "$dir\meilisearch.exe"
+
+      - name: Verify Meilisearch checksum
+        run: |
+          $hash = (Get-FileHash 'C:\meilisearch\meilisearch.exe' -Algorithm SHA256).Hash
+          if ($hash.ToUpper() -ne '${{ env.MEILISEARCH_SHA256 }}') {
+            Write-Error "SHA-256 mismatch: $hash"
+            exit 1
+          }
+          Write-Host "Checksum verified: $hash"
+
+      - name: Start Meilisearch
+        run: |
+          $key = -join ((1..48) | ForEach-Object { [char](Get-Random -Min 65 -Max 90) })
+          $env:MEILI_MASTER_KEY_CI = $key
+          echo "MEILI_MASTER_KEY=$key" >> $env:GITHUB_ENV
+          $proc = Start-Process 'C:\meilisearch\meilisearch.exe' `
+            -ArgumentList '--http-addr','127.0.0.1:17700','--no-analytics','--db-path','C:\meili-data' `
+            -Environment @{ MEILI_MASTER_KEY = $key } `
+            -PassThru
+          echo "MEILI_PID=$($proc.Id)" >> $env:GITHUB_ENV
+          $deadline = (Get-Date).AddSeconds(30)
+          while ((Get-Date) -lt $deadline) {
+            try {
+              $r = Invoke-WebRequest 'http://127.0.0.1:17700/health' -UseBasicParsing -TimeoutSec 2 -EA SilentlyContinue
+              if ($r.StatusCode -eq 200) { Write-Host "Meilisearch ready"; break }
+            } catch {}
+            Start-Sleep 2
+          }
+
+      - name: Run integration tests
+        env:
+          MEILI_HOST: 'http://127.0.0.1:17700'
+        run: >
+          dotnet test tests/Lantern.IntegrationTests
+          --configuration Release --no-build
+          --logger "trx;LogFileName=integration-tests.trx"
+
+      - name: Stop Meilisearch
+        if: always()
+        run: |
+          if ($env:MEILI_PID) {
+            Stop-Process -Id $env:MEILI_PID -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: '**/*.trx'
+
+  # ── 3. Publish win-x64 ────────────────────────────────────────────────────
+
+  publish:
+    name: Publish win-x64
+    runs-on: windows-latest
+    needs: [qualify, integration]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore for win-x64
+        run: dotnet restore src/Lantern.Web/Lantern.Web.csproj --runtime win-x64
+
+      - name: Publish win-x64
+        run: |
+          dotnet publish src/Lantern.Web/Lantern.Web.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --no-restore `
+            --output artifacts/publish/win-x64 `
+            /p:Version=${{ needs.qualify.outputs.version }} `
+            /p:InformationalVersion="${{ needs.qualify.outputs.version }}+${{ needs.qualify.outputs.commit }}"
+
+      - name: Validate publish outputs
+        run: |
+          $pub = 'artifacts/publish/win-x64'
+          foreach ($f in @('Lantern.Web.exe', 'wwwroot')) {
+            if (-not (Test-Path (Join-Path $pub $f))) {
+              Write-Error "Missing required output: $f"
+              exit 1
+            }
+          }
+          Write-Host "Publish outputs validated"
+
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-win-x64
+          path: artifacts/publish/win-x64
+          retention-days: 7
+
+  # ── 4. Download and verify Meilisearch for packaging ─────────────────────
+
+  package:
+    name: Package Release
+    runs-on: windows-latest
+    needs: [qualify, publish]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download publish artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: publish-win-x64
+          path: artifacts/publish/win-x64
+
+      - name: Cache Meilisearch binary
+        id: cache-meili
+        uses: actions/cache@v4
+        with:
+          path: artifacts/meilisearch/meilisearch.exe
+          key: meilisearch-windows-amd64-${{ env.MEILISEARCH_VERSION }}
+
+      - name: Download Meilisearch for packaging
+        if: steps.cache-meili.outputs.cache-hit != 'true'
+        run: |
+          New-Item -ItemType Directory -Path 'artifacts/meilisearch' -Force | Out-Null
+          $url = "https://github.com/meilisearch/meilisearch/releases/download/v${{ env.MEILISEARCH_VERSION }}/meilisearch-windows-amd64.exe"
+          Invoke-WebRequest -Uri $url -OutFile 'artifacts/meilisearch/meilisearch.exe'
+
+      - name: Verify Meilisearch checksum
+        run: |
+          $hash = (Get-FileHash 'artifacts/meilisearch/meilisearch.exe' -Algorithm SHA256).Hash
+          if ($hash.ToUpper() -ne '${{ env.MEILISEARCH_SHA256 }}') {
+            Write-Error "SHA-256 mismatch: $hash"
+            exit 1
+          }
+          Write-Host "Meilisearch checksum verified"
+
+      - name: Build release package
+        run: |
+          $v = '${{ needs.qualify.outputs.version }}'
+          .\scripts\Build-Release.ps1 `
+            -Version $v `
+            -MeilisearchExe 'artifacts\meilisearch\meilisearch.exe' `
+            -SkipModel `
+            -SkipTests `
+            -OutputDir 'artifacts\release'
+
+      - name: Verify archive contents
+        run: |
+          $v   = '${{ needs.qualify.outputs.version }}'
+          $zip = "artifacts/release/Lantern-$v-win-x64.zip"
+          $tmp = "artifacts/verify-extract"
+          Expand-Archive -Path $zip -DestinationPath $tmp
+          $required = @(
+            'app/Lantern.Web.exe',
+            'app/wwwroot',
+            'bin/meilisearch/meilisearch.exe',
+            'config/appsettings.example.json',
+            'scripts/Initialize-Lantern.ps1',
+            'scripts/Install-LanternService.ps1',
+            'scripts/Uninstall-LanternService.ps1',
+            'scripts/Start-Lantern.ps1',
+            'scripts/Backup-Lantern.ps1',
+            'manifest.json',
+            'VERSION'
+          )
+          $missing = @()
+          foreach ($f in $required) {
+            if (-not (Test-Path (Join-Path $tmp $f))) { $missing += $f }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing archive entries: $($missing -join ', ')"
+            exit 1
+          }
+          Write-Host "Archive contents verified ($($required.Count) required items present)"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-win-x64
+          path: |
+            artifacts/release/Lantern-*.zip
+            artifacts/release/Lantern-*.sha256
+          retention-days: 90
+
+  # ── 5. Create GitHub Release ──────────────────────────────────────────────
+
+  release:
+    name: Create GitHub Release
+    runs-on: windows-latest
+    needs: [qualify, package]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-win-x64
+          path: artifacts/release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.qualify.outputs.version }}
+          name: Lantern v${{ needs.qualify.outputs.version }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/release/Lantern-*.zip
+            artifacts/release/Lantern-*.sha256
+          body: |
+            ## Lantern v${{ needs.qualify.outputs.version }}
+
+            Self-contained Windows x64 release.
+
+            ### Installation
+
+            1. Extract the ZIP archive.
+            2. Run `scripts\Initialize-Lantern.ps1` as Administrator.
+            3. Run `scripts\Start-Lantern.ps1` for console mode, or
+               `scripts\Install-LanternService.ps1` for Windows Service mode.
+
+            See `docs\INSTALL.md` in the archive for full instructions.
+
+            ### Components
+
+            | Component | Version |
+            |-----------|---------|
+            | .NET | 10 (self-contained) |
+            | Meilisearch | ${{ env.MEILISEARCH_VERSION }} |
+            | LlamaPure | 1.0.4 |
+
+            > **Note:** The Granite embedding model (`granite-embedding-97M-multilingual-r2.gguf`)
+            > is not included in the release archive due to its size (~200 MB).
+            > Hybrid search requires a separate model download; keyword search works without it.
+
+            ### Checksums
+
+            SHA-256 checksums are provided in the `.sha256` files attached to this release.
+
+            ### Known limitations
+
+            - Release binaries are not code-signed. Windows SmartScreen may display a warning on first run.
+            - The GGUF model is not bundled; hybrid search requires manual model placement.
+            - Tested on Windows 10 x64 and Windows 11 x64.

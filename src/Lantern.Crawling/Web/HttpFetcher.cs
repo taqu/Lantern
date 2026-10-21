@@ -1,7 +1,7 @@
-using Lantern.Core.Crawling;
-using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Sockets;
+using Lantern.Core.Crawling;
+using Microsoft.Extensions.Logging;
 
 namespace Lantern.Crawling.Web;
 

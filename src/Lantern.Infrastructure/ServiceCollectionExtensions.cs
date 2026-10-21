@@ -29,9 +29,11 @@ public static class ServiceCollectionExtensions
         services.Configure<HybridSearchOptions>(
             configuration.GetSection(HybridSearchOptions.SectionName));
 
-        services.AddSingleton(sp => new Meilisearch.MeilisearchClient(
-            sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value.Url,
-            Environment.GetEnvironmentVariable("MEILI_API_KEY") ?? ""));
+        services.AddSingleton(sp =>
+        {
+            MeilisearchOptions opts = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
+            return new Meilisearch.MeilisearchClient(opts.Url, opts.ResolveApiKey());
+        });
         services.AddSingleton(sp => new MeilisearchIndexingService(
             sp.GetRequiredService<Meilisearch.MeilisearchClient>(),
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value,
@@ -44,7 +46,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchService>(sp =>
         {
             MeilisearchOptions options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            string apiKey = Environment.GetEnvironmentVariable("MEILI_API_KEY") ?? "";
+            string apiKey = options.ResolveApiKey();
             ILogger<MeilisearchSearchService> logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
             HybridSearchOptions hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
             return new MeilisearchSearchService(options, apiKey, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);

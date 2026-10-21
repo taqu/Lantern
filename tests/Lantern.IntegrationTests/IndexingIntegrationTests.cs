@@ -32,8 +32,13 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
 
     private static SearchDocument Doc(int i, string content = "日本語 lantern foundation") => new()
     {
-        SourceId = "test", SourceType = "web", Uri = $"https://example.com/{i}", Title = $"Document {i}",
-        Content = content, MimeType = "text/html", Size = 100
+        SourceId = "test",
+        SourceType = "web",
+        Uri = $"https://example.com/{i}",
+        Title = $"Document {i}",
+        Content = content,
+        MimeType = "text/html",
+        Size = 100
     };
 
     [SkippableFact]
