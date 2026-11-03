@@ -23,12 +23,14 @@ local AI-powered semantic search — entirely offline, with no cloud dependencie
 ## Quick Start
 
 1. Extract `Lantern-<version>-win-x64.zip` to `C:\Lantern\`
-2. Run as Administrator:
+2. Open PowerShell as **Administrator** and run:
    ```powershell
+   cd C:\Lantern
    .\scripts\Initialize-Lantern.ps1
    ```
-3. Start Lantern:
+3. Start Lantern (no elevation required):
    ```powershell
+   cd C:\Lantern
    .\scripts\Start-Lantern.ps1
    ```
 4. Open `http://127.0.0.1:5000` in your browser.
