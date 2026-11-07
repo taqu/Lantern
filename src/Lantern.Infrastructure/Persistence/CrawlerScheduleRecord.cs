@@ -21,8 +21,8 @@ public sealed class CrawlerScheduleRecord
         TimeOfDay = TimeOfDay != null ? TimeOnly.Parse(TimeOfDay) : null,
         TimeZoneId = TimeZoneId,
         DaysOfWeek = ParseDaysOfWeek(DaysOfWeek),
-        NextRunAt = NextRunAt,
-        LastTriggeredAt = LastTriggeredAt
+        NextRunAt = NextRunAt.HasValue ? new DateTimeOffset(NextRunAt.Value, TimeSpan.Zero) : null,
+        LastTriggeredAt = LastTriggeredAt.HasValue ? new DateTimeOffset(LastTriggeredAt.Value, TimeSpan.Zero) : null
     };
 
     public static CrawlerScheduleRecord FromDomain(CrawlerSchedule s) => new()

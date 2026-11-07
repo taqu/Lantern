@@ -343,10 +343,10 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset?>("LastTriggeredAt")
+                    b.Property<DateTime?>("LastTriggeredAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("NextRunAt")
+                    b.Property<DateTime?>("NextRunAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TimeOfDay")

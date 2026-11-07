@@ -1,4 +1,5 @@
 using Lantern.Core.Crawling;
+using Lantern.Core.Jobs;
 using Lantern.Crawling.Files;
 using Lantern.Crawling.Jobs;
 using Lantern.Crawling.Web;
@@ -25,7 +26,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<CrawlerJobService>();
         services.AddSingleton<JobDispatcherService>();
         services.AddHostedService(sp => sp.GetRequiredService<JobDispatcherService>());
-        services.AddHostedService<CrawlerSchedulerService>();
+        services.AddSingleton<CrawlerSchedulerService>();
+        services.AddHostedService(sp => sp.GetRequiredService<CrawlerSchedulerService>());
+        services.AddSingleton<ISchedulerHealthService>(sp => sp.GetRequiredService<CrawlerSchedulerService>());
         services.AddHostedService<RetentionCleanupService>();
         return services;
     }

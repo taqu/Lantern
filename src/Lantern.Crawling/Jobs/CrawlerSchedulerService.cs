@@ -17,23 +17,80 @@ public sealed class CrawlerSchedulerService(
     CrawlerJobService jobService,
     JobDispatcherService dispatcher,
     IOptions<JobOptions> options,
-    ILogger<CrawlerSchedulerService> logger) : BackgroundService
+    ILogger<CrawlerSchedulerService> logger) : BackgroundService, ISchedulerHealthService
 {
+    private const int MaxConsecutiveFailures = 5;
+    private const double MaxBackoffSeconds = 30.0;
+
+    private volatile SchedulerStatus _status = new(SchedulerState.Starting, null, null);
+
+    public SchedulerStatus GetStatus() => _status;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Crawler scheduler started");
+        _status = new(SchedulerState.Running, null, null);
+
+        int consecutiveFailures = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await CheckSchedulesAsync(stoppingToken); }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            try
             {
-                logger.LogError(ex, "Scheduler check failed");
+                await CheckSchedulesAsync(stoppingToken);
+                consecutiveFailures = 0;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex) when (IsPermanentError(ex))
+            {
+                logger.LogCritical(ex, "Scheduler encountered a permanent error and will stop. Fix the application before restarting.");
+                _status = new(SchedulerState.Faulted, ex.Message, DateTimeOffset.UtcNow);
+                return;
+            }
+            catch (Exception ex)
+            {
+                consecutiveFailures++;
+
+                if (consecutiveFailures >= MaxConsecutiveFailures)
+                {
+                    logger.LogCritical(ex, "Scheduler failed {Count} consecutive times and will stop", consecutiveFailures);
+                    _status = new(SchedulerState.Faulted, ex.Message, DateTimeOffset.UtcNow);
+                    return;
+                }
+
+                TimeSpan delay = TimeSpan.FromSeconds(Math.Min(
+                    options.Value.BackoffBaseSeconds * Math.Pow(2, consecutiveFailures - 1),
+                    MaxBackoffSeconds));
+                logger.LogWarning(ex, "Scheduler check failed (attempt {Attempt}/{Max}); retrying in {Seconds}s",
+                    consecutiveFailures, MaxConsecutiveFailures, delay.TotalSeconds);
+
+                try { await Task.Delay(delay, stoppingToken); }
+                catch (OperationCanceledException) { break; }
+                continue;
             }
 
             try { await Task.Delay(TimeSpan.FromSeconds(options.Value.DispatcherPollIntervalSeconds), stoppingToken); }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException) { break; }
         }
+
+        _status = new(SchedulerState.Stopped, null, null);
+        logger.LogInformation("Crawler scheduler stopped");
+    }
+
+    private static bool IsPermanentError(Exception ex)
+    {
+        if (ex is InvalidOperationException)
+        {
+            string msg = ex.Message;
+            if (msg.Contains("could not be translated", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("translation", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("LINQ", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     private async Task CheckSchedulesAsync(CancellationToken ct)
@@ -50,6 +107,10 @@ public sealed class CrawlerSchedulerService(
             {
                 await ProcessDueScheduleAsync(schedule, now, ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to process schedule for crawler {CrawlerId}", schedule.CrawlerId);
@@ -65,11 +126,6 @@ public sealed class CrawlerSchedulerService(
         // Advance the schedule first to prevent double-firing if job creation fails partway through.
         await schedules.UpdateLastTriggeredAsync(schedule.CrawlerId, now, nextRun, ct);
 
-        // Retrieve the crawler configuration. If unavailable, skip this occurrence.
-        // The caller (CrawlerManagementService) stores configs; we access them via ICrawlStateRepository.
-        // We store the config snapshot at job creation. Here we look up the crawler in CrawlerJobService.
-        // The schedule doesn't carry the config — look it up from the last submitted snapshot.
-        // For Phase 7 file crawlers, we re-use the config from the last submitted job for this crawler.
         string? snapshot = await GetLatestSnapshotAsync(schedule.CrawlerId, ct);
         if (snapshot == null)
         {
@@ -116,7 +172,6 @@ public sealed class CrawlerSchedulerService(
 
     private async Task<string?> GetLatestSnapshotAsync(Guid crawlerId, CancellationToken ct)
     {
-        // Find the most recent job for this crawler to reuse its config snapshot
         (IReadOnlyList<CrawlerJob> page, _) = await jobs.GetJobsPagedAsync(1, 1, crawlerId, ct: ct);
         return page.FirstOrDefault()?.ConfigurationSnapshot;
     }

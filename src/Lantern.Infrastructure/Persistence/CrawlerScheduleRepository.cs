@@ -33,8 +33,9 @@ public sealed class CrawlerScheduleRepository(IDbContextFactory<LanternDbContext
     public async Task<IReadOnlyList<CrawlerSchedule>> GetDueSchedulesAsync(DateTimeOffset now, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
+        DateTime nowUtc = now.UtcDateTime;
         List<CrawlerScheduleRecord> recs = await db.CrawlerSchedules.AsNoTracking()
-            .Where(s => s.Enabled && s.Type != "Disabled" && s.NextRunAt != null && s.NextRunAt <= now)
+            .Where(s => s.Enabled && s.Type != "Disabled" && s.NextRunAt != null && s.NextRunAt <= nowUtc)
             .ToListAsync(ct);
         return recs.Select(r => r.ToDomain()).ToList();
     }

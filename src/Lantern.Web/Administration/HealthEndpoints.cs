@@ -1,4 +1,5 @@
 using Lantern.Core.Administration;
+using Lantern.Core.Jobs;
 using Lantern.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +14,7 @@ public static class HealthEndpoints
         app.MapGet("/api/health", async (
             ISearchEngineHealthService meiliHealth,
             IDbContextFactory<LanternDbContext> dbFactory,
+            ISchedulerHealthService schedulerHealth,
             MeilisearchProcessManager? processManager,
             CancellationToken ct) =>
         {
@@ -45,7 +47,10 @@ public static class HealthEndpoints
             string? meiliProcess = processManager == null ? null
                 : processManager.IsRunning ? "running" : "stopped";
 
-            bool healthy = sqliteStatus == "ready" && meiliStatus == "ready";
+            SchedulerStatus schedulerStatus = schedulerHealth.GetStatus();
+            string schedulerState = schedulerStatus.State.ToString().ToLowerInvariant();
+
+            bool healthy = sqliteStatus == "ready" && meiliStatus == "ready" && schedulerStatus.State != SchedulerState.Faulted;
             string overall = healthy ? "healthy" : sqliteStatus == "ready" ? "degraded" : "unhealthy";
 
             return Results.Ok(new
@@ -57,6 +62,8 @@ public static class HealthEndpoints
                     database = sqliteStatus,
                     meilisearch = meiliStatus,
                     meilisearchProcess = meiliProcess,
+                    scheduler = schedulerState,
+                    schedulerError = schedulerStatus.LastError,
                 },
                 timestamp = DateTimeOffset.UtcNow,
             });
