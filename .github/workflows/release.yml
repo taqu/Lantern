@@ -261,11 +261,7 @@ jobs:
             'app/wwwroot',
             'bin/meilisearch/meilisearch.exe',
             'config/appsettings.example.json',
-            'scripts/Initialize-Lantern.ps1',
-            'scripts/Install-LanternService.ps1',
-            'scripts/Uninstall-LanternService.ps1',
-            'scripts/Start-Lantern.ps1',
-            'scripts/Backup-Lantern.ps1',
+            'docs/INSTALL.md',
             'manifest.json',
             'VERSION'
           )
@@ -325,10 +321,12 @@ jobs:
 
             ### Installation
 
-            1. Extract the ZIP archive.
-            2. Run `scripts\Initialize-Lantern.ps1` as Administrator.
-            3. Run `scripts\Start-Lantern.ps1` for console mode, or
-               `scripts\Install-LanternService.ps1` for Windows Service mode.
+            1. Extract the ZIP archive to `C:\Lantern\`.
+            2. Follow the setup steps in `docs\INSTALL.md` to create the data
+               directories, copy the example configuration, and generate the
+               Meilisearch key files.
+            3. Set `LANTERN_ADMIN_USERNAME` and `LANTERN_ADMIN_PASSWORD` in your
+               shell, then run `app\Lantern.Web.exe`.
 
             See `docs\INSTALL.md` in the archive for full instructions.
 

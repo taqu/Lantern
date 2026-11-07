@@ -183,6 +183,15 @@ if (Test-Path $exampleSrc) {
     Write-OK "config/"
 }
 
+# start-lantern.ps1 (root-level entry point)
+$startScript = Join-Path $RepoRoot 'start-lantern.ps1'
+if (Test-Path $startScript) {
+    Copy-Item $startScript (Join-Path $stagingDir 'start-lantern.ps1')
+    Write-OK "start-lantern.ps1"
+} else {
+    Write-Fail "start-lantern.ps1 not found at $startScript"
+}
+
 # scripts/
 $scriptsDir = Join-Path $stagingDir 'scripts'
 Copy-Item (Join-Path $RepoRoot 'release\scripts') $scriptsDir -Recurse

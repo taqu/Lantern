@@ -14,14 +14,24 @@ if (OperatingSystem.IsWindows())
     builder.Host.UseWindowsService(options => options.ServiceName = "Lantern");
 }
 
-// Load persistent production configuration from the shared data directory.
-// This file is created by Initialize-Lantern.ps1 and survives application upgrades.
-string productionConfig = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-    "Lantern", "config", "appsettings.json");
-if (File.Exists(productionConfig))
+if (builder.Environment.IsDevelopment())
 {
-    builder.Configuration.AddJsonFile(productionConfig, optional: true, reloadOnChange: false);
+    // Load machine-local development overrides (absolute paths written by setup-dev.ps1).
+    // This file is gitignored (matches appsettings.*.Local.json pattern).
+    string devLocalConfig = Path.Combine(builder.Environment.ContentRootPath, "appsettings.Development.Local.json");
+    builder.Configuration.AddJsonFile(devLocalConfig, optional: true, reloadOnChange: false);
+}
+else
+{
+    // Load persistent production configuration from the shared data directory.
+    // This file is created by Initialize-Lantern.ps1 and survives application upgrades.
+    string productionConfig = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "Lantern", "config", "appsettings.json");
+    if (File.Exists(productionConfig))
+    {
+        builder.Configuration.AddJsonFile(productionConfig, optional: true, reloadOnChange: false);
+    }
 }
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();

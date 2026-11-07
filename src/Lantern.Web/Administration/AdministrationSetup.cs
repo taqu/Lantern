@@ -78,8 +78,16 @@ public static class AdministrationSetup
             IDbContextFactory<LanternDbContext> factory = app.Services.GetRequiredService<IDbContextFactory<LanternDbContext>>();
             await using LanternDbContext db = await factory.CreateDbContextAsync();
             await db.Database.MigrateAsync();
-            await app.Services.GetRequiredService<AdministratorAuthentication>().ProvisionAsync(
-                Environment.GetEnvironmentVariable("LANTERN_ADMIN_USERNAME"), Environment.GetEnvironmentVariable("LANTERN_ADMIN_PASSWORD"));
+            // Env vars take precedence; in Development, also accept credentials from User Secrets
+            // (key DevAdmin:Username / DevAdmin:Password — set by setup-dev.ps1).
+            string? adminUser = Environment.GetEnvironmentVariable("LANTERN_ADMIN_USERNAME");
+            string? adminPass = Environment.GetEnvironmentVariable("LANTERN_ADMIN_PASSWORD");
+            if (app.Environment.IsDevelopment())
+            {
+                adminUser ??= app.Configuration["DevAdmin:Username"];
+                adminPass ??= app.Configuration["DevAdmin:Password"];
+            }
+            await app.Services.GetRequiredService<AdministratorAuthentication>().ProvisionAsync(adminUser, adminPass);
         }
         catch (Exception ex)
         {

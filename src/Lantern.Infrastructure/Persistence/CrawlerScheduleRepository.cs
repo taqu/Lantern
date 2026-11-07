@@ -45,8 +45,8 @@ public sealed class CrawlerScheduleRepository(IDbContextFactory<LanternDbContext
         await db.CrawlerSchedules
             .Where(s => s.CrawlerId == crawlerId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(r => r.LastTriggeredAt, triggeredAt)
-                .SetProperty(r => r.NextRunAt, nextRunAt),
+                .SetProperty(r => r.LastTriggeredAt, triggeredAt.UtcDateTime)
+                .SetProperty(r => r.NextRunAt, nextRunAt.UtcDateTime),
                 ct);
     }
 

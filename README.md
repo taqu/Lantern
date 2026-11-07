@@ -22,20 +22,21 @@ local AI-powered semantic search — entirely offline, with no cloud dependencie
 
 ## Quick Start
 
-1. Extract `Lantern-<version>-win-x64.zip` to `C:\Lantern\`
-2. Open PowerShell as **Administrator** and run:
-   ```powershell
-   cd C:\Lantern
-   .\scripts\Initialize-Lantern.ps1
-   ```
-3. Start Lantern (no elevation required):
-   ```powershell
-   cd C:\Lantern
-   .\scripts\Start-Lantern.ps1
-   ```
-4. Open `http://127.0.0.1:5000` in your browser.
+1. Extract `Lantern-<version>-win-x64.zip` to a directory of your choice.
 
-See [`release/docs/INSTALL.md`](release/docs/INSTALL.md) for full instructions.
+2. Open PowerShell in the extracted directory.
+
+3. Start Lantern (no elevation required):
+
+   ```powershell
+   .\start-lantern.ps1
+   ```
+
+4. On first launch, create the administrator account when prompted.
+
+5. Open the URL displayed by Lantern in your browser.
+
+See [`release/docs/INSTALL.md`](release/docs/INSTALL.md) for Windows Service setup and advanced configuration.
 
 ---
 
@@ -44,12 +45,12 @@ See [`release/docs/INSTALL.md`](release/docs/INSTALL.md) for full instructions.
 | Document | Description |
 |----------|-------------|
 | [INSTALL.md](release/docs/INSTALL.md) | Installation and first-run |
-| [CONFIGURATION.md](release/docs/CONFIGURATION.md) | Configuration reference |
-| [WINDOWS-SERVICE.md](release/docs/WINDOWS-SERVICE.md) | Windows Service setup |
-| [UPGRADE.md](release/docs/UPGRADE.md) | Upgrade procedure |
-| [BACKUP-RESTORE.md](release/docs/BACKUP-RESTORE.md) | Backup and restore |
-| [TROUBLESHOOTING.md](release/docs/TROUBLESHOOTING.md) | Troubleshooting |
-| [THIRD-PARTY-NOTICES.md](release/docs/THIRD-PARTY-NOTICES.md) | Third-party licenses |
+| [administration.md](release/docs/administration.md) | Administrator guide |
+| [operations.md](release/docs/operations.md) | Operations reference |
+| [backup-recovery.md](release/docs/backup-recovery.md) | Backup and restore |
+| [security.md](release/docs/development.md) | Security guide |
+| [security.md](release/docs/security.md) | Security guide |
+| [dependencies.md](release/docs/dependencies.md) | Third-party components and licenses |
 
 ---
 
@@ -71,4 +72,4 @@ See [`release/docs/INSTALL.md`](release/docs/INSTALL.md) for full instructions.
 | LlamaPure | 1.0.4 | MIT |
 | IBM Granite Embedding 97M | R2 | Apache 2.0 |
 
-See [THIRD-PARTY-NOTICES.md](release/docs/THIRD-PARTY-NOTICES.md) for full license texts.
+See [dependencies.md](release/docs/dependencies.md) for full component versions and license information.

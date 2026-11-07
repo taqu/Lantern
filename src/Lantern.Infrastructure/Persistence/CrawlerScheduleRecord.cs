@@ -10,8 +10,8 @@ public sealed class CrawlerScheduleRecord
     public string? TimeOfDay { get; set; }
     public string? TimeZoneId { get; set; }
     public string? DaysOfWeek { get; set; }
-    public DateTimeOffset? NextRunAt { get; set; }
-    public DateTimeOffset? LastTriggeredAt { get; set; }
+    public DateTime? NextRunAt { get; set; }
+    public DateTime? LastTriggeredAt { get; set; }
 
     public CrawlerSchedule ToDomain() => new()
     {
@@ -35,8 +35,8 @@ public sealed class CrawlerScheduleRecord
         DaysOfWeek = s.DaysOfWeek.Count > 0
             ? string.Join(",", s.DaysOfWeek.Select(d => (int)d))
             : null,
-        NextRunAt = s.NextRunAt,
-        LastTriggeredAt = s.LastTriggeredAt
+        NextRunAt = s.NextRunAt?.UtcDateTime,
+        LastTriggeredAt = s.LastTriggeredAt?.UtcDateTime
     };
 
     private static IReadOnlyList<DayOfWeek> ParseDaysOfWeek(string? raw)
