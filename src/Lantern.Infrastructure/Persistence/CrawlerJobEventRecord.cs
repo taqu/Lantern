@@ -7,7 +7,7 @@ public sealed class CrawlerJobEventRecord
     public long Id { get; set; }
     public Guid JobId { get; set; }
     public string EventType { get; set; } = "";
-    public DateTimeOffset OccurredAt { get; set; }
+    public DateTime OccurredAt { get; set; }
     public string? Details { get; set; }
 
     public CrawlerJobEvent ToDomain() => new()
@@ -15,7 +15,7 @@ public sealed class CrawlerJobEventRecord
         Id = Id,
         JobId = JobId,
         EventType = Enum.Parse<JobEventType>(EventType),
-        OccurredAt = OccurredAt,
+        OccurredAt = new DateTimeOffset(OccurredAt, TimeSpan.Zero),
         Details = Details
     };
 
@@ -24,7 +24,7 @@ public sealed class CrawlerJobEventRecord
         Id = e.Id,
         JobId = e.JobId,
         EventType = e.EventType.ToString(),
-        OccurredAt = e.OccurredAt,
+        OccurredAt = e.OccurredAt.UtcDateTime,
         Details = e.Details
     };
 }

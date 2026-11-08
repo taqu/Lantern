@@ -38,7 +38,7 @@ public sealed class SqlitePersistenceTests : IAsyncLifetime
         await service.SaveAsync(new ApplicationSetting { DisplayName = "社内 Lantern" });
         await using (LanternDbContext db = await Factory.CreateDbContextAsync())
         {
-            Assert.Equal(7, (await db.Database.GetAppliedMigrationsAsync()).Count());
+            Assert.Equal(8, (await db.Database.GetAppliedMigrationsAsync()).Count());
             Assert.False(db.Database.HasPendingModelChanges());
             await db.Database.MigrateAsync();
         }

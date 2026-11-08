@@ -161,6 +161,70 @@ public sealed class CrawlerSchedulerServiceTests
         Assert.NotNull(svc.GetStatus().FaultedAt);
     }
 
+    // ── Cancellation token isolation ──────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_UnexpectedOperationCanceledIsTreatedAsTransient()
+    {
+        // An OperationCanceledException that is NOT from stoppingToken (e.g. an internal
+        // per-operation timeout) must be counted as a transient failure, not silently swallowed.
+        int callCount = 0;
+        var repo = new FakeScheduleRepository(_ =>
+        {
+            Interlocked.Increment(ref callCount);
+            throw new OperationCanceledException("operation timed out");
+        });
+        CrawlerSchedulerService svc = BuildService(repo);
+
+        using var cts = new CancellationTokenSource();
+        await svc.StartAsync(cts.Token);
+        await WaitForFinalStateAsync(svc, TimeSpan.FromSeconds(5));
+        await svc.StopAsync(CancellationToken.None);
+
+        Assert.Equal(SchedulerState.Faulted, svc.GetStatus().State);
+        Assert.Equal(5, callCount); // MaxConsecutiveFailures = 5
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CancellationDuringQuery_TransitionsToStopped()
+    {
+        // When stoppingToken is canceled while a repository query is in progress,
+        // the OperationCanceledException must propagate as expected shutdown (not error).
+        var repo = new FakeScheduleRepositoryAsync(async (_, ct) =>
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return [];
+        });
+        CrawlerSchedulerService svc = BuildService(repo);
+
+        await svc.StartAsync(CancellationToken.None);
+        await WaitForStateAsync(svc, s => s != SchedulerState.Starting, TimeSpan.FromSeconds(2));
+        await svc.StopAsync(CancellationToken.None);
+
+        Assert.Equal(SchedulerState.Stopped, svc.GetStatus().State);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RepeatedPolling_DoesNotFault()
+    {
+        // The scheduler must run multiple poll cycles without accumulating failure counts
+        // or producing unexpected cancellation.
+        int callCount = 0;
+        var repo = new FakeScheduleRepository(_ =>
+        {
+            Interlocked.Increment(ref callCount);
+            return [];
+        });
+        CrawlerSchedulerService svc = BuildService(repo);
+
+        await svc.StartAsync(CancellationToken.None);
+        await WaitForCallCountAsync(() => callCount, 3, TimeSpan.FromSeconds(5));
+        await svc.StopAsync(CancellationToken.None);
+
+        Assert.Equal(SchedulerState.Stopped, svc.GetStatus().State);
+        Assert.True(callCount >= 3, $"Expected at least 3 poll cycles, got {callCount}");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static async Task WaitForStateAsync(CrawlerSchedulerService svc, Func<SchedulerState, bool> predicate, TimeSpan timeout)
@@ -177,7 +241,7 @@ public sealed class CrawlerSchedulerServiceTests
             await Task.Delay(2);
     }
 
-    // ── Fake repository ───────────────────────────────────────────────────────
+    // ── Fake repositories ─────────────────────────────────────────────────────
 
     private sealed class FakeScheduleRepository(
         Func<DateTimeOffset, IReadOnlyList<CrawlerSchedule>> getDue) : ICrawlerScheduleRepository
@@ -190,6 +254,25 @@ public sealed class CrawlerSchedulerServiceTests
 
         public Task<IReadOnlyList<CrawlerSchedule>> GetDueSchedulesAsync(DateTimeOffset now, CancellationToken ct = default)
             => Task.FromResult(getDue(now));
+
+        public Task UpdateLastTriggeredAsync(Guid crawlerId, DateTimeOffset triggeredAt, DateTimeOffset nextRunAt, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task DeleteScheduleAsync(Guid crawlerId, CancellationToken ct = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class FakeScheduleRepositoryAsync(
+        Func<DateTimeOffset, CancellationToken, Task<IReadOnlyList<CrawlerSchedule>>> getDue) : ICrawlerScheduleRepository
+    {
+        public Task<CrawlerSchedule?> GetScheduleAsync(Guid crawlerId, CancellationToken ct = default)
+            => Task.FromResult<CrawlerSchedule?>(null);
+
+        public Task SaveScheduleAsync(CrawlerSchedule schedule, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<CrawlerSchedule>> GetDueSchedulesAsync(DateTimeOffset now, CancellationToken ct = default)
+            => getDue(now, ct);
 
         public Task UpdateLastTriggeredAsync(Guid crawlerId, DateTimeOffset triggeredAt, DateTimeOffset nextRunAt, CancellationToken ct = default)
             => Task.CompletedTask;

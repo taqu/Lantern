@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Threading.Channels;
 using Lantern.Core.Crawling;
 using Lantern.Core.Jobs;
 using Microsoft.Extensions.Hosting;
@@ -21,7 +20,9 @@ public sealed class JobDispatcherService : BackgroundService
     private readonly IWebCrawler? _webCrawler;
     private readonly IOptions<JobOptions> _options;
     private readonly ILogger<JobDispatcherService> _logger;
-    private readonly Channel<bool> _wakeUp;
+    // SemaphoreSlim avoids CancelAfter-based polling that generates first-chance OperationCanceledException on every tick.
+    // WaitAsync(TimeSpan, CancellationToken) returns false on timeout instead of throwing.
+    private readonly SemaphoreSlim _wakeUp = new(0, int.MaxValue);
     private SemaphoreSlim _concurrency = null!;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeCts = new();
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
@@ -38,15 +39,10 @@ public sealed class JobDispatcherService : BackgroundService
         _webCrawler = webCrawler;
         _options = options;
         _logger = logger;
-        _wakeUp = Channel.CreateBounded<bool>(new BoundedChannelOptions(4)
-        {
-            FullMode = BoundedChannelFullMode.DropWrite,
-            SingleReader = true
-        });
     }
 
     // Called by CrawlerJobService after a job is persisted to signal a dispatch attempt.
-    public void SignalNewJob() => _wakeUp.Writer.TryWrite(true);
+    public void SignalNewJob() => _wakeUp.Release();
 
     // Called by the cancellation path to cancel an in-flight job CTS.
     public void SignalCancellation(Guid jobId)
@@ -73,11 +69,14 @@ public sealed class JobDispatcherService : BackgroundService
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex) { _logger.LogError(ex, "Dispatcher loop error"); }
 
-            // Wait for wake-up signal or poll interval
-            using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            delayCts.CancelAfter(TimeSpan.FromSeconds(_options.Value.DispatcherPollIntervalSeconds));
-            try { await _wakeUp.Reader.ReadAsync(delayCts.Token); }
-            catch (OperationCanceledException) { }
+            // Wait for a wake-up signal or the poll interval — returns false on timeout, throws only on shutdown.
+            try
+            {
+                await _wakeUp.WaitAsync(
+                    TimeSpan.FromSeconds(_options.Value.DispatcherPollIntervalSeconds),
+                    stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
         }
 
         _logger.LogInformation("Job dispatcher stopping; waiting for active jobs to finish");
@@ -226,7 +225,7 @@ public sealed class JobDispatcherService : BackgroundService
         {
             _activeCts.TryRemove(job.Id, out _);
             _concurrency.Release();
-            _wakeUp.Writer.TryWrite(true);
+            _wakeUp.Release();
         }
     }
 
@@ -257,6 +256,7 @@ public sealed class JobDispatcherService : BackgroundService
             try { cts.Cancel(); cts.Dispose(); } catch { }
         }
         _concurrency?.Dispose();
+        _wakeUp.Dispose();
         base.Dispose();
     }
 }

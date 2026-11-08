@@ -25,10 +25,11 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
     public async Task<bool> ClaimJobAsync(Guid jobId, DateTimeOffset startedAt, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
+        DateTime startedAtUtc = startedAt.UtcDateTime;
         int affected = await db.Database.ExecuteSqlInterpolatedAsync(
             $"""
             UPDATE CrawlerJobs
-            SET Status = 'Running', StartedAt = {startedAt}
+            SET Status = 'Running', StartedAt = {startedAtUtc}
             WHERE Id = {jobId}
               AND Status = 'Pending'
               AND NOT EXISTS (
@@ -68,12 +69,13 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
     public async Task CompleteJobAsync(Guid jobId, JobStatus status, JobProgress progress, string? errorMessage, DateTimeOffset finishedAt, CancellationToken ct = default)
     {
         string statusStr = status.ToString();
+        DateTime finishedAtUtc = finishedAt.UtcDateTime;
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         await db.CrawlerJobs
             .Where(j => j.Id == jobId)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(j => j.Status, statusStr)
-                .SetProperty(j => j.FinishedAt, finishedAt)
+                .SetProperty(j => j.FinishedAt, finishedAtUtc)
                 .SetProperty(j => j.ErrorMessage, errorMessage)
                 .SetProperty(j => j.DiscoveredFiles, progress.DiscoveredFiles)
                 .SetProperty(j => j.ProcessedFiles, progress.ProcessedFiles)
@@ -132,12 +134,12 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
     public async Task MarkInterruptedJobsFailedAsync(string reason, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTime nowUtc = DateTime.UtcNow;
         await db.CrawlerJobs
             .Where(j => j.Status == "Running")
             .ExecuteUpdateAsync(s => s
                 .SetProperty(j => j.Status, "Failed")
-                .SetProperty(j => j.FinishedAt, now)
+                .SetProperty(j => j.FinishedAt, nowUtc)
                 .SetProperty(j => j.ErrorMessage, reason),
                 ct);
         // Also mark Pending+CancellationRequested as Canceled
@@ -145,7 +147,7 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
             .Where(j => j.Status == "Pending" && j.CancellationRequested)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(j => j.Status, "Canceled")
-                .SetProperty(j => j.FinishedAt, now)
+                .SetProperty(j => j.FinishedAt, nowUtc)
                 .SetProperty(j => j.ErrorMessage, "Canceled before execution began"),
                 ct);
     }
@@ -153,9 +155,10 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
     public async Task<int> DeleteOldJobsAsync(DateTimeOffset olderThan, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
+        DateTime olderThanUtc = olderThan.UtcDateTime;
         // Only delete terminal, non-active jobs
         return await db.CrawlerJobs
-            .Where(j => j.CreatedAt < olderThan
+            .Where(j => j.CreatedAt < olderThanUtc
                      && (j.Status == "Completed" || j.Status == "Failed" || j.Status == "Canceled"))
             .ExecuteDeleteAsync(ct);
     }
@@ -180,8 +183,9 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
     public async Task<int> DeleteOldEventsAsync(DateTimeOffset olderThan, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
+        DateTime olderThanUtc = olderThan.UtcDateTime;
         return await db.CrawlerJobEvents
-            .Where(e => e.OccurredAt < olderThan)
+            .Where(e => e.OccurredAt < olderThanUtc)
             .ExecuteDeleteAsync(ct);
     }
 }

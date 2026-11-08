@@ -229,7 +229,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("JobId")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("OccurredAt")
+                    b.Property<DateTime>("OccurredAt")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -263,7 +263,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("DeletedFiles")
@@ -278,7 +278,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     b.Property<long>("FailedFiles")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset?>("FinishedAt")
+                    b.Property<DateTime?>("FinishedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("IndexedFiles")
@@ -290,13 +290,13 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RetryOfJobId")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("ScheduledAt")
+                    b.Property<DateTime?>("ScheduledAt")
                         .HasColumnType("TEXT");
 
                     b.Property<long>("SkippedFiles")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset?>("StartedAt")
+                    b.Property<DateTime?>("StartedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")

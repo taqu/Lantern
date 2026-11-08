@@ -9,10 +9,10 @@ public sealed class CrawlerJobRecord
     public string CrawlerName { get; set; } = "";
     public string Trigger { get; set; } = "Manual";
     public string Status { get; set; } = "Pending";
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset? ScheduledAt { get; set; }
-    public DateTimeOffset? StartedAt { get; set; }
-    public DateTimeOffset? FinishedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ScheduledAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
     public int AttemptNumber { get; set; } = 1;
     public string? ConfigurationSnapshot { get; set; }
     public string? ErrorMessage { get; set; }
@@ -33,10 +33,10 @@ public sealed class CrawlerJobRecord
         CrawlerName = CrawlerName,
         Trigger = Enum.Parse<JobTrigger>(Trigger),
         Status = Enum.Parse<JobStatus>(Status),
-        CreatedAt = CreatedAt,
-        ScheduledAt = ScheduledAt,
-        StartedAt = StartedAt,
-        FinishedAt = FinishedAt,
+        CreatedAt = new DateTimeOffset(CreatedAt, TimeSpan.Zero),
+        ScheduledAt = ScheduledAt.HasValue ? new DateTimeOffset(ScheduledAt.Value, TimeSpan.Zero) : null,
+        StartedAt = StartedAt.HasValue ? new DateTimeOffset(StartedAt.Value, TimeSpan.Zero) : null,
+        FinishedAt = FinishedAt.HasValue ? new DateTimeOffset(FinishedAt.Value, TimeSpan.Zero) : null,
         AttemptNumber = AttemptNumber,
         ConfigurationSnapshot = ConfigurationSnapshot,
         ErrorMessage = ErrorMessage,
@@ -61,10 +61,10 @@ public sealed class CrawlerJobRecord
         CrawlerName = job.CrawlerName,
         Trigger = job.Trigger.ToString(),
         Status = job.Status.ToString(),
-        CreatedAt = job.CreatedAt,
-        ScheduledAt = job.ScheduledAt,
-        StartedAt = job.StartedAt,
-        FinishedAt = job.FinishedAt,
+        CreatedAt = job.CreatedAt.UtcDateTime,
+        ScheduledAt = job.ScheduledAt?.UtcDateTime,
+        StartedAt = job.StartedAt?.UtcDateTime,
+        FinishedAt = job.FinishedAt?.UtcDateTime,
         AttemptNumber = job.AttemptNumber,
         ConfigurationSnapshot = job.ConfigurationSnapshot,
         ErrorMessage = job.ErrorMessage,
