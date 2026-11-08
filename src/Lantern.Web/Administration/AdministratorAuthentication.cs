@@ -87,6 +87,26 @@ public sealed class AdministratorAuthentication(IDbContextFactory<LanternDbConte
         }
         finally { _gate.Release(); }
     }
+
+    public async Task ResetPasswordAsync(string password, CancellationToken ct = default)
+    {
+        if (password.Length < 14 || password.Length > 128)
+            throw new InvalidOperationException("Password must be 14–128 characters.");
+        await _gate.WaitAsync(ct);
+        try
+        {
+            await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
+            AdministratorAccount? account = await db.AdministratorAccounts.SingleOrDefaultAsync(ct);
+            if (account == null)
+                throw new InvalidOperationException("No administrator account exists. Run setup-dev.ps1 (without -ResetAdmin) first.");
+            account.PasswordHash = _hasher.HashPassword(account, password);
+            account.SessionStamp = Guid.NewGuid().ToString("N");
+            account.FailedAttempts = 0;
+            account.LockedUntil = null;
+            await db.SaveChangesAsync(ct);
+        }
+        finally { _gate.Release(); }
+    }
 }
 
 public sealed class AdministratorCookieEvents(AdministratorAuthentication authentication) : CookieAuthenticationEvents

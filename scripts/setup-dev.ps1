@@ -19,11 +19,20 @@
     Path to meilisearch.exe. Resolved relative to the repository root.
     Default: tools\meilisearch\meilisearch.exe
 
+.PARAMETER ResetAdmin
+    Reset the development administrator password without deleting any data.
+    Requires a previous successful setup (database must exist).
+    The new password is stored in User Secrets and displayed once.
+    The old password is permanently replaced.
+
 .EXAMPLE
     .\scripts\setup-dev.ps1
 
 .EXAMPLE
     .\scripts\setup-dev.ps1 -AdminUsername myuser
+
+.EXAMPLE
+    .\scripts\setup-dev.ps1 -ResetAdmin
 
 .NOTES
     Prerequisites:
@@ -34,20 +43,79 @@
 [CmdletBinding()]
 param(
     [string]$AdminUsername = "admin",
-    [string]$MeilisearchExe = "tools\meilisearch\meilisearch.exe"
+    [string]$MeilisearchExe = "tools\meilisearch\meilisearch.exe",
+    [switch]$ResetAdmin
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot  = Split-Path $PSScriptRoot -Parent
-$webRoot   = Join-Path $repoRoot "src\Lantern.Web"
-$appData   = Join-Path $webRoot "App_Data"
-$secretsDir = Join-Path $appData "secrets"
-$meiliData  = Join-Path $appData "meilisearch"
+$repoRoot     = Split-Path $PSScriptRoot -Parent
+$webRoot      = Join-Path $repoRoot "src\Lantern.Web"
+$appData      = Join-Path $webRoot "App_Data"
+$secretsDir   = Join-Path $appData "secrets"
+$meiliData    = Join-Path $appData "meilisearch"
 $meiliKeyFile = Join-Path $secretsDir "meilisearch-master-key.txt"
 $localConfig  = Join-Path $webRoot "appsettings.Development.Local.json"
+$dbPath       = Join-Path $appData "database\lantern.db"
 $meiliExeAbs  = if ([System.IO.Path]::IsPathRooted($MeilisearchExe)) { $MeilisearchExe } else { Join-Path $repoRoot $MeilisearchExe }
+
+# ── -ResetAdmin: reset the administrator password without touching any other data ─
+if ($ResetAdmin) {
+    Write-Host ""
+    Write-Host "Lantern development — reset administrator password" -ForegroundColor Cyan
+    Write-Host "===================================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    # Verify the database exists; refuse to operate on a non-existent installation.
+    if (-not (Test-Path $dbPath -PathType Leaf)) {
+        Write-Host "ERROR: Development database not found at:" -ForegroundColor Red
+        Write-Host "  $dbPath" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Run .\scripts\setup-dev.ps1 (without -ResetAdmin) first to initialise the" -ForegroundColor Yellow
+        Write-Host "development environment and start the application at least once." -ForegroundColor Yellow
+        exit 1
+    }
+
+    Write-Host "Resetting administrator password (this may build the project)..."
+    $env:ASPNETCORE_ENVIRONMENT = "Development"
+    $env:LANTERN_DEV_RESET_ADMIN = "1"
+    try {
+        $newPassword = & dotnet run --project $webRoot --no-launch-profile 2>&1 |
+            Where-Object { $_ -notmatch '^\s*(Build|Warning|Error|info|warn|fail|crit|\[)' -and $_.Trim() -ne '' } |
+            Select-Object -Last 1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $env:LANTERN_DEV_RESET_ADMIN = $null
+    }
+
+    if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($newPassword)) {
+        Write-Host ""
+        Write-Host "ERROR: Password reset failed (exit code $exitCode)." -ForegroundColor Red
+        Write-Host "Check the output above for details." -ForegroundColor Yellow
+        exit 1
+    }
+
+    # Update User Secrets so that if the database is ever reset, the new password is used.
+    dotnet user-secrets set "DevAdmin:Password" $newPassword --project $webRoot | Out-Null
+
+    Write-Host ""
+    Write-Host "  Administrator password reset successfully." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Development administrator credentials" -ForegroundColor Cyan
+    $existingUser = (dotnet user-secrets list --project $webRoot) |
+                    Where-Object { $_ -match '^DevAdmin:Username\s*=\s*(.*)$' } |
+                    ForEach-Object { $Matches[1].Trim() }
+    Write-Host "  Username : $existingUser"
+    Write-Host "  Password : $newPassword" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Save the password now. It will not be shown again." -ForegroundColor Yellow
+    Write-Host "  Existing sessions have been invalidated." -ForegroundColor DarkGray
+    Write-Host ""
+    exit 0
+}
+
+# ── Normal setup ──────────────────────────────────────────────────────────────
 
 Write-Host ""
 Write-Host "Lantern development setup" -ForegroundColor Cyan
@@ -133,13 +201,16 @@ if (Test-Path $localConfig) {
 # ── 7. Initialise development admin User Secrets ──────────────────────────────
 Write-Host "Configuring development admin credentials..."
 
-# Check if secret already set
-#$existingUser = dotnet user-secrets get "DevAdmin:Username" --project $webRoot 2>&1
-$existingUser = (dotnet user-secrets list --project $webRoot) | 
-                Where-Object { $_ -match '^DevAdmin:Username\s*=\s*(.*)$' } | 
+# Extract the existing username value from User Secrets (not the key name).
+$existingUser = (dotnet user-secrets list --project $webRoot) |
+                Where-Object { $_ -match '^DevAdmin:Username\s*=\s*(.*)$' } |
                 ForEach-Object { $Matches[1].Trim() }
-if ($existingUser -match "DevAdmin:Username") {
+
+# Credentials are already configured when the value is non-empty.
+if (-not [string]::IsNullOrEmpty($existingUser)) {
     Write-Host "  Admin User Secrets: already set (preserved)"
+    Write-Host "  Username : $existingUser"
+    Write-Host "  Password : (stored in User Secrets — use .\scripts\setup-dev.ps1 -ResetAdmin to change)"
 } else {
     # Generate a random 20-char password meeting the 14-char minimum
     $pwdBytes = New-Object byte[] 15
@@ -157,7 +228,8 @@ if ($existingUser -match "DevAdmin:Username") {
     Write-Host "  Password : $password" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  Save the password now. It is stored in User Secrets and will not be shown again." -ForegroundColor Yellow
-    Write-Host "  To reset: delete App_Data\database\lantern.db and re-run this script."
+    Write-Host "  The account is created on first application startup." -ForegroundColor DarkGray
+    Write-Host "  To change the password later: .\scripts\setup-dev.ps1 -ResetAdmin" -ForegroundColor DarkGray
     Write-Host ""
 }
 

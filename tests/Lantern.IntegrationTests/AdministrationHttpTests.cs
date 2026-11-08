@@ -190,7 +190,11 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Meilisearch:Url"] = "http://127.0.0.1:1",
-                ["Meilisearch:IndexName"] = "http-test-index"
+                ["Meilisearch:IndexName"] = "http-test-index",
+                ["MeilisearchProcess:Managed"] = "false",
+                // Override any DevAdmin User Secrets so tests start with an unpopulated database.
+                ["DevAdmin:Username"] = "",
+                ["DevAdmin:Password"] = ""
             }));
         }
     }

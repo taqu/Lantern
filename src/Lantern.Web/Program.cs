@@ -5,7 +5,12 @@ using Lantern.Web;
 using Lantern.Web.Administration;
 using Lantern.Web.Components;
 
+// When LANTERN_DEV_RESET_ADMIN=1 the process resets the admin password and exits
+// without starting the web server. Only permitted in Development.
+bool isDevReset = string.Equals(Environment.GetEnvironmentVariable("LANTERN_DEV_RESET_ADMIN"), "1", StringComparison.Ordinal);
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+if (isDevReset) builder.Logging.ClearProviders();
 
 // Windows Service support — enables running under the Service Control Manager.
 // Has no effect on non-Windows platforms or when running interactively.
@@ -59,6 +64,24 @@ if (embeddingOptions.Enabled)
 }
 
 WebApplication app = builder.Build();
+
+if (isDevReset)
+{
+    if (!app.Environment.IsDevelopment())
+    {
+        await Console.Error.WriteLineAsync("Error: LANTERN_DEV_RESET_ADMIN is only permitted in the Development environment.");
+        Environment.Exit(1);
+        return;
+    }
+    await app.InitializeAdministrationAsync();
+    byte[] pwBytes = new byte[15];
+    System.Security.Cryptography.RandomNumberGenerator.Fill(pwBytes);
+    string newPassword = Convert.ToBase64String(pwBytes).TrimEnd('=');
+    await app.Services.GetRequiredService<AdministratorAuthentication>().ResetPasswordAsync(newPassword);
+    Console.WriteLine(newPassword);
+    return;
+}
+
 await app.InitializeAdministrationAsync();
 
 if (!app.Environment.IsDevelopment())

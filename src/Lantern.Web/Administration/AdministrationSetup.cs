@@ -77,6 +77,7 @@ public static class AdministrationSetup
         {
             IDbContextFactory<LanternDbContext> factory = app.Services.GetRequiredService<IDbContextFactory<LanternDbContext>>();
             await using LanternDbContext db = await factory.CreateDbContextAsync();
+            app.Logger.LogInformation("Administration database: {ConnectionString}", db.Database.GetConnectionString());
             await db.Database.MigrateAsync();
             // Env vars take precedence; in Development, also accept credentials from User Secrets
             // (key DevAdmin:Username / DevAdmin:Password — set by setup-dev.ps1).
@@ -87,7 +88,20 @@ public static class AdministrationSetup
                 adminUser ??= app.Configuration["DevAdmin:Username"];
                 adminPass ??= app.Configuration["DevAdmin:Password"];
             }
+            // Empty strings mean "no credentials configured" — treat identically to null so that
+            // tests can suppress auto-provisioning by setting DevAdmin keys to empty strings.
+            if (string.IsNullOrEmpty(adminUser)) adminUser = null;
+            if (string.IsNullOrEmpty(adminPass)) adminPass = null;
+            bool accountExistedBefore = await db.AdministratorAccounts.AnyAsync();
+            app.Logger.LogInformation("Administrator provisioning: account exists={AccountExists}, credentials configured={HasCredentials}",
+                accountExistedBefore, adminUser != null);
             await app.Services.GetRequiredService<AdministratorAuthentication>().ProvisionAsync(adminUser, adminPass);
+            if (!accountExistedBefore)
+            {
+                bool accountCreated = await db.AdministratorAccounts.AnyAsync();
+                app.Logger.LogInformation("Administrator provisioning result: {Result}",
+                    accountCreated ? "account created" : "skipped — no credentials available");
+            }
         }
         catch (Exception ex)
         {

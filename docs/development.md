@@ -106,7 +106,11 @@ This script:
 
 The script is safe to run multiple times. Existing secrets and configuration are preserved.
 
-**Save the administrator password** printed during first run. To reset it, delete `App_Data\database\lantern.db` and re-run setup.
+**Save the administrator password** printed during first run. If you need to change it later, use the `-ResetAdmin` flag — do not delete the database:
+
+```powershell
+.\scripts\setup-dev.ps1 -ResetAdmin
+```
 
 ---
 
@@ -114,7 +118,15 @@ The script is safe to run multiple times. Existing secrets and configuration are
 
 On first application start, the initial administrator account is created from credentials stored in User Secrets (`DevAdmin:Username` / `DevAdmin:Password`), set by `setup-dev.ps1`.
 
-This account is created only once. If you need to change the password, use the administration UI or reset the development database.
+The account is created **only once** — on the first startup after `setup-dev.ps1` has stored credentials and no account exists in the database. Subsequent startups skip provisioning and use the existing account. This means the credentials printed by `setup-dev.ps1` on its first run are the ones that apply; re-running the script does not change the database password.
+
+If you need to change the password, use the credential reset command:
+
+```powershell
+.\scripts\setup-dev.ps1 -ResetAdmin
+```
+
+This generates a new password, updates the database using the application's own hashing, rotates the session stamp (invalidating existing sessions), and stores the new password in User Secrets.
 
 Environment variables `LANTERN_ADMIN_USERNAME` and `LANTERN_ADMIN_PASSWORD` take precedence over User Secrets if both are set.
 
@@ -273,17 +285,33 @@ dotnet test tests\Lantern.IntegrationTests
 
 ---
 
-## 16. Resetting Development Data
+## 16. Resetting the Development Administrator Password
 
-Delete the database file to reset all application data including the administrator account:
+To change the administrator password without touching any other data:
+
+```powershell
+.\scripts\setup-dev.ps1 -ResetAdmin
+```
+
+This:
+1. Verifies the development database exists.
+2. Generates a new password using the application's own password hasher.
+3. Updates the administrator record in the database.
+4. Rotates the session stamp, invalidating any active browser sessions.
+5. Stores the new password in User Secrets.
+6. Displays the new password once.
+
+**Resetting all development data**
+
+Delete the database file only if you want to reset all application data (crawlers, search data, job history, settings, and the administrator account):
 
 ```powershell
 Remove-Item src\Lantern.Web\App_Data\database\lantern.db -Force
 ```
 
-The database and administrator account are recreated on next application start (using User Secrets credentials). Meilisearch indexes are **not** cleared; delete `App_Data\meilisearch\` to clear them too.
+The database and administrator account are recreated on next application start using the credentials currently stored in User Secrets. Meilisearch indexes are **not** cleared; delete `App_Data\meilisearch\` separately to clear them.
 
-After reset, the credentials from User Secrets are used again. If you want new credentials, run:
+If the User Secrets no longer match what you want, regenerate them before restarting:
 
 ```powershell
 dotnet user-secrets remove "DevAdmin:Username" --project src\Lantern.Web
@@ -318,6 +346,7 @@ All services use structured logging with named categories (e.g., `Lantern.Web.Me
 | `appsettings.Development.Local.json not found warning` (startup) | Setup not run | Run `.\scripts\setup-dev.ps1` |
 | Login page accepts credentials but doesn't authenticate | Cookie requires HTTPS | Use `https://localhost:7108` not `http://localhost:5271` |
 | `No valid administrator account` | No account created yet | Verify setup-dev.ps1 ran; check `DevAdmin:*` User Secrets |
+| Login fails after re-running setup-dev.ps1 | setup-dev.ps1 preserved old credentials correctly; previous password still applies | Use `.\scripts\setup-dev.ps1 -ResetAdmin` to generate a new password |
 | Native DllNotFoundException | Build not restored | Run `dotnet build src\Lantern.Web` |
 
 ---
