@@ -1,60 +1,69 @@
-# Administration (Phase 3)
+# Lantern Administration Reference
 
-Lantern now provides `/admin`, `/admin/crawlers`, `/admin/jobs`, `/admin/index`,
-`/admin/settings` and `/admin/system`. Public `/search` access is unchanged. The search
-page remains Interactive Server; administration and account pages are static,
+Lantern provides `/admin`, `/admin/crawlers`, `/admin/jobs`, `/admin/index`,
+`/admin/settings`, and `/admin/system`. Public `/search` access is unchanged. The search
+page uses Interactive Server rendering; administration and account pages are static,
 server-rendered Blazor components using standard HTTP forms. Every privileged request
 therefore passes through cookie validation and authorization, with no long-lived admin
 circuit retaining stale authorization after logout.
 
-## First administrator and HTTPS
+## Initial Administrator Setup
 
-Use the existing HTTPS development profile:
+### Release installation
 
-```powershell
-dotnet run --project src/Lantern.Web --launch-profile https
-```
-
-Visit `https://localhost:7108/account/login`. Trust the .NET development certificate
-if your local development setup requires it. Administration uses secure-only cookies
-even in Development; HTTP is not a supported admin login transport.
-
-Before the first start, provision the account using server-side process environment
-variables `LANTERN_ADMIN_USERNAME` and `LANTERN_ADMIN_PASSWORD`. The password must have
-14–128 characters and must not be a publicly shared value. For a local PowerShell
-session, enter it without putting the password in shell history:
+The initial administrator account is created interactively during the first run of
+`start-lantern.ps1`. The script prompts for a username (1–80 characters) and a password
+(14–128 characters with confirmation). No account is created automatically on subsequent
+launches.
 
 ```powershell
-$env:LANTERN_ADMIN_USERNAME = Read-Host 'Initial administrator username'
-$initialPassword = Read-Host 'Initial administrator password' -AsSecureString
-$env:LANTERN_ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $initialPassword).Password
-try {
-    dotnet run --project src/Lantern.Web --launch-profile https
-} finally {
-    Remove-Item Env:LANTERN_ADMIN_PASSWORD -ErrorAction SilentlyContinue
-    Remove-Item Env:LANTERN_ADMIN_USERNAME -ErrorAction SilentlyContinue
-    $initialPassword.Dispose()
-}
+.\start-lantern.ps1
 ```
 
-Remove the bootstrap variables from the hosting environment after the first successful
-initialization. An existing account is never replaced by bootstrap environment changes.
-Without both variables, a fresh installation starts with no usable administrator account;
-there is no public setup or registration endpoint. Supplying incomplete or invalid initial
-credentials fails startup with an actionable error. No administrator password is shipped
-in configuration or source control. Tests provision only their isolated temporary database.
+See [`docs/INSTALL.md`](INSTALL.md) for the complete first-run workflow.
 
-The account table stores an ASP.NET Core `PasswordHasher` result, never a plaintext
-password. It is separate from editable application settings. Provisioning, login and
-session validation keep this entity entirely server-side. SQLite is not encrypted by
-Lantern; restrict access to its directory and backups to the application identity and
-authorized operators. Process environment variables must be managed as server secrets.
+### Development environment
 
-Login failures use a generic message. Five failed credentials attempts lock the single
-account for 15 minutes, persisted in SQLite. Login requests are also limited to 10 per
-minute per connecting IP, with no queue. This can temporarily lock out the legitimate
-administrator; there is no account recovery or password-change UI in Phase 3. Configure
-the first account deliberately and retain credentials in an approved password manager.
+For development, `scripts/setup-dev.ps1` generates a random password and stores
+credentials in User Secrets (`DevAdmin:Username` / `DevAdmin:Password`). These are read
+at startup via `IConfiguration` and used to provision the administrator on first launch.
+
+```powershell
+.\scripts\setup-dev.ps1
+```
+
+See [`docs/development.md`](development.md) for the complete development workflow.
+
+### Provisioning rules
+
+- An administrator account is created **only once** — when no account exists in the
+  database and credentials are provided. Subsequent launches skip provisioning entirely.
+- The account is stored in SQLite. The password is hashed with PBKDF2 (HMAC-SHA512,
+  210,000 iterations) via ASP.NET Core `PasswordHasher<T>`. Plaintext passwords are
+  never persisted.
+- There is no public registration or setup endpoint. Credentials must be supplied through
+  the local setup mechanism.
+
+### Credential recovery
+
+Use `reset-admin.ps1` (included in the release package) to reset the administrator
+password without deleting application data:
+
+```powershell
+.\reset-admin.ps1
+```
+
+See the [Password Recovery](#password-recovery) section below.
+
+## Login and Sessions
+
+Administration uses secure-only cookies.
+HTTP is not a supported login transport unless the connection is to loopback
+(`127.0.0.1` / `[::1]`).
+
+Login failures use a generic message to prevent account enumeration. Five consecutive
+failed attempts lock the account for 15 minutes, persisted in SQLite. Login requests
+are rate-limited to 10 per minute per connecting IP.
 
 ## Sessions and authorization
 
@@ -169,21 +178,45 @@ Crawlers is a read-only list of persisted definitions with a clear scope notice.
 is an informational page. Creation/editing, execution, scheduling, history and extraction
 remain later-phase features. No destructive index management controls were added.
 
-## Verification and references
+## Password Recovery
+
+Use `reset-admin.ps1` (at the root of the release package) to reset the administrator
+password without affecting any other application data:
 
 ```powershell
-dotnet build Lantern.slnx --artifacts-path artifacts/phase3
-dotnet test Lantern.slnx --artifacts-path artifacts/phase3 --no-build
+.\reset-admin.ps1
 ```
 
-SQLite and HTTP tests use isolated temporary directories. HTTP integration tests run the
-real application middleware with HTTPS test clients, actual cookies, real SQLite,
-antiforgery tokens and an intentionally unavailable Meilisearch endpoint. They cover
-authorization, settings, logout/replay, account/key persistence after host restart,
-rate limits and offline administration. Existing real Meilisearch tests also exercise
-the new health service and verify actual document counts when `MEILI_MASTER_KEY` is set.
+The script:
+1. Stops the Windows Service if running.
+2. Prompts for a new password twice (input is hidden).
+3. Passes the password via a process environment variable to `Lantern.Web.exe --admin-reset`.
+4. Lantern hashes the new password with its own `PasswordHasher` implementation and updates SQLite.
+5. Rotates the session stamp, invalidating all active browser sessions.
+6. Offers to restart the Windows Service.
 
-The implementation follows Microsoft's guidance for [Blazor authentication and
-authorization](https://learn.microsoft.com/en-us/aspnet/core/blazor/security/?view=aspnetcore-10.0),
-[antiforgery protection](https://learn.microsoft.com/en-us/aspnet/core/security/anti-request-forgery),
-and [applying EF migrations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying).
+**Data preserved during reset:** crawler configurations, search categories, job history,
+schedules, Meilisearch indexes, and all other SQLite records are unaffected.
+
+If the data directory is not `C:\ProgramData\Lantern\`, specify it explicitly:
+
+```powershell
+.\reset-admin.ps1 -DataRoot D:\YourDataPath
+```
+
+The Windows Service must be stopped before running the reset to prevent concurrent
+database writes. The script handles this automatically; run it from an elevated
+PowerShell prompt if the service requires elevation to stop.
+
+For development password reset, see `docs/development.md` section 16.
+
+## Running Tests
+
+```powershell
+dotnet build Lantern.slnx
+dotnet test Lantern.slnx --no-build
+```
+
+Integration tests use isolated temporary directories with real SQLite and no Meilisearch
+dependency. They cover authorization, settings, logout/session replay, account persistence
+after host restart, rate limits, and antiforgery protection.

@@ -192,18 +192,40 @@ if (Test-Path $startScript) {
     Write-Fail "start-lantern.ps1 not found at $startScript"
 }
 
-# scripts/
-$scriptsDir = Join-Path $stagingDir 'scripts'
-Copy-Item (Join-Path $RepoRoot 'release\scripts') $scriptsDir -Recurse
-Write-OK "scripts/"
-
-# docs/
-$docsDir = Join-Path $stagingDir 'docs'
-$releaseDocs = Join-Path $RepoRoot 'release\docs'
-if (Test-Path $releaseDocs) {
-    Copy-Item $releaseDocs $docsDir -Recurse
-    Write-OK "docs/"
+# reset-admin.ps1 (root-level recovery script)
+$resetScript = Join-Path $RepoRoot 'reset-admin.ps1'
+if (Test-Path $resetScript) {
+    Copy-Item $resetScript (Join-Path $stagingDir 'reset-admin.ps1')
+    Write-OK "reset-admin.ps1"
+} else {
+    Write-Fail "reset-admin.ps1 not found at $resetScript"
 }
+
+# scripts/ — from release\scripts if present, otherwise skip
+$scriptsDir  = Join-Path $stagingDir 'scripts'
+$releaseScripts = Join-Path $RepoRoot 'release\scripts'
+if (Test-Path $releaseScripts) {
+    Copy-Item $releaseScripts $scriptsDir -Recurse
+    Write-OK "scripts/"
+} else {
+    New-Item -ItemType Directory -Path $scriptsDir | Out-Null
+    Write-Host "    [WARN] release\scripts not found — scripts/ directory will be empty" -ForegroundColor Yellow
+}
+
+# docs/ — copy from repo docs/ (accessible on GitHub and in the release package)
+$docsDir   = Join-Path $stagingDir 'docs'
+$repoDocs  = Join-Path $RepoRoot 'docs'
+$docFiles  = @('INSTALL.md', 'administration.md', 'operations.md', 'backup-recovery.md', 'security.md', 'dependencies.md')
+New-Item -ItemType Directory -Path $docsDir | Out-Null
+foreach ($f in $docFiles) {
+    $src = Join-Path $repoDocs $f
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $docsDir $f)
+    } else {
+        Write-Host "    [WARN] docs/$f not found in repo docs/" -ForegroundColor Yellow
+    }
+}
+Write-OK "docs/"
 
 # VERSION
 Copy-Item (Join-Path $RepoRoot 'VERSION') (Join-Path $stagingDir 'VERSION')

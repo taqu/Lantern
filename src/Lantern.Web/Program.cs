@@ -9,8 +9,13 @@ using Lantern.Web.Components;
 // without starting the web server. Only permitted in Development.
 bool isDevReset = string.Equals(Environment.GetEnvironmentVariable("LANTERN_DEV_RESET_ADMIN"), "1", StringComparison.Ordinal);
 
+// When --admin-reset is passed the process resets the administrator password using
+// the value in LANTERN_ADMIN_RESET_PASSWORD and exits. Works in any environment.
+// Use reset-admin.ps1 (included in the release package) rather than calling this directly.
+bool isAdminReset = args.Contains("--admin-reset");
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
-if (isDevReset) builder.Logging.ClearProviders();
+if (isDevReset || isAdminReset) builder.Logging.ClearProviders();
 
 // Windows Service support — enables running under the Service Control Manager.
 // Has no effect on non-Windows platforms or when running interactively.
@@ -44,23 +49,26 @@ builder.Services.AddLanternInfrastructure(builder.Configuration);
 builder.Services.AddLanternCrawling(builder.Configuration);
 builder.AddLanternAdministration();
 
-// Managed Meilisearch process (optional — disabled by default).
-MeilisearchProcessOptions meiliProcessOpts =
-    builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName)
-    .Get<MeilisearchProcessOptions>() ?? new();
-if (meiliProcessOpts.Managed)
+// Managed Meilisearch process and embedding are not needed in one-shot reset modes.
+if (!isDevReset && !isAdminReset)
 {
-    builder.Services.Configure<MeilisearchProcessOptions>(
-        builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName));
-    builder.Services.AddSingleton<MeilisearchProcessManager>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<MeilisearchProcessManager>());
-}
+    MeilisearchProcessOptions meiliProcessOpts =
+        builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName)
+        .Get<MeilisearchProcessOptions>() ?? new();
+    if (meiliProcessOpts.Managed)
+    {
+        builder.Services.Configure<MeilisearchProcessOptions>(
+            builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName));
+        builder.Services.AddSingleton<MeilisearchProcessManager>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<MeilisearchProcessManager>());
+    }
 
-EmbeddingOptions embeddingOptions =
-    builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>() ?? new();
-if (embeddingOptions.Enabled)
-{
-    builder.Services.AddLanternEmbedding(builder.Configuration);
+    EmbeddingOptions embeddingOptions =
+        builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>() ?? new();
+    if (embeddingOptions.Enabled)
+    {
+        builder.Services.AddLanternEmbedding(builder.Configuration);
+    }
 }
 
 WebApplication app = builder.Build();
@@ -79,6 +87,31 @@ if (isDevReset)
     string newPassword = Convert.ToBase64String(pwBytes).TrimEnd('=');
     await app.Services.GetRequiredService<AdministratorAuthentication>().ResetPasswordAsync(newPassword);
     Console.WriteLine(newPassword);
+    return;
+}
+
+if (isAdminReset)
+{
+    string? resetPassword = Environment.GetEnvironmentVariable("LANTERN_ADMIN_RESET_PASSWORD");
+    Environment.SetEnvironmentVariable("LANTERN_ADMIN_RESET_PASSWORD", null);
+    if (string.IsNullOrEmpty(resetPassword))
+    {
+        await Console.Error.WriteLineAsync("Error: --admin-reset requires the LANTERN_ADMIN_RESET_PASSWORD environment variable.");
+        await Console.Error.WriteLineAsync("       Use reset-admin.ps1 to reset the password interactively.");
+        Environment.Exit(1);
+        return;
+    }
+    await app.InitializeAdministrationAsync();
+    try
+    {
+        await app.Services.GetRequiredService<AdministratorAuthentication>().ResetPasswordAsync(resetPassword);
+        Console.WriteLine("Administrator password reset successfully. Existing sessions have been invalidated.");
+    }
+    catch (InvalidOperationException ex)
+    {
+        await Console.Error.WriteLineAsync($"Error: {ex.Message}");
+        Environment.Exit(1);
+    }
     return;
 }
 

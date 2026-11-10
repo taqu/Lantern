@@ -36,7 +36,7 @@ local AI-powered semantic search — entirely offline, with no cloud dependencie
 
 5. Open the URL displayed by Lantern in your browser.
 
-See [`release/docs/INSTALL.md`](release/docs/INSTALL.md) for Windows Service setup and advanced configuration.
+See [`docs/INSTALL.md`](docs/INSTALL.md) for Windows Service setup and advanced configuration.
 
 ---
 
@@ -44,13 +44,13 @@ See [`release/docs/INSTALL.md`](release/docs/INSTALL.md) for Windows Service set
 
 | Document | Description |
 |----------|-------------|
-| [INSTALL.md](release/docs/INSTALL.md) | Installation and first-run |
-| [administration.md](release/docs/administration.md) | Administrator guide |
-| [operations.md](release/docs/operations.md) | Operations reference |
-| [backup-recovery.md](release/docs/backup-recovery.md) | Backup and restore |
-| [security.md](release/docs/development.md) | Security guide |
-| [security.md](release/docs/security.md) | Security guide |
-| [dependencies.md](release/docs/dependencies.md) | Third-party components and licenses |
+| [INSTALL.md](docs/INSTALL.md) | Installation and first-run |
+| [development.md](docs/development.md) | Developer guide |
+| [administration.md](docs/administration.md) | Administrator reference |
+| [operations.md](docs/operations.md) | Operations reference |
+| [backup-recovery.md](docs/backup-recovery.md) | Backup and restore |
+| [security.md](docs/security.md) | Security model |
+| [dependencies.md](docs/dependencies.md) | Third-party components and licenses |
 
 ---
 

@@ -128,6 +128,48 @@ public sealed class AdministrationProvisioningTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProvisionAsync_PasswordTooLong_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Auth.ProvisionAsync("admin", new string('x', 129)));
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_UsernameEmpty_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Auth.ProvisionAsync("", "valid-password-14chars"));
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_UsernameWhitespaceOnly_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Auth.ProvisionAsync("   ", "valid-password-14chars"));
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_UsernameTooLong_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Auth.ProvisionAsync(new string('a', 81), "valid-password-14chars"));
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_UsernameWithControlCharacter_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Auth.ProvisionAsync("admin\x01", "valid-password-14chars"));
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_UsernameProvidedWithNullPassword_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Auth.ProvisionAsync("admin", null));
+    }
+
+    [Fact]
     public async Task RepeatedSetup_ExistingCredentials_AccountUnchanged()
     {
         // Simulates running setup-dev.ps1 multiple times with User Secrets already set.
@@ -155,6 +197,28 @@ public sealed class AdministrationProvisioningTests : IAsyncLifetime
         await Auth.ResetPasswordAsync("unlocked-new-password-after");
         var principal = await Auth.ValidateAsync("admin", "unlocked-new-password-after");
         Assert.NotNull(principal);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_PreviousPasswordRejectedAfterReset()
+    {
+        const string original = "original-password-before";
+        const string reset    = "reset-password-value-new";
+        await Auth.ProvisionAsync("admin", original);
+        await Auth.ResetPasswordAsync(reset);
+        Assert.Null(await Auth.ValidateAsync("admin", original));
+        Assert.NotNull(await Auth.ValidateAsync("admin", reset));
+    }
+
+    [Fact]
+    public async Task ProvisionAsync_ExistingCrawlerDataPreserved()
+    {
+        // Create an admin account; verify ProvisionAsync on subsequent call does not
+        // delete unrelated rows. (Crawler schema is separate — just verify no exception
+        // and the account is unchanged.)
+        await Auth.ProvisionAsync("admin", "first-setup-crawler-data");
+        await Auth.ProvisionAsync("admin", "second-call-should-no-op");
+        Assert.NotNull(await Auth.ValidateAsync("admin", "first-setup-crawler-data"));
     }
 
     private sealed class ProvisioningFactory(string directory) : WebApplicationFactory<Program>

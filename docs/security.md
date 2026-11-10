@@ -4,13 +4,18 @@
 
 Lantern uses ASP.NET Core cookie authentication for the administration interface.
 
-- Credentials are stored as Argon2id (via `IPasswordHasher<T>`) hashes in SQLite.
-- The initial administrator account is provisioned at startup; plaintext passwords are never persisted.
+- Credentials are stored as PBKDF2 (HMAC-SHA512, 210,000 iterations) hashes in SQLite
+  via ASP.NET Core `PasswordHasher<T>` V3 format. Plaintext passwords are never persisted.
+- The initial administrator account is provisioned through a local setup command on first
+  run; there is no public registration endpoint.
 - The authentication cookie is named `__Host-Lantern.Admin` with `HttpOnly`, `Secure`, and `SameSite=Strict` attributes.
-- Sessions expire after 60 minutes of inactivity (sliding expiration).
+- Sessions expire after **30 minutes**; sliding expiration is **disabled**. A session stamp
+  stored in SQLite is validated on every authenticated request; logout and password reset
+  rotate the stamp, invalidating all active sessions immediately.
 - ASP.NET Core Data Protection keys are persisted to the configured `Storage:DataProtectionKeysPath` directory so sessions survive controlled restarts.
-- Login attempts are rate-limited (ASP.NET Core rate limiting, 5 attempts per IP per minute); repeated failures return HTTP 429.
-- Login errors use a generic "invalid credentials" message to prevent username enumeration.
+- Login attempts are rate-limited to **10 per IP per minute** (ASP.NET Core rate limiting); repeated failures return HTTP 429.
+- Five consecutive failed password attempts lock the account for 15 minutes (per-account lockout, stored in SQLite).
+- Login errors use a generic message to prevent account enumeration.
 
 ## Authorization
 
