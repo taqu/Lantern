@@ -30,6 +30,8 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             result = await _client.WaitForTaskAsync(taskUid, timeoutMs: _options.TaskTimeoutSeconds * 1000d,
                 intervalMs: 100, cancellationToken: deadline.Token);
         }
+        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
+        { throw new MeilisearchAuthenticationException(ex); }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         { throw new TimeoutException($"Meilisearch {operation}, task {taskUid} did not finish within {_options.TaskTimeoutSeconds} seconds. Its outcome is unknown.", ex); }
         catch (MeilisearchTimeoutError ex)
@@ -41,6 +43,8 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
     private async Task ConfigureAsync(string name, CancellationToken ct)
     {
         try { await _client.GetIndexAsync(name, ct); }
+        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
+        { throw new MeilisearchAuthenticationException(ex); }
         catch (MeilisearchApiError ex) when (ex.Code == "index_not_found")
         {
             TaskInfo create = await _client.CreateIndexAsync(name, "id", ct);
@@ -79,8 +83,13 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         foreach (IReadOnlyList<SearchDocument> batch in DocumentBatcher.Split(documents.Select(DocumentNormalizer.Normalize), _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch))
         {
             ct.ThrowIfCancellationRequested();
-            TaskInfo task = await _client.Index(name).AddDocumentsAsync(batch, "id", ct);
-            await WaitAsync(task.TaskUid, "upsert documents", ct);
+            try
+            {
+                TaskInfo task = await _client.Index(name).AddDocumentsAsync(batch, "id", ct);
+                await WaitAsync(task.TaskUid, "upsert documents", ct);
+            }
+            catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
+            { throw new MeilisearchAuthenticationException(ex); }
         }
     }
 

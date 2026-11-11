@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Lantern.Infrastructure.Search;
+using Meilisearch;
 using Microsoft.Extensions.Options;
 
 namespace Lantern.Web;
@@ -9,10 +11,12 @@ namespace Lantern.Web;
 /// </summary>
 public sealed class MeilisearchProcessManager(
     IOptions<MeilisearchProcessOptions> options,
+    IOptions<MeilisearchOptions> meiliOptions,
     ILogger<MeilisearchProcessManager> logger)
     : IHostedService, IDisposable
 {
     private readonly MeilisearchProcessOptions _opts = options.Value;
+    private readonly MeilisearchOptions _meiliOptions = meiliOptions.Value;
     private Process? _process;
     private CancellationTokenSource? _monitorCts;
     private Task _monitorTask = Task.CompletedTask;
@@ -63,6 +67,8 @@ public sealed class MeilisearchProcessManager(
             logger.LogError(ex, "Meilisearch failed to start. Search will be unavailable.");
             return;
         }
+
+        await ProvisionApplicationKeyAsync(masterKey, cancellationToken);
 
         _monitorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _monitorTask = MonitorLoopAsync(_monitorCts.Token);
@@ -115,6 +121,72 @@ public sealed class MeilisearchProcessManager(
         if (Path.IsPathRooted(path)) return path;
         string appBase = AppContext.BaseDirectory;
         return Path.GetFullPath(path, appBase);
+    }
+
+    private async Task ProvisionApplicationKeyAsync(string masterKey, CancellationToken ct)
+    {
+        string apiKeyFile = _meiliOptions.ApiKeyFile;
+        if (string.IsNullOrEmpty(apiKeyFile))
+        {
+            logger.LogWarning("Meilisearch:ApiKeyFile is not configured. The application will use the master key for all requests. Configure ApiKeyFile to use a scoped API key.");
+            return;
+        }
+
+        // Check whether an existing key is still valid
+        if (File.Exists(apiKeyFile))
+        {
+            string existingKey = (await File.ReadAllTextAsync(apiKeyFile, ct)).Trim();
+            if (!string.IsNullOrEmpty(existingKey) && await IsKeyValidAsync(existingKey, ct))
+            {
+                logger.LogInformation("Meilisearch application API key is valid.");
+                return;
+            }
+            logger.LogWarning("Existing Meilisearch application API key is invalid or expired. Reprovisioning...");
+        }
+
+        try
+        {
+            var adminClient = new MeilisearchClient(_meiliOptions.Url, masterKey);
+            var keyBody = new Key
+            {
+                Name = "Lantern Application Key",
+                Description = "Scoped key used by Lantern for indexing and search",
+                Actions = [KeyAction.All],
+                Indexes = ["*"],
+                ExpiresAt = null
+            };
+            Key created = await adminClient.CreateKeyAsync(keyBody, ct);
+            string keyValue = created.KeyUid
+                ?? throw new InvalidOperationException("Meilisearch did not return a KeyUid for the created API key.");
+
+            string? dir = Path.GetDirectoryName(apiKeyFile);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(apiKeyFile, keyValue, ct);
+            logger.LogInformation("Meilisearch application API key provisioned and stored.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to provision Meilisearch application API key. Search and indexing will fail until a valid key is configured.");
+            if (_opts.FailOnStartupError) throw;
+        }
+    }
+
+    private async Task<bool> IsKeyValidAsync(string apiKey, CancellationToken ct)
+    {
+        try
+        {
+            var testClient = new MeilisearchClient(_meiliOptions.Url, apiKey);
+            await testClient.GetAllIndexesAsync(new Meilisearch.QueryParameters.IndexesQuery(), ct);
+            return true;
+        }
+        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
+        {
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<string> ReadMasterKeyAsync(CancellationToken ct)

@@ -21,13 +21,13 @@ public sealed class MeilisearchSearchService : ISearchService
     private readonly HybridSearchOptions _hybridOptions;
 
     public MeilisearchSearchService(
+        MeilisearchClient client,
         MeilisearchOptions options,
-        string? apiKey,
         ILogger<MeilisearchSearchService> logger,
         IDocumentIndexingService? indexing = null,
         HybridSearchOptions? hybridOptions = null)
     {
-        _client = new MeilisearchClient(options.Url, apiKey ?? "");
+        _client = client;
         _indexName = options.IndexName;
         _logger = logger;
         _indexing = indexing ?? new MeilisearchIndexingService(_client, options,

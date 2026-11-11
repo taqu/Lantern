@@ -513,3 +513,205 @@ jobs:
             ${{ runner.temp }}/lantern-out.log
             ${{ runner.temp }}/lantern-err.log
           retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 7. Linux Unit Tests
+  # ──────────────────────────────────────────────────────────────────────────
+  linux-unit-tests:
+    name: Linux Unit Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run unit tests
+        run: >
+          dotnet test tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=linux-unit-results.trx"
+          --results-directory artifacts/test-results/linux-unit
+
+      - name: Upload Linux unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-unit-test-results
+          path: artifacts/test-results/linux-unit/
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 8. Linux Extraction Tests (no external dependencies)
+  # ──────────────────────────────────────────────────────────────────────────
+  linux-extraction-tests:
+    name: Linux Extraction Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Run extraction tests
+        run: >
+          dotnet test tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj
+          --configuration Release
+          --no-restore
+          --filter "FullyQualifiedName~Extraction"
+          --logger "trx;LogFileName=linux-extraction-results.trx"
+          --results-directory artifacts/test-results/linux-extraction
+
+      - name: Upload Linux extraction test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-extraction-test-results
+          path: artifacts/test-results/linux-extraction/
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 9. Linux x64 Publish Validation + Smoke Test
+  # ──────────────────────────────────────────────────────────────────────────
+  linux-publish-validation:
+    name: Linux x64 Publish Validation
+    runs-on: ubuntu-latest
+    needs: [linux-unit-tests, linux-extraction-tests]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Restore for linux-x64
+        run: dotnet restore src/Lantern.Web/Lantern.Web.csproj --runtime linux-x64
+
+      - name: Publish linux-x64 self-contained
+        run: >
+          dotnet publish src/Lantern.Web/Lantern.Web.csproj
+          --configuration Release
+          --runtime linux-x64
+          --self-contained true
+          --output artifacts/publish/linux-x64
+          --no-restore
+
+      - name: Verify publish output
+        run: |
+          DIR="artifacts/publish/linux-x64"
+          EXE="$DIR/Lantern.Web"
+
+          if [[ ! -f "$EXE" ]]; then
+            echo "ERROR: Lantern.Web not found in publish output." >&2
+            exit 1
+          fi
+          echo "Executable : $EXE ($(du -h "$EXE" | cut -f1))"
+
+          if [[ ! -d "$DIR/wwwroot" ]]; then
+            echo "ERROR: wwwroot directory missing from publish output." >&2
+            exit 1
+          fi
+          echo "wwwroot    : present"
+
+          COUNT=$(find "$DIR" -type f | wc -l)
+          echo "Total files: $COUNT"
+
+      - name: Smoke test — start published application
+        id: smoke-start
+        run: |
+          DIR=$(realpath "artifacts/publish/linux-x64")
+          EXE="$DIR/Lantern.Web"
+          chmod +x "$EXE"
+          APP_PORT=18080
+
+          export ASPNETCORE_ENVIRONMENT=Development
+          export ASPNETCORE_URLS="http://127.0.0.1:$APP_PORT"
+          export Meilisearch__Url="http://127.0.0.1:1"
+          export LANTERN_ADMIN_USERNAME=smoketest
+          export LANTERN_ADMIN_PASSWORD=Sm0keTest\!CI2024
+
+          "$EXE" &
+          SMOKE_PID=$!
+          echo "SMOKE_PID=$SMOKE_PID" >> "$GITHUB_ENV"
+
+          STARTED=false
+          DEADLINE=$(( $(date +%s) + 45 ))
+          while [[ $(date +%s) -lt $DEADLINE ]]; do
+            if ! kill -0 "$SMOKE_PID" 2>/dev/null; then
+              echo "ERROR: Lantern process exited unexpectedly." >&2
+              exit 1
+            fi
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://127.0.0.1:$APP_PORT/" 2>/dev/null || echo "000")
+            if [[ "$HTTP" != "000" ]]; then
+              STARTED=true
+              break
+            fi
+            sleep 2
+          done
+
+          if ! $STARTED; then
+            echo "ERROR: Lantern did not respond within 45 s." >&2
+            exit 1
+          fi
+          echo "Linux smoke test passed: application responded on port $APP_PORT."
+
+      - name: Stop smoke test application
+        if: always()
+        run: |
+          if [[ -n "${SMOKE_PID:-}" ]]; then
+            kill "$SMOKE_PID" 2>/dev/null || true
+            wait "$SMOKE_PID" 2>/dev/null || true
+          fi
+
+      - name: Upload Linux publish output
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-linux-x64
+          path: |
+            artifacts/publish/linux-x64/Lantern.Web
+            artifacts/publish/linux-x64/wwwroot/
+          retention-days: 7

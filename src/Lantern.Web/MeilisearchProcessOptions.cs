@@ -14,9 +14,12 @@ public sealed class MeilisearchProcessOptions
 
     /// <summary>
     /// Path to the Meilisearch executable. Relative paths are resolved from the
-    /// application base directory (the directory containing Lantern.Web.exe).
+    /// application base directory (the directory containing Lantern.Web.exe / Lantern.Web).
+    /// Production installations should use absolute paths written by 'Lantern.Web setup'.
     /// </summary>
-    public string ExecutablePath { get; set; } = @"bin\meilisearch\meilisearch.exe";
+    public string ExecutablePath { get; set; } = OperatingSystem.IsWindows()
+        ? @"bin\meilisearch\meilisearch.exe"
+        : "bin/meilisearch/meilisearch";
 
     /// <summary>Absolute path to the Meilisearch persistent data directory.</summary>
     public string DataDirectory { get; set; } = "";

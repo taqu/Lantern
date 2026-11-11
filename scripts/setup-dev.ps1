@@ -50,13 +50,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot     = Split-Path $PSScriptRoot -Parent
-$webRoot      = Join-Path $repoRoot "src\Lantern.Web"
-$appData      = Join-Path $webRoot "App_Data"
-$secretsDir   = Join-Path $appData "secrets"
-$meiliData    = Join-Path $appData "meilisearch"
-$meiliKeyFile = Join-Path $secretsDir "meilisearch-master-key.txt"
-$localConfig  = Join-Path $webRoot "appsettings.Development.Local.json"
+$repoRoot       = Split-Path $PSScriptRoot -Parent
+$webRoot        = Join-Path $repoRoot "src\Lantern.Web"
+$appData        = Join-Path $webRoot "App_Data"
+$secretsDir     = Join-Path $appData "secrets"
+$meiliData      = Join-Path $appData "meilisearch"
+$meiliKeyFile   = Join-Path $secretsDir "meilisearch-master-key.txt"
+$meiliApiKeyFile = Join-Path $secretsDir "meili-api-key.txt"
+$localConfig    = Join-Path $webRoot "appsettings.Development.Local.json"
 $dbPath       = Join-Path $appData "database\lantern.db"
 $meiliExeAbs  = if ([System.IO.Path]::IsPathRooted($MeilisearchExe)) { $MeilisearchExe } else { Join-Path $repoRoot $MeilisearchExe }
 
@@ -188,9 +189,12 @@ if (Test-Path $localConfig) {
     Write-Host "appsettings.Development.Local.json: already exists (preserved)"
 } else {
     $localJson = [ordered]@{
+        Meilisearch = [ordered]@{
+            ApiKeyFile = $meiliApiKeyFile -replace '\\', '\\'
+        }
         MeilisearchProcess = [ordered]@{
-            ExecutablePath = $meiliExeAbs -replace '\\', '\\'
-            DataDirectory  = $meiliData   -replace '\\', '\\'
+            ExecutablePath = $meiliExeAbs  -replace '\\', '\\'
+            DataDirectory  = $meiliData    -replace '\\', '\\'
             MasterKeyFile  = $meiliKeyFile -replace '\\', '\\'
         }
     } | ConvertTo-Json -Depth 4

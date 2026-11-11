@@ -70,8 +70,8 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Assert.Equal("https://example.com/0", hit.Uri);
         Assert.Equal("web", hit.SourceType);
         Assert.Equal("text/html", hit.MimeType);
-        var search = new MeilisearchSearchService(new MeilisearchOptions
-        { Url = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", IndexName = _name }, _key,
+        var searchOpts = new MeilisearchOptions { Url = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", IndexName = _name };
+        var search = new MeilisearchSearchService(_client, searchOpts,
             NullLogger<MeilisearchSearchService>.Instance, _service);
         SearchPageResponse page = await search.SearchPageAsync("replacement", 1);
         Assert.Equal(hit.Uri, Assert.Single(page.Items).Url);

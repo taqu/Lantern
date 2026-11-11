@@ -6,6 +6,7 @@ using Lantern.Core.Search;
 using Lantern.Infrastructure.Extraction;
 using Lantern.Infrastructure.Persistence;
 using Lantern.Infrastructure.Search;
+using Meilisearch;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -46,10 +47,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISearchService>(sp =>
         {
             MeilisearchOptions options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            string apiKey = options.ResolveApiKey();
+            MeilisearchClient client = sp.GetRequiredService<MeilisearchClient>();
             ILogger<MeilisearchSearchService> logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
             HybridSearchOptions hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
-            return new MeilisearchSearchService(options, apiKey, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);
+            return new MeilisearchSearchService(client, options, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);
         });
 
         services.AddSingleton<ITextChunkingService, TextChunkingService>();
@@ -64,8 +65,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDocumentExtractor, HtmlExtractor>();
         services.AddSingleton<IDocumentExtractor, PdfExtractor>();
         services.AddSingleton<IDocumentExtractor, DocxExtractor>();
+        services.AddSingleton<IDocumentExtractor, DocExtractor>();
         services.AddSingleton<IDocumentExtractor, XlsxExtractor>();
         services.AddSingleton<IDocumentExtractor, PptxExtractor>();
+        services.AddSingleton<IDocumentExtractor, PptExtractor>();
         services.AddSingleton<IDocumentExtractor, GeneralTextExtractor>();
         services.AddSingleton<EncodingDetector>();
         services.AddSingleton<DocumentExtractionDispatcher>();

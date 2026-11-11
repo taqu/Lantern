@@ -11,5 +11,8 @@ public enum DocumentFormat
     Xlsx,
     Pptx,
     Csv,
-    GeneralText
+    GeneralText,
+    Doc,
+    Xls,
+    Ppt,
 }

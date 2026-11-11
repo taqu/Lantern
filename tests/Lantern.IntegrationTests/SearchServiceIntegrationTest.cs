@@ -50,12 +50,9 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
 
     private MeilisearchSearchService CreateService()
     {
-        var options = new MeilisearchOptions
-        {
-            Url = _host,
-            IndexName = IndexName
-        };
-        return new MeilisearchSearchService(options, _masterKey, NullLogger<MeilisearchSearchService>.Instance);
+        var options = new MeilisearchOptions { Url = _host, IndexName = IndexName };
+        var client = new MeilisearchClient(_host, _masterKey ?? "");
+        return new MeilisearchSearchService(client, options, NullLogger<MeilisearchSearchService>.Instance);
     }
 
     private async Task EnsureIndexReadyAsync(IEnumerable<object> documents)

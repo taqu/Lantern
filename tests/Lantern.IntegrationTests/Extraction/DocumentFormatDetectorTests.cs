@@ -18,6 +18,9 @@ public sealed class DocumentFormatDetectorTests
     [InlineData(".xlsx", DocFormat.Xlsx)]
     [InlineData(".pptx", DocFormat.Pptx)]
     [InlineData(".csv", DocFormat.Csv)]
+    [InlineData(".doc", DocFormat.Doc)]
+    [InlineData(".xls", DocFormat.Xls)]
+    [InlineData(".ppt", DocFormat.Ppt)]
     [InlineData(".xyz", DocFormat.Unknown)]
     public void Detect_ByExtension(string ext, DocFormat expected)
     {
@@ -44,6 +47,9 @@ public sealed class DocumentFormatDetectorTests
     [InlineData(DocFormat.Xlsx, true)]
     [InlineData(DocFormat.Pptx, true)]
     [InlineData(DocFormat.Csv, true)]
+    [InlineData(DocFormat.Doc, true)]
+    [InlineData(DocFormat.Xls, true)]
+    [InlineData(DocFormat.Ppt, true)]
     [InlineData(DocFormat.Unknown, false)]
     public void IsSupported_ReturnsCorrectValue(DocFormat format, bool expected)
     {

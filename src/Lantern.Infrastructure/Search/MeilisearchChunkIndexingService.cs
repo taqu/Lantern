@@ -46,8 +46,13 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         string indexName = _hybridOptions.ChunkIndexName;
         _logger.LogInformation("Configuring chunk index '{IndexName}'", indexName);
 
-        TaskInfo task = await _client.CreateIndexAsync(indexName, "id");
-        await WaitAsync(task.TaskUid, cancellationToken);
+        try
+        {
+            TaskInfo createTask = await _client.CreateIndexAsync(indexName, "id");
+            await WaitAsync(createTask.TaskUid, cancellationToken);
+        }
+        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
+        { throw new MeilisearchAuthenticationException(ex); }
 
         Meilisearch.Index index = _client.Index(indexName);
 
@@ -68,8 +73,13 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         var batch = chunks.ToList();
         if (batch.Count == 0) return;
 
-        TaskInfo task = await index.AddDocumentsAsync(batch, primaryKey: "id");
-        await WaitAsync(task.TaskUid, cancellationToken);
+        try
+        {
+            TaskInfo task = await index.AddDocumentsAsync(batch, primaryKey: "id");
+            await WaitAsync(task.TaskUid, cancellationToken);
+        }
+        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
+        { throw new MeilisearchAuthenticationException(ex); }
         _logger.LogDebug("Upserted {Count} chunks", batch.Count);
     }
 

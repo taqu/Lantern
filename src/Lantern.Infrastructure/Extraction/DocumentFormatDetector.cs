@@ -6,6 +6,10 @@ public sealed class DocumentFormatDetector
 {
     private static readonly Dictionary<string, DocFormat> ExtensionMap = new(StringComparer.OrdinalIgnoreCase)
     {
+        // Legacy Office binary formats
+        [".doc"] = DocFormat.Doc,
+        [".xls"] = DocFormat.Xls,
+        [".ppt"] = DocFormat.Ppt,
         // Office and document formats
         [".txt"] = DocFormat.PlainText,
         [".text"] = DocFormat.PlainText,
@@ -117,7 +121,8 @@ public sealed class DocumentFormatDetector
 
     // Magic bytes for format validation
     private static readonly byte[] PdfMagic = "%PDF"u8.ToArray();
-    private static readonly byte[] ZipMagic = [0x50, 0x4B, 0x03, 0x04]; // PK header
+    private static readonly byte[] ZipMagic = [0x50, 0x4B, 0x03, 0x04]; // PK header (Office Open XML / ZIP)
+    private static readonly byte[] Ole2Magic = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]; // OLE2 Compound Document
 
     public DocFormat Detect(DocumentInput input)
     {
@@ -160,6 +165,13 @@ public sealed class DocumentFormatDetector
                 header[2] == ZipMagic[2] && header[3] == ZipMagic[3])
                 return DocFormat.Unknown; // Could be DOCX/XLSX/PPTX — rely on extension
 
+            if (read >= 8 &&
+                header[0] == Ole2Magic[0] && header[1] == Ole2Magic[1] &&
+                header[2] == Ole2Magic[2] && header[3] == Ole2Magic[3] &&
+                header[4] == Ole2Magic[4] && header[5] == Ole2Magic[5] &&
+                header[6] == Ole2Magic[6] && header[7] == Ole2Magic[7])
+                return DocFormat.Unknown; // Could be DOC/XLS/PPT — rely on extension to distinguish
+
             // Try text classification for unknown-extension files
             TextBinaryClassifier.Classification classification = TextBinaryClassifier.ClassifyBytes(header.AsSpan(0, read));
             if (classification == TextBinaryClassifier.Classification.Text)
@@ -173,7 +185,8 @@ public sealed class DocumentFormatDetector
     {
         DocFormat.PlainText or DocFormat.Markdown or DocFormat.Html
             or DocFormat.Pdf or DocFormat.Docx or DocFormat.Xlsx
-            or DocFormat.Pptx or DocFormat.Csv or DocFormat.GeneralText => true,
+            or DocFormat.Pptx or DocFormat.Csv or DocFormat.GeneralText
+            or DocFormat.Doc or DocFormat.Xls or DocFormat.Ppt => true,
         _ => false
     };
 }
