@@ -68,7 +68,7 @@ Meilisearch is not bundled in the repository. Download the Windows x64 binary on
 
 This places `meilisearch.exe` in `tools\meilisearch\`. The binary and its data files are gitignored.
 
-The application starts and manages Meilisearch automatically in Development mode. A dedicated development data directory (`App_Data\meilisearch\`) is used, completely separate from any production installation.
+The application starts and manages Meilisearch automatically in Development mode. A dedicated development data directory (`AppData\meilisearch\`) is used, completely separate from any production installation.
 
 ---
 
@@ -98,8 +98,8 @@ This script:
 
 1. Validates the .NET 10 SDK.
 2. Checks for `meilisearch.exe`.
-3. Creates `src\Lantern.Web\App_Data\` with subdirectories.
-4. Generates a Meilisearch master key stored at `App_Data\secrets\meilisearch-master-key.txt`.
+3. Creates `src\Lantern.Web\AppData\` with subdirectories.
+4. Generates a Meilisearch master key stored at `AppData\secrets\meilisearch-master-key.txt`.
 5. Writes `src\Lantern.Web\appsettings.Development.Local.json` with absolute paths to the Meilisearch binary, data directory, and key file. This file is gitignored.
 6. Stores development administrator credentials in [User Secrets](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets).
 7. Trusts the ASP.NET Core HTTPS development certificate.
@@ -168,10 +168,10 @@ This runs `dotnet run --project src\Lantern.Web --launch-profile "Lantern Develo
 
 ## 10. Development Data Isolation
 
-All development data lives under `src\Lantern.Web\App_Data\`:
+All development data lives under `src\Lantern.Web\AppData\`:
 
 ```
-App_Data\
+AppData\
     database\       SQLite database (lantern.db)
     keys\           ASP.NET Core data protection keys
     meilisearch\    Meilisearch data directory
@@ -203,7 +203,7 @@ Development and production ports differ to avoid conflicts if both run on the sa
 The development database is created automatically on first launch:
 
 ```
-App_Data\database\lantern.db
+AppData\database\lantern.db
 ```
 
 EF Core migrations run automatically at application startup. No manual migration steps are required for normal development.
@@ -212,14 +212,14 @@ To apply or create migrations manually:
 
 ```powershell
 # Apply migrations to the development database
-$env:LANTERN_MIGRATION_DATABASE = "src\Lantern.Web\App_Data\database\lantern.db"
+$env:LANTERN_MIGRATION_DATABASE = "src\Lantern.Web\AppData\database\lantern.db"
 dotnet ef database update --project src\Lantern.Infrastructure --startup-project src\Lantern.Web
 
 # Create a new migration
 dotnet ef migrations add MyMigrationName --project src\Lantern.Infrastructure --startup-project src\Lantern.Web
 ```
 
-To reset the development database, delete `App_Data\database\lantern.db`. It will be recreated on next startup. This also removes the administrator account; re-run `setup-dev.ps1` to restore it.
+To reset the development database, delete `AppData\database\lantern.db`. It will be recreated on next startup. This also removes the administrator account; re-run `setup-dev.ps1` to restore it.
 
 ---
 
@@ -227,15 +227,15 @@ To reset the development database, delete `App_Data\database\lantern.db`. It wil
 
 In Development mode, the application manages Meilisearch automatically:
 
-- **Startup**: `MeilisearchProcessManager` launches `meilisearch.exe` with `--db-path App_Data\meilisearch --http-addr 127.0.0.1:7702`. It polls `http://127.0.0.1:7702/health` until ready (up to 60 seconds). `FailOnStartupError` is `false` in development, so search is unavailable rather than blocking app startup if Meilisearch is missing.
+- **Startup**: `MeilisearchProcessManager` launches `meilisearch.exe` with `--db-path AppData\meilisearch --http-addr 127.0.0.1:7702`. It polls `http://127.0.0.1:7702/health` until ready (up to 60 seconds). `FailOnStartupError` is `false` in development, so search is unavailable rather than blocking app startup if Meilisearch is missing.
 - **Shutdown**: The process is closed gracefully when the application stops; killed if it doesn't exit within 5 seconds.
 - **Monitoring**: The process is monitored every 10 seconds and restarted up to 3 times if it crashes.
 
 To start Meilisearch independently (bypasses application management):
 
 ```powershell
-$env:MEILI_MASTER_KEY = Get-Content src\Lantern.Web\App_Data\secrets\meilisearch-master-key.txt
-.\scripts\start-meilisearch.ps1 -Port 7702 -DataDir src\Lantern.Web\App_Data\meilisearch
+$env:MEILI_MASTER_KEY = Get-Content src\Lantern.Web\AppData\secrets\meilisearch-master-key.txt
+.\scripts\start-meilisearch.ps1 -Port 7702 -DataDir src\Lantern.Web\AppData\meilisearch
 ```
 
 ---
@@ -306,10 +306,10 @@ This:
 Delete the database file only if you want to reset all application data (crawlers, search data, job history, settings, and the administrator account):
 
 ```powershell
-Remove-Item src\Lantern.Web\App_Data\database\lantern.db -Force
+Remove-Item src\Lantern.Web\AppData\database\lantern.db -Force
 ```
 
-The database and administrator account are recreated on next application start using the credentials currently stored in User Secrets. Meilisearch indexes are **not** cleared; delete `App_Data\meilisearch\` separately to clear them.
+The database and administrator account are recreated on next application start using the credentials currently stored in User Secrets. Meilisearch indexes are **not** cleared; delete `AppData\meilisearch\` separately to clear them.
 
 If the User Secrets no longer match what you want, regenerate them before restarting:
 
@@ -341,7 +341,7 @@ All services use structured logging with named categories (e.g., `Lantern.Web.Me
 
 | Error | Likely cause | Fix |
 |---|---|---|
-| `Could not initialize Lantern administration` | App_Data directory permissions or missing migrations | Check `App_Data\database\` exists and is writable |
+| `Could not initialize Lantern administration` | AppData directory permissions or missing migrations | Check `AppData\database\` exists and is writable |
 | `Meilisearch executable not found` | Setup not run or Meilisearch not downloaded | Run `download-meilisearch.ps1` then `setup-dev.ps1` |
 | `appsettings.Development.Local.json not found warning` (startup) | Setup not run | Run `.\scripts\setup-dev.ps1` |
 | Login page accepts credentials but doesn't authenticate | Cookie requires HTTPS | Use `https://localhost:7108` not `http://localhost:5271` |
@@ -355,8 +355,8 @@ All services use structured logging with named categories (e.g., `Lantern.Web.Me
 
 | Aspect | Development | Production |
 |---|---|---|
-| Data directory | `src\Lantern.Web\App_Data\` | `C:\ProgramData\Lantern\` |
-| Database | `App_Data\database\lantern.db` | `ProgramData\Lantern\database\lantern.db` |
+| Data directory | `src\Lantern.Web\AppData\` | `C:\ProgramData\Lantern\` |
+| Database | `AppData\database\lantern.db` | `ProgramData\Lantern\database\lantern.db` |
 | Meilisearch port | 7702 | 7700 |
 | Meilisearch index | `lantern-dev-documents` | `lantern-documents` |
 | Meilisearch management | Managed (auto-start) | Managed (via service) |

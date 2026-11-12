@@ -52,7 +52,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot       = Split-Path $PSScriptRoot -Parent
 $webRoot        = Join-Path $repoRoot "src\Lantern.Web"
-$appData        = Join-Path $webRoot "App_Data"
+$appData        = Join-Path $webRoot "AppData"
 $secretsDir     = Join-Path $appData "secrets"
 $meiliData      = Join-Path $appData "meilisearch"
 $meiliKeyFile   = Join-Path $secretsDir "meilisearch-master-key.txt"
@@ -160,7 +160,7 @@ if (Test-Path $modelPath -PathType Leaf) {
     Write-Host " not present (hybrid search disabled)" -ForegroundColor DarkGray
 }
 
-# ── 4. Create App_Data structure ──────────────────────────────────────────────
+# ── 4. Create AppData structure ──────────────────────────────────────────────
 Write-Host "Creating development data directories..."
 foreach ($dir in @($appData, $secretsDir, $meiliData, (Join-Path $appData "database"), (Join-Path $appData "keys"), (Join-Path $appData "logs"))) {
     if (-not (Test-Path $dir)) {
@@ -180,6 +180,18 @@ if (Test-Path $meiliKeyFile) {
     $key = [Convert]::ToBase64String($bytes)
     Set-Content -Path $meiliKeyFile -Value $key -NoNewline -Encoding UTF8
     Write-Host "Meilisearch master key: generated" -ForegroundColor Green
+}
+
+# ── 5b. Seed meili-api-key.txt with the master key ───────────────────────────
+# MeilisearchProcessManager will re-provision a scoped key on first startup.
+# Writing the master key here ensures the app has a working credential even if
+# the provisioning step runs before Meilisearch finishes initialising.
+if (Test-Path $meiliApiKeyFile) {
+    Write-Host "Meilisearch API key file: already exists (preserved)"
+} else {
+    $masterKey = Get-Content -Path $meiliKeyFile -Raw -Encoding UTF8
+    Set-Content -Path $meiliApiKeyFile -Value $masterKey.Trim() -NoNewline -Encoding UTF8
+    Write-Host "Meilisearch API key file: seeded from master key" -ForegroundColor Green
 }
 
 # ── 6. Write appsettings.Development.Local.json with absolute paths ───────────

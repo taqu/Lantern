@@ -15,7 +15,7 @@ public static class AdministrationSetup
     public static void AddLanternAdministration(this WebApplicationBuilder builder)
     {
         string root = builder.Environment.IsDevelopment()
-            ? Path.Combine(builder.Environment.ContentRootPath, "App_Data")
+            ? Path.Combine(builder.Environment.ContentRootPath, "AppData")
             : PlatformDirectories.DefaultDataRoot;
         string dbPath = Path.GetFullPath(builder.Configuration["Storage:DatabasePath"] ?? Path.Combine(root, "database", "lantern.db"), builder.Environment.ContentRootPath);
         string keyPath = Path.GetFullPath(builder.Configuration["Storage:DataProtectionKeysPath"] ?? Path.Combine(root, "keys"), builder.Environment.ContentRootPath);
