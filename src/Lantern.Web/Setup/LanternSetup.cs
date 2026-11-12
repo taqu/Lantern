@@ -40,7 +40,6 @@ public static class LanternSetup
 
         // Generate Meilisearch master key if absent.
         string masterKeyFile = Path.Combine(secretsDir, "meili-master-key.txt");
-        string apiKeyFile = Path.Combine(secretsDir, "meili-api-key.txt");
         string masterKey = await EnsureMasterKeyAsync(masterKeyFile, ct);
         if (showMasterKey)
             Console.WriteLine($"Master key: {masterKey}");
@@ -50,7 +49,7 @@ public static class LanternSetup
 
         // Write the production configuration file from computed defaults.
         string configFile = PlatformDirectories.ProductionConfigFile;
-        await EnsureProductionConfigAsync(configFile, dataRoot, secretsDir, masterKeyFile, apiKeyFile, ct);
+        await EnsureProductionConfigAsync(configFile, dataRoot, secretsDir, masterKeyFile, ct);
 
         return dataRoot;
     }
@@ -309,7 +308,7 @@ public static class LanternSetup
 
     private static async Task EnsureProductionConfigAsync(
         string configFile, string dataRoot, string secretsDir,
-        string masterKeyFile, string apiKeyFile, CancellationToken ct)
+        string masterKeyFile, CancellationToken ct)
     {
         if (File.Exists(configFile))
         {
@@ -336,7 +335,10 @@ public static class LanternSetup
                 ["Url"] = "http://127.0.0.1:7700",
                 ["IndexName"] = "lantern-documents",
                 ["MaxDocumentsPerBatch"] = 100,
-                ["ApiKeyFile"] = apiKeyFile,
+            },
+            ["SecretStore"] = new JsonObject
+            {
+                ["Directory"] = secretsDir,
             },
             ["MeilisearchProcess"] = new JsonObject
             {

@@ -89,6 +89,12 @@ builder.Services.AddLanternInfrastructure(builder.Configuration);
 builder.Services.AddLanternCrawling(builder.Configuration);
 builder.AddLanternAdministration();
 
+// MeilisearchProcessOptions is bound unconditionally so IMasterKeyAccessor
+// can locate the master key file whether or not Lantern owns the process.
+builder.Services.Configure<MeilisearchProcessOptions>(
+    builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName));
+builder.Services.AddSingleton<Lantern.Infrastructure.Search.IMasterKeyAccessor, MeilisearchMasterKeyAccessor>();
+
 // Managed Meilisearch process and embedding are not needed in one-shot command modes.
 bool isCommandMode = isDevReset || isAdminReset || subcommand != null;
 if (!isCommandMode)
@@ -98,11 +104,13 @@ if (!isCommandMode)
         .Get<MeilisearchProcessOptions>() ?? new();
     if (meiliProcessOpts.Managed)
     {
-        builder.Services.Configure<MeilisearchProcessOptions>(
-            builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName));
         builder.Services.AddSingleton<MeilisearchProcessManager>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MeilisearchProcessManager>());
     }
+
+    // Must be registered AFTER the process manager so the managed server is
+    // live before EnsureCredentialsAsync is called.
+    builder.Services.AddHostedService<Lantern.Infrastructure.Search.MeilisearchCredentialBootstrapper>();
 
     EmbeddingOptions embeddingOptions =
         builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>() ?? new();

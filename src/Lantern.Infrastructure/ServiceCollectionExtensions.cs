@@ -6,9 +6,11 @@ using Lantern.Core.Search;
 using Lantern.Infrastructure.Extraction;
 using Lantern.Infrastructure.Persistence;
 using Lantern.Infrastructure.Search;
+using Lantern.Infrastructure.Secrets;
 using Meilisearch;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -29,25 +31,41 @@ public static class ServiceCollectionExtensions
             configuration.GetSection(ChunkingOptions.SectionName));
         services.Configure<HybridSearchOptions>(
             configuration.GetSection(HybridSearchOptions.SectionName));
+        services.Configure<SecretStoreOptions>(
+            configuration.GetSection(SecretStoreOptions.SectionName));
 
+        services.AddSingleton<ISecretStore, FileSecretStore>();
+        services.AddSingleton<IMeilisearchCredentialManager>(sp => new MeilisearchCredentialManager(
+            sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value,
+            sp.GetRequiredService<IMasterKeyAccessor>(),
+            sp.GetRequiredService<ISecretStore>(),
+            sp.GetRequiredService<ILogger<MeilisearchCredentialManager>>()));
+        services.AddSingleton<IMeilisearchClientFactory>(sp => new MeilisearchClientFactory(
+            sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value,
+            sp.GetRequiredService<IMeilisearchCredentialManager>()));
+        // NOTE: MeilisearchCredentialBootstrapper is registered by the host
+        // (Program.cs) *after* the Meilisearch process manager so that the
+        // managed server is already accepting requests before provisioning.
+
+        // Legacy singleton: back it with the Indexing role so existing consumers
+        // get a writable client without each being rewired individually. New code
+        // should take IMeilisearchClientFactory directly.
         services.AddSingleton(sp =>
-        {
-            MeilisearchOptions opts = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            return new Meilisearch.MeilisearchClient(opts.Url, opts.ResolveApiKey());
-        });
+            sp.GetRequiredService<IMeilisearchClientFactory>().GetIndexingClient());
+
         services.AddSingleton(sp => new MeilisearchIndexingService(
-            sp.GetRequiredService<Meilisearch.MeilisearchClient>(),
+            sp.GetRequiredService<IMeilisearchClientFactory>().GetIndexingClient(),
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value,
             sp.GetRequiredService<ILogger<MeilisearchIndexingService>>()));
         services.AddSingleton<IDocumentIndexingService>(sp => sp.GetRequiredService<MeilisearchIndexingService>());
         services.AddSingleton<ISearchEngineHealthService>(sp => new MeilisearchHealthService(
-            sp.GetRequiredService<Meilisearch.MeilisearchClient>(),
+            sp.GetRequiredService<IMeilisearchClientFactory>().GetSearchClient(),
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value));
 
         services.AddSingleton<ISearchService>(sp =>
         {
             MeilisearchOptions options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            MeilisearchClient client = sp.GetRequiredService<MeilisearchClient>();
+            MeilisearchClient client = sp.GetRequiredService<IMeilisearchClientFactory>().GetSearchClient();
             ILogger<MeilisearchSearchService> logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
             HybridSearchOptions hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
             return new MeilisearchSearchService(client, options, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);

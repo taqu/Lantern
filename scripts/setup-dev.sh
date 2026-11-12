@@ -17,7 +17,6 @@ APP_DATA="$WEB_ROOT/App_Data"
 SECRETS_DIR="$APP_DATA/secrets"
 MEILI_DATA="$APP_DATA/meilisearch"
 MEILI_KEY_FILE="$SECRETS_DIR/meilisearch-master-key.txt"
-MEILI_API_KEY_FILE="$SECRETS_DIR/meili-api-key.txt"
 LOCAL_CONFIG="$WEB_ROOT/appsettings.Development.Local.json"
 DB_PATH="$APP_DATA/database/lantern.db"
 
@@ -148,25 +147,14 @@ else
     echo "Meilisearch master key: generated"
 fi
 
-# ── 5b. Seed meili-api-key.txt with the master key ───────────────────────────
-# MeilisearchProcessManager will re-provision a scoped key on first startup.
-if [[ -f "$MEILI_API_KEY_FILE" ]]; then
-    echo "Meilisearch API key file: already exists (preserved)"
-else
-    MASTER_KEY=$(cat "$MEILI_KEY_FILE" | tr -d '[:space:]')
-    printf '%s' "$MASTER_KEY" > "$MEILI_API_KEY_FILE"
-    chmod 600 "$MEILI_API_KEY_FILE"
-    echo "Meilisearch API key file: seeded from master key"
-fi
-
 # ── 6. Write appsettings.Development.Local.json with absolute paths ───────────
 if [[ -f "$LOCAL_CONFIG" ]]; then
     echo "appsettings.Development.Local.json: already exists (preserved)"
 else
     cat > "$LOCAL_CONFIG" <<EOF
 {
-  "Meilisearch": {
-    "ApiKeyFile": "$MEILI_API_KEY_FILE"
+  "SecretStore": {
+    "Directory": "$SECRETS_DIR"
   },
   "MeilisearchProcess": {
     "Managed": true,

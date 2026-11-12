@@ -56,7 +56,6 @@ $appData        = Join-Path $webRoot "AppData"
 $secretsDir     = Join-Path $appData "secrets"
 $meiliData      = Join-Path $appData "meilisearch"
 $meiliKeyFile   = Join-Path $secretsDir "meilisearch-master-key.txt"
-$meiliApiKeyFile = Join-Path $secretsDir "meili-api-key.txt"
 $localConfig    = Join-Path $webRoot "appsettings.Development.Local.json"
 $dbPath       = Join-Path $appData "database\lantern.db"
 $meiliExeAbs  = if ([System.IO.Path]::IsPathRooted($MeilisearchExe)) { $MeilisearchExe } else { Join-Path $repoRoot $MeilisearchExe }
@@ -182,27 +181,16 @@ if (Test-Path $meiliKeyFile) {
     Write-Host "Meilisearch master key: generated" -ForegroundColor Green
 }
 
-# ── 5b. Seed meili-api-key.txt with the master key ───────────────────────────
-# MeilisearchProcessManager will re-provision a scoped key on first startup.
-# Writing the master key here ensures the app has a working credential even if
-# the provisioning step runs before Meilisearch finishes initialising.
-if (Test-Path $meiliApiKeyFile) {
-    Write-Host "Meilisearch API key file: already exists (preserved)"
-} else {
-    $masterKey = Get-Content -Path $meiliKeyFile -Raw -Encoding UTF8
-    Set-Content -Path $meiliApiKeyFile -Value $masterKey.Trim() -NoNewline -Encoding UTF8
-    Write-Host "Meilisearch API key file: seeded from master key" -ForegroundColor Green
-}
-
 # ── 6. Write appsettings.Development.Local.json with absolute paths ───────────
 # This file is gitignored (matches appsettings.*.Local.json). It supplies the
-# machine-specific absolute paths that MeilisearchProcessManager needs.
+# machine-specific absolute paths that MeilisearchProcessManager and the
+# credential manager's FileSecretStore need.
 if (Test-Path $localConfig) {
     Write-Host "appsettings.Development.Local.json: already exists (preserved)"
 } else {
     $localJson = [ordered]@{
-        Meilisearch = [ordered]@{
-            ApiKeyFile = $meiliApiKeyFile -replace '\\', '\\'
+        SecretStore = [ordered]@{
+            Directory = $secretsDir -replace '\\', '\\'
         }
         MeilisearchProcess = [ordered]@{
             ExecutablePath = $meiliExeAbs  -replace '\\', '\\'
