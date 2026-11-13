@@ -230,7 +230,7 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
 
             new(MeilisearchCredentialRole.Admin,
                 Name: "Lantern Admin",
-                Description: "Administrative key for authorized server-side maintenance (excludes keys.*).",
+                Description: "Administrative key for authorized server-side maintenance (index-scoped; excludes keys.*, dumps and version).",
                 SecretName: "meili-admin-key",
                 Actions:
                 [
@@ -242,8 +242,8 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
                     KeyAction.TasksDelete,
                     KeyAction.SettingsAll,
                     KeyAction.StatsGet,
-                    KeyAction.DumpsCreate,
-                    KeyAction.Version,
+                    // dumps.create and version are global actions; Meilisearch rejects
+                    // them on index-scoped keys (index_scoped_api_key_with_global_action).
                 ],
                 Indexes: ["lantern-*"]),
         ];

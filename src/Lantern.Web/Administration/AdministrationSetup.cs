@@ -36,15 +36,18 @@ public static class AdministrationSetup
         builder.Services.AddScoped<CategoryManagementService>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddCascadingAuthenticationState();
+        bool secureCookies = !builder.Environment.IsDevelopment();
         IDataProtectionBuilder protection = builder.Services.AddDataProtection().SetApplicationName("Lantern").PersistKeysToFileSystem(new DirectoryInfo(keyPath));
         if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
         builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
         {
             options.LoginPath = "/account/login";
             options.AccessDeniedPath = "/account/denied";
-            options.Cookie.Name = "__Host-Lantern.Admin";
+            // The "__Host-" prefix requires the Secure attribute; browsers silently discard such a
+            // cookie when set over plain HTTP, which made sign-in appear to do nothing in development.
+            options.Cookie.Name = secureCookies ? "__Host-Lantern.Admin" : "Lantern.Admin";
             options.Cookie.HttpOnly = true;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = secureCookies ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
             options.SlidingExpiration = false;
@@ -54,7 +57,7 @@ public static class AdministrationSetup
             policy => policy.RequireAuthenticatedUser().RequireRole(AdministratorAuthentication.Policy)));
         builder.Services.AddAntiforgery(options =>
         {
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = secureCookies ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
             options.Cookie.SameSite = SameSiteMode.Strict;
         });
         builder.Services.Configure<FormOptions>(options =>

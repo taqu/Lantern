@@ -5,6 +5,7 @@ using Lantern.Web;
 using Lantern.Web.Administration;
 using Lantern.Web.Components;
 using Lantern.Web.Setup;
+using Microsoft.AspNetCore.HttpOverrides;
 
 // ── Subcommand detection ──────────────────────────────────────────────────────
 // First positional arg that doesn't start with '--' is treated as a subcommand.

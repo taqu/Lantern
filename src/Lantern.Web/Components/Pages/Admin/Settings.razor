@@ -5,6 +5,7 @@
 @inject AdministrationService Administration
 @inject IOptions<MeilisearchOptions> SearchOptions
 @inject IOptions<HybridSearchOptions> HybridSearchOptions
+@inject IMeilisearchCredentialManager Credentials
 @inject ILogger<Settings> Logger
 
 <PageTitle>Settings · Lantern Administration</PageTitle>
@@ -30,7 +31,7 @@ else
 <dl class="row">
     <dt class="col-sm-3">Search endpoint</dt><dd class="col-sm-9">@Endpoint</dd>
     <dt class="col-sm-3">Active index</dt><dd class="col-sm-9">@SearchOptions.Value.IndexName</dd>
-    <dt class="col-sm-3">Meilisearch API key</dt><dd class="col-sm-9">@(string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("MEILI_API_KEY")) ? "Not configured" : "Configured")</dd>
+    <dt class="col-sm-3">Meilisearch API keys</dt><dd class="col-sm-9">@KeyStatus</dd>
 </dl>
 <form method="post" action="/admin/actions/test-connection" data-enhance="false">
     <AntiforgeryToken />
@@ -52,6 +53,22 @@ else
     private ApplicationSetting? _settings;
     private string Endpoint => Uri.TryCreate(SearchOptions.Value.Url, UriKind.Absolute, out var uri)
         ? uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.SafeUnescaped) : "Invalid endpoint configuration";
+    // Role-scoped keys come from the credential manager (server-provisioned or local secret store).
+    // Values are never rendered.
+    private string KeyStatus
+    {
+        get
+        {
+            if (!Credentials.IsReady) return "Not configured";
+            var roles = new List<string>();
+            foreach (MeilisearchCredentialRole role in Enum.GetValues<MeilisearchCredentialRole>())
+            {
+                try { Credentials.GetCredential(role); roles.Add(role.ToString()); }
+                catch (InvalidOperationException) { }
+            }
+            return roles.Count == 0 ? "Not configured" : "Configured (" + string.Join(", ", roles) + ")";
+        }
+    }
     protected override async Task OnInitializedAsync()
     {
         try { _settings = await Administration.GetSettingsAsync(); }

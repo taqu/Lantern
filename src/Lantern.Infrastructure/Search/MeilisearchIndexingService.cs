@@ -12,7 +12,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _initialized;
 
-    public MeilisearchIndexingService(MeilisearchClient client, MeilisearchOptions options, ILogger<MeilisearchIndexingService> logger)
+    public MeilisearchIndexingService(IMeilisearchClientFactory client, MeilisearchOptions options, ILogger<MeilisearchIndexingService> logger)
     {
         if (string.IsNullOrWhiteSpace(options.IndexName) || options.MaxDocumentsPerBatch <= 0 ||
             options.MaxPayloadBytesPerBatch < 2 || options.TaskTimeoutSeconds <= 0)
@@ -42,7 +42,13 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
 
     private async Task ConfigureAsync(string name, CancellationToken ct)
     {
-        try { await _client.GetIndexAsync(name, ct); }
+        try {
+            Meilisearch.Index idx = await _client.GetIndexAsync(name, ct);
+        }catch(MeilisearchApiError ex)
+        {
+
+        }
+#if false
         catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
         { throw new MeilisearchAuthenticationException(ex); }
         catch (MeilisearchApiError ex) when (ex.Code == "index_not_found")
@@ -50,8 +56,10 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             TaskInfo create = await _client.CreateIndexAsync(name, "id", ct);
             await WaitAsync(create.TaskUid, "create index", ct);
         }
+#endif
         Meilisearch.Index index = await _client.GetIndexAsync(name, ct);
-        if (index.PrimaryKey != "id") throw new InvalidOperationException($"Index {name} must use primary key id.");
+        string? primaryKey = index.PrimaryKey;
+        if (primaryKey != "id") throw new InvalidOperationException($"Index {name} must use primary key id.");
         TaskInfo task = await index.UpdateSettingsAsync(new Settings
         {
             SearchableAttributes = new[] { "title", "content" },
