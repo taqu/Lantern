@@ -254,7 +254,7 @@ Write-Host "Setup complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "Development ports:" -ForegroundColor Cyan
 Write-Host "  Lantern Web  : https://localhost:7108  (http://localhost:5271)"
-Write-Host "  Meilisearch  : http://127.0.0.1:7702"
+Write-Host "  Meilisearch  : http://127.0.0.1:7700"
 Write-Host "  Embedding    : http://127.0.0.1:7703  (when enabled)"
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan

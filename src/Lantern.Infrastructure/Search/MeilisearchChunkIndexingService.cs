@@ -1,5 +1,6 @@
 using Lantern.Core.Search;
 using Meilisearch;
+using Meilisearch.QueryParameters;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -7,7 +8,8 @@ namespace Lantern.Infrastructure.Search;
 
 public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 {
-    private readonly MeilisearchClient _client;
+    private readonly IMeilisearchClientFactory _clientFactory;
+    private MeilisearchClient _client = null!;
     private readonly MeilisearchOptions _documentOptions;
     private readonly HybridSearchOptions _hybridOptions;
     private readonly ILogger<MeilisearchChunkIndexingService> _logger;
@@ -15,12 +17,12 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     private bool _initialized;
 
     public MeilisearchChunkIndexingService(
-        MeilisearchClient client,
+        IMeilisearchClientFactory clientFactory,
         IOptions<MeilisearchOptions> documentOptions,
         IOptions<HybridSearchOptions> hybridOptions,
         ILogger<MeilisearchChunkIndexingService> logger)
     {
-        _client = client;
+        _clientFactory = clientFactory;
         _documentOptions = documentOptions.Value;
         _hybridOptions = hybridOptions.Value;
         _logger = logger;
@@ -29,35 +31,31 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     public async Task EnsureIndexAsync(CancellationToken cancellationToken = default)
     {
         await _initLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (_initialized) return;
+        try {
+            if(_initialized) return;
             await ConfigureAsync(cancellationToken);
             _initialized = true;
-        }
-        finally
-        {
+        } finally {
             _initLock.Release();
         }
     }
 
     private async Task ConfigureAsync(CancellationToken cancellationToken)
     {
+        if(null == _client) {
+            _client = _clientFactory.GetIndexingClient();
+        }
         string indexName = _hybridOptions.ChunkIndexName;
         _logger.LogInformation("Configuring chunk index '{IndexName}'", indexName);
 
-        try
-        {
+        try {
             TaskInfo createTask = await _client.CreateIndexAsync(indexName, "id");
             await WaitAsync(createTask.TaskUid, cancellationToken);
-        }
-        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
-        { throw new MeilisearchAuthenticationException(ex); }
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") { throw new MeilisearchAuthenticationException(ex); }
 
         Meilisearch.Index index = _client.Index(indexName);
 
-        TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings
-        {
+        TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings {
             SearchableAttributes = ["title", "sectionTitle", "content"],
             FilterableAttributes = ["documentId", "sourceId", "sourceType", "extension", "categoryIds"],
             DisplayedAttributes = ["*"]
@@ -70,16 +68,13 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     {
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
-        var batch = chunks.ToList();
-        if (batch.Count == 0) return;
+        List<SearchChunk> batch = chunks.ToList();
+        if(batch.Count == 0) return;
 
-        try
-        {
+        try {
             TaskInfo task = await index.AddDocumentsAsync(batch, primaryKey: "id");
             await WaitAsync(task.TaskUid, cancellationToken);
-        }
-        catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
-        { throw new MeilisearchAuthenticationException(ex); }
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") { throw new MeilisearchAuthenticationException(ex); }
         _logger.LogDebug("Upserted {Count} chunks", batch.Count);
     }
 
@@ -87,7 +82,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     {
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
-        var query = new Meilisearch.QueryParameters.DeleteDocumentsQuery { Filter = $"documentId = \"{documentId}\"" };
+        DeleteDocumentsQuery query = new Meilisearch.QueryParameters.DeleteDocumentsQuery { Filter = $"documentId = \"{documentId}\"" };
         TaskInfo task = await index.DeleteDocumentsAsync(query, cancellationToken);
         await WaitAsync(task.TaskUid, cancellationToken);
     }
@@ -95,12 +90,12 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     public async Task ReplaceDocumentChunksAsync(string documentId, IEnumerable<SearchChunk> newChunks, CancellationToken cancellationToken = default)
     {
         await EnsureIndexAsync(cancellationToken);
-        var chunkList = newChunks.ToList();
+        List<SearchChunk> chunkList = newChunks.ToList();
 
         // Delete all existing chunks for the document, then upsert new ones.
         // Not atomic but reduces stale chunk window.
         await DeleteChunksByDocumentAsync(documentId, cancellationToken);
-        if (chunkList.Count > 0)
+        if(chunkList.Count > 0)
             await UpsertChunksAsync(chunkList, cancellationToken);
     }
 
@@ -114,20 +109,17 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
     private async Task WaitAsync(int taskUid, CancellationToken cancellationToken)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(_documentOptions.TaskTimeoutSeconds));
         TaskResource result;
-        try
-        {
+        try {
             result = await _client.WaitForTaskAsync(taskUid,
                 timeoutMs: _documentOptions.TaskTimeoutSeconds * 1000d,
                 intervalMs: 100, cancellationToken: cts.Token);
-        }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
+        } catch(OperationCanceledException ex) when(!cancellationToken.IsCancellationRequested) {
             throw new TimeoutException($"Meilisearch task {taskUid} timed out after {_documentOptions.TaskTimeoutSeconds}s.", ex);
         }
-        if (result.Status != TaskInfoStatus.Succeeded)
+        if(result.Status != TaskInfoStatus.Succeeded)
             throw new InvalidOperationException($"Meilisearch task {taskUid}: {result.Status}; {System.Text.Json.JsonSerializer.Serialize(result.Error)}");
     }
 }

@@ -36,12 +36,10 @@ public sealed class DocumentProcessingService : IDocumentProcessingService
         CancellationToken cancellationToken = default)
     {
         // Validate file size if we have a path
-        if (input.FilePath != null && File.Exists(input.FilePath))
-        {
-            var fileInfo = new FileInfo(input.FilePath);
+        if(input.FilePath != null && File.Exists(input.FilePath)) {
+            FileInfo fileInfo = new FileInfo(input.FilePath);
             long maxBytes = (long)_options.MaxFileSizeMB * 1024 * 1024;
-            if (fileInfo.Length > maxBytes)
-            {
+            if(fileInfo.Length > maxBytes) {
                 _logger.LogWarning("File too large: {Path} ({Size}MB > {Max}MB)",
                     input.FilePath, fileInfo.Length / 1024 / 1024, _options.MaxFileSizeMB);
                 return Failure(ExtractionFailureCategory.FileTooLarge,
@@ -50,43 +48,31 @@ public sealed class DocumentProcessingService : IDocumentProcessingService
         }
 
         await _concurrencyLimiter.WaitAsync(cancellationToken);
-        try
-        {
+        try {
             ExtractedDocument extracted;
-            try
-            {
+            try {
                 extracted = await _dispatcher.ExtractAsync(input, cancellationToken);
-            }
-            catch (NotSupportedException ex)
-            {
+            } catch(NotSupportedException ex) {
                 return Failure(ExtractionFailureCategory.UnsupportedFormat, ex.Message);
-            }
-            catch (InvalidOperationException ex) when (ex.Message.StartsWith("PDF_ENCRYPTED"))
-            {
+            } catch(InvalidOperationException ex) when(ex.Message.StartsWith("PDF_ENCRYPTED")) {
                 return Failure(ExtractionFailureCategory.EncryptedDocument, "Document is encrypted or password-protected");
-            }
-            catch (OperationCanceledException)
-            {
+            } catch(OperationCanceledException) {
                 return Failure(ExtractionFailureCategory.ExtractionTimeout, "Extraction was cancelled");
-            }
-            catch (Exception ex)
-            {
+            } catch(Exception ex) {
                 _logger.LogError(ex, "Extraction failed for {FileName}", input.FileName ?? input.FilePath);
                 return Failure(ExtractionFailureCategory.ExtractionFailed, $"Extraction failed: {ex.Message}");
             }
 
             // Check extracted character limit
             int totalChars = extracted.Blocks.Sum(b => b.Text.Length);
-            if (totalChars > _options.MaxExtractedCharacters)
-            {
+            if(totalChars > _options.MaxExtractedCharacters) {
                 _logger.LogWarning("Extracted text too large: {Chars} chars from {File}",
                     totalChars, input.FileName ?? input.FilePath);
                 return Failure(ExtractionFailureCategory.ResourceLimitExceeded,
                     $"Extracted text ({totalChars} chars) exceeds limit of {_options.MaxExtractedCharacters}");
             }
 
-            if (extracted.Blocks.Count == 0 || totalChars == 0)
-            {
+            if(extracted.Blocks.Count == 0 || totalChars == 0) {
                 return Failure(ExtractionFailureCategory.NoExtractableText,
                     "No extractable text found in document");
             }
@@ -97,15 +83,12 @@ public sealed class DocumentProcessingService : IDocumentProcessingService
             _logger.LogInformation("Processed {FileName}: {Blocks} blocks -> {Chunks} chunks",
                 input.FileName ?? input.FilePath, extracted.Blocks.Count, chunks.Count);
 
-            return new DocumentProcessingResult
-            {
+            return new DocumentProcessingResult {
                 Success = true,
                 Document = extracted,
                 Chunks = chunks
             };
-        }
-        finally
-        {
+        } finally {
             _concurrencyLimiter.Release();
         }
     }

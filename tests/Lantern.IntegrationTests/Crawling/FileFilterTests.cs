@@ -9,8 +9,7 @@ public sealed class FileFilterTests
         IReadOnlyList<string>? extensions = null,
         IReadOnlyList<string>? excludedDirs = null,
         int maxFileSizeMB = 100) =>
-        new()
-        {
+        new() {
             CrawlerId = Guid.NewGuid(),
             RootPath = @"C:\test",
             IncludedExtensions = extensions ?? [".pdf", ".txt"],
@@ -21,7 +20,7 @@ public sealed class FileFilterTests
     [Fact]
     public void IncludedExtensionAllowsMatchingFiles()
     {
-        var filter = new FileFilter(Config(extensions: [".pdf", ".txt"]));
+        FileFilter filter = new FileFilter(Config(extensions: [".pdf", ".txt"]));
         FileInfo file = CreateFile("report.pdf", 1024);
         Assert.True(filter.ShouldIncludeFile(file));
     }
@@ -29,7 +28,7 @@ public sealed class FileFilterTests
     [Fact]
     public void ExcludedExtensionRejectsFile()
     {
-        var filter = new FileFilter(Config(extensions: [".pdf"]));
+        FileFilter filter = new FileFilter(Config(extensions: [".pdf"]));
         FileInfo file = CreateFile("data.xlsx", 1024);
         Assert.False(filter.ShouldIncludeFile(file));
     }
@@ -37,7 +36,7 @@ public sealed class FileFilterTests
     [Fact]
     public void EmptyInclusionListAllowsAllExtensions()
     {
-        var filter = new FileFilter(Config(extensions: []));
+        FileFilter filter = new FileFilter(Config(extensions: []));
         FileInfo file = CreateFile("anything.xyz", 1024);
         Assert.True(filter.ShouldIncludeFile(file));
     }
@@ -45,7 +44,7 @@ public sealed class FileFilterTests
     [Fact]
     public void FileLargerThanLimitIsRejected()
     {
-        var filter = new FileFilter(Config(maxFileSizeMB: 1));
+        FileFilter filter = new FileFilter(Config(maxFileSizeMB: 1));
         FileInfo file = CreateFile("huge.pdf", 2 * 1024 * 1024);
         Assert.False(filter.ShouldIncludeFile(file));
     }
@@ -53,7 +52,7 @@ public sealed class FileFilterTests
     [Fact]
     public void FileAtExactLimitIsAccepted()
     {
-        var filter = new FileFilter(Config(maxFileSizeMB: 1));
+        FileFilter filter = new FileFilter(Config(maxFileSizeMB: 1));
         FileInfo file = CreateFile("exact.pdf", 1 * 1024 * 1024);
         Assert.True(filter.ShouldIncludeFile(file));
     }
@@ -61,7 +60,7 @@ public sealed class FileFilterTests
     [Fact]
     public void ExcludedDirectoryNameIsRejected()
     {
-        var filter = new FileFilter(Config(excludedDirs: ["node_modules", ".git"]));
+        FileFilter filter = new FileFilter(Config(excludedDirs: ["node_modules", ".git"]));
         DirectoryInfo dir = CreateDir("node_modules");
         Assert.True(filter.ShouldExcludeDirectory(dir));
     }
@@ -69,7 +68,7 @@ public sealed class FileFilterTests
     [Fact]
     public void NonExcludedDirectoryIsAllowed()
     {
-        var filter = new FileFilter(Config(excludedDirs: ["node_modules"]));
+        FileFilter filter = new FileFilter(Config(excludedDirs: ["node_modules"]));
         DirectoryInfo dir = CreateDir("src");
         Assert.False(filter.ShouldExcludeDirectory(dir));
     }
@@ -77,7 +76,7 @@ public sealed class FileFilterTests
     [Fact]
     public void ExtensionMatchIsCaseInsensitive()
     {
-        var filter = new FileFilter(Config(extensions: [".PDF"]));
+        FileFilter filter = new FileFilter(Config(extensions: [".PDF"]));
         FileInfo file = CreateFile("report.pdf", 1024);
         Assert.True(filter.ShouldIncludeFile(file));
     }
@@ -87,7 +86,7 @@ public sealed class FileFilterTests
         // FileInfo with a fake path; we only need Name, Extension, Length for filtering logic
         // Use a temp path format so FileInfo doesn't try to stat a real file
         string dir = Path.GetTempPath();
-        var info = new FileInfo(Path.Combine(dir, name));
+        FileInfo info = new FileInfo(Path.Combine(dir, name));
         // We can't set Length on FileInfo directly — instead test using actual temp files
         using FileStream tmp = File.Create(info.FullName);
         tmp.SetLength(length);

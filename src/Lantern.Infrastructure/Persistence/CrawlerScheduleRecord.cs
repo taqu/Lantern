@@ -13,8 +13,7 @@ public sealed class CrawlerScheduleRecord
     public DateTime? NextRunAt { get; set; }
     public DateTime? LastTriggeredAt { get; set; }
 
-    public CrawlerSchedule ToDomain() => new()
-    {
+    public CrawlerSchedule ToDomain() => new() {
         CrawlerId = CrawlerId,
         Enabled = Enabled,
         Type = Enum.Parse<ScheduleType>(Type),
@@ -25,8 +24,7 @@ public sealed class CrawlerScheduleRecord
         LastTriggeredAt = LastTriggeredAt.HasValue ? new DateTimeOffset(LastTriggeredAt.Value, TimeSpan.Zero) : null
     };
 
-    public static CrawlerScheduleRecord FromDomain(CrawlerSchedule s) => new()
-    {
+    public static CrawlerScheduleRecord FromDomain(CrawlerSchedule s) => new() {
         CrawlerId = s.CrawlerId,
         Enabled = s.Enabled,
         Type = s.Type.ToString(),
@@ -41,7 +39,7 @@ public sealed class CrawlerScheduleRecord
 
     private static IReadOnlyList<DayOfWeek> ParseDaysOfWeek(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return [];
+        if(string.IsNullOrWhiteSpace(raw)) return [];
         return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(s => (DayOfWeek)int.Parse(s))
             .ToList();

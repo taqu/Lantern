@@ -27,43 +27,39 @@ internal static class Program
         bool runSeed = false;
         string? extractPath = null;
 
-        for (int i = 0; i < args.Length; i++)
-        {
-            switch (args[i])
-            {
-                case "--meili":
-                    runMeili = true;
-                    break;
-                case "--extract":
-                    runExtract = true;
-                    if (i + 1 < args.Length)
-                        extractPath = args[++i];
-                    else
-                    {
-                        Console.Error.WriteLine("--extract requires a file path argument.");
-                        return 2;
-                    }
-                    break;
-                case "--generate-samples":
-                    generateSamples = true;
-                    break;
-                case "--seed":
-                    runSeed = true;
-                    break;
-                case "--help":
-                case "-h":
-                    PrintHelp();
-                    return 0;
-                default:
-                    Console.Error.WriteLine($"Unknown argument: {args[i]}");
-                    PrintHelp();
+        for(int i = 0; i < args.Length; i++) {
+            switch(args[i]) {
+            case "--meili":
+                runMeili = true;
+                break;
+            case "--extract":
+                runExtract = true;
+                if(i + 1 < args.Length)
+                    extractPath = args[++i];
+                else {
+                    Console.Error.WriteLine("--extract requires a file path argument.");
                     return 2;
+                }
+                break;
+            case "--generate-samples":
+                generateSamples = true;
+                break;
+            case "--seed":
+                runSeed = true;
+                break;
+            case "--help":
+            case "-h":
+                PrintHelp();
+                return 0;
+            default:
+                Console.Error.WriteLine($"Unknown argument: {args[i]}");
+                PrintHelp();
+                return 2;
             }
         }
 
         // --seed is a standalone command; skip if explicitly requested
-        if (runSeed)
-        {
+        if(runSeed) {
             Console.WriteLine();
             Console.WriteLine("=== Seeding development index ===");
             bool seedOk = await Seeder.RunAsync();
@@ -76,37 +72,31 @@ internal static class Program
 
         bool runAll = !runMeili && !runExtract && !generateSamples;
 
-        if (generateSamples || runAll)
-        {
+        if(generateSamples || runAll) {
             string samplesDir = FindSamplesDirectory();
             DocumentGenerator.GenerateSamples(samplesDir);
         }
 
         bool meiliPassed = true;
 
-        if (runMeili || runAll)
-        {
+        if(runMeili || runAll) {
             string host = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700";
             string? masterKey = Environment.GetEnvironmentVariable("MEILI_MASTER_KEY");
 
-            if (string.IsNullOrWhiteSpace(masterKey))
-            {
+            if(string.IsNullOrWhiteSpace(masterKey)) {
                 Console.WriteLine();
                 Console.WriteLine("WARNING: MEILI_MASTER_KEY environment variable is not set.");
                 Console.WriteLine("         Meilisearch tests will be skipped.");
                 Console.WriteLine("         Set MEILI_MASTER_KEY to run connectivity tests.");
                 meiliPassed = false;
-            }
-            else
-            {
-                var meili = new MeilisearchFeasibility(host, masterKey);
+            } else {
+                MeilisearchFeasibility meili = new MeilisearchFeasibility(host, masterKey);
                 meiliPassed = await meili.RunAsync();
             }
         }
 
-        if (runExtract || runAll)
-        {
-            var extraction = new DocumentExtractionFeasibility();
+        if(runExtract || runAll) {
+            DocumentExtractionFeasibility extraction = new DocumentExtractionFeasibility();
             // When running all, pass null so it scans samples/documents/
             await extraction.RunAsync(runAll ? null : extractPath);
         }
@@ -114,7 +104,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("=== Summary ===");
 
-        if (runMeili || runAll)
+        if(runMeili || runAll)
             Console.WriteLine($"  Meilisearch : {(meiliPassed ? "PASS" : "FAIL / SKIPPED")}");
 
         Console.WriteLine();
@@ -124,11 +114,10 @@ internal static class Program
     private static string FindSamplesDirectory()
     {
         string? dir = Directory.GetCurrentDirectory();
-        for (int depth = 0; depth < 8; depth++)
-        {
-            if (dir == null) break;
+        for(int depth = 0; depth < 8; depth++) {
+            if(dir == null) break;
             string candidate = Path.Combine(dir, "samples", "documents");
-            if (Directory.Exists(candidate)) return candidate;
+            if(Directory.Exists(candidate)) return candidate;
             dir = Path.GetDirectoryName(dir);
         }
 

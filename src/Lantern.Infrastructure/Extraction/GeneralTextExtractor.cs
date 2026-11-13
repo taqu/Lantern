@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using Lantern.Core.Extraction;
 
@@ -24,7 +25,7 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
         byte[] bytes = await ReadBytesAsync(input, cancellationToken);
 
         // Binary check
-        if (TextBinaryClassifier.ClassifyBytes(bytes) == TextBinaryClassifier.Classification.Binary)
+        if(TextBinaryClassifier.ClassifyBytes(bytes) == TextBinaryClassifier.Classification.Binary)
             throw new InvalidOperationException("BINARY_CONTENT: Input appears to be binary, not text.");
 
         EncodingDetector.DetectionResult detection = _encodingDetector.Detect(bytes, hintEncoding: null);
@@ -36,8 +37,7 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
         string title = DeriveTitle(input, text);
         IReadOnlyList<ExtractedBlock> blocks = BuildBlocks(text);
 
-        return new ExtractedDocument
-        {
+        return new ExtractedDocument {
             Title = title,
             Blocks = blocks,
             Metadata = new ExtractedDocumentMetadata(
@@ -49,11 +49,10 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
 
     private static async Task<byte[]> ReadBytesAsync(DocumentInput input, CancellationToken ct)
     {
-        if (input.FilePath != null)
+        if(input.FilePath != null)
             return await File.ReadAllBytesAsync(input.FilePath, ct);
-        if (input.Stream != null)
-        {
-            using var ms = new MemoryStream();
+        if(input.Stream != null) {
+            using MemoryStream ms = new MemoryStream();
             await input.Stream.CopyToAsync(ms, ct);
             return ms.ToArray();
         }
@@ -63,21 +62,15 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
     // Normalize CR/CRLF to LF; strip only truly invalid control characters (keep tab)
     private static string NormalizeLineEndings(string text)
     {
-        var sb = new System.Text.StringBuilder(text.Length);
-        for (int i = 0; i < text.Length; i++)
-        {
+        StringBuilder sb = new System.Text.StringBuilder(text.Length);
+        for(int i = 0; i < text.Length; i++) {
             char c = text[i];
-            if (c == '\r')
-            {
+            if(c == '\r') {
                 sb.Append('\n');
-                if (i + 1 < text.Length && text[i + 1] == '\n') i++;
-            }
-            else if (c < 0x09 || (c > 0x0D && c < 0x20) || c == 0x7F)
-            {
+                if(i + 1 < text.Length && text[i + 1] == '\n') i++;
+            } else if(c < 0x09 || (c > 0x0D && c < 0x20) || c == 0x7F) {
                 // Drop invalid control chars; keep \t (0x09), \n (0x0A), \v(0x0B), \f(0x0C), \r(0x0D already handled)
-            }
-            else
-            {
+            } else {
                 sb.Append(c);
             }
         }
@@ -86,17 +79,15 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
 
     private static string DeriveTitle(DocumentInput input, string text)
     {
-        if (input.FileName != null)
-        {
+        if(input.FileName != null) {
             string name = Path.GetFileNameWithoutExtension(input.FileName);
-            if (!string.IsNullOrEmpty(name)) return name;
+            if(!string.IsNullOrEmpty(name)) return name;
             // Extensionless file: use full filename
             return input.FileName;
         }
-        if (input.FilePath != null)
-        {
+        if(input.FilePath != null) {
             string name = Path.GetFileNameWithoutExtension(input.FilePath);
-            if (!string.IsNullOrEmpty(name)) return name;
+            if(!string.IsNullOrEmpty(name)) return name;
         }
         // Fallback: first non-empty line up to 80 chars
         string first = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Untitled";
@@ -110,20 +101,20 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
     /// </summary>
     private static IReadOnlyList<ExtractedBlock> BuildBlocks(string text)
     {
-        if (string.IsNullOrEmpty(text)) return [];
+        if(string.IsNullOrEmpty(text)) return [];
 
         string[] lines = text.Split('\n');
-        var blocks = new List<ExtractedBlock>();
+        List<ExtractedBlock> blocks = new List<ExtractedBlock>();
         string? currentSection = null;
         int blockStartLine = 0;
-        var buffer = new System.Text.StringBuilder();
+        StringBuilder buffer = new System.Text.StringBuilder();
 
         void FlushBlock(int endLine)
         {
             string content = buffer.ToString();
             // Trim trailing blank lines but preserve internal structure
             content = content.TrimEnd('\n', '\r');
-            if (string.IsNullOrWhiteSpace(content)) return;
+            if(string.IsNullOrWhiteSpace(content)) return;
 
             blocks.Add(new ExtractedBlock(
                 BlockType.PlainText,
@@ -135,23 +126,20 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
         }
 
         int consecutiveBlanks = 0;
-        for (int i = 0; i < lines.Length; i++)
-        {
+        for(int i = 0; i < lines.Length; i++) {
             string line = lines[i];
             bool isBlank = string.IsNullOrWhiteSpace(line);
 
-            if (isBlank)
-            {
+            if(isBlank) {
                 consecutiveBlanks++;
-                if (consecutiveBlanks >= 2 && buffer.Length > 0)
-                {
+                if(consecutiveBlanks >= 2 && buffer.Length > 0) {
                     // Flush current block on 2+ consecutive blank lines
                     FlushBlock(endLine: i); // 1-based end is i (blank line before)
                     blockStartLine = i + 1;
                     consecutiveBlanks = 0;
                     continue;
                 }
-                if (buffer.Length > 0)
+                if(buffer.Length > 0)
                     buffer.AppendLine();
                 continue;
             }
@@ -159,29 +147,26 @@ public sealed class GeneralTextExtractor : IDocumentExtractor
             consecutiveBlanks = 0;
 
             // Detect section boundary for common patterns
-            if (buffer.Length == 0) blockStartLine = i;
-            if (SectionPattern.IsMatch(line))
-            {
+            if(buffer.Length == 0) blockStartLine = i;
+            if(SectionPattern.IsMatch(line)) {
                 // Flush if we already have content and this looks like a new declaration
-                if (buffer.Length > 0)
-                {
+                if(buffer.Length > 0) {
                     string trimmed = line.TrimStart();
                     bool isTopLevel = line.Length == trimmed.Length || line[0] != ' ' && line[0] != '\t';
-                    if (isTopLevel)
-                    {
+                    if(isTopLevel) {
                         FlushBlock(endLine: i);
                         blockStartLine = i;
                     }
                 }
                 // Track section name from simple patterns
                 Match match = Regex.Match(line, @"(?:class|struct|interface|fn|func|function|def|namespace|module)\s+(\w+)");
-                if (match.Success) currentSection = match.Groups[1].Value;
+                if(match.Success) currentSection = match.Groups[1].Value;
             }
 
             buffer.AppendLine(line);
         }
 
-        if (buffer.Length > 0)
+        if(buffer.Length > 0)
             FlushBlock(endLine: lines.Length);
 
         return blocks;

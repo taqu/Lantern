@@ -1,3 +1,4 @@
+using System.Text;
 using Lantern.Core.Extraction;
 using Toxy;
 
@@ -16,49 +17,46 @@ public sealed class XlsxExtractor : IDocumentExtractor
     private static ExtractedDocument Extract(DocumentInput input)
     {
         string? filePath = input.FilePath;
-        if (filePath == null)
+        if(filePath == null)
             throw new ArgumentException("XlsxExtractor requires FilePath");
 
-        var context = new ParserContext(filePath);
+        ParserContext context = new ParserContext(filePath);
         ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
-        if (parser == null)
+        if(parser == null)
             throw new InvalidOperationException($"No Toxy spreadsheet parser for {input.Extension}");
 
         ToxySpreadsheet spreadsheet = parser.Parse();
         DocFormat earlyFormat = string.Equals(input.Extension, ".xls", StringComparison.OrdinalIgnoreCase)
             ? DocFormat.Xls : DocFormat.Xlsx;
-        if (spreadsheet?.Tables == null)
+        if(spreadsheet?.Tables == null)
             return EmptyDocument(input, earlyFormat);
 
-        var blocks = new List<ExtractedBlock>();
-        var worksheetNames = new List<string>();
+        List<ExtractedBlock> blocks = new List<ExtractedBlock>();
+        List<string> worksheetNames = new List<string>();
 
-        foreach (ToxyTable? table in spreadsheet.Tables)
-        {
+        foreach(ToxyTable? table in spreadsheet.Tables) {
             string sheetName = table.Name ?? "Sheet";
             worksheetNames.Add(sheetName);
 
-            if (table.Rows == null || table.Rows.Count == 0) continue;
+            if(table.Rows == null || table.Rows.Count == 0) continue;
 
             // Build table block per sheet
-            var sb = new System.Text.StringBuilder();
+            StringBuilder sb = new System.Text.StringBuilder();
             sb.AppendLine($"[{sheetName}]");
 
             bool hasContent = false;
-            foreach (ToxyRow? row in table.Rows)
-            {
-                if (row?.Cells == null) continue;
-                var cellValues = row.Cells
+            foreach(ToxyRow? row in table.Rows) {
+                if(row?.Cells == null) continue;
+                List<string> cellValues = row.Cells
                     .Select(c => c?.Value?.Trim() ?? "")
                     .ToList();
                 // Skip entirely empty rows
-                if (cellValues.All(string.IsNullOrEmpty)) continue;
+                if(cellValues.All(string.IsNullOrEmpty)) continue;
                 sb.AppendLine(string.Join("\t", cellValues));
                 hasContent = true;
             }
 
-            if (hasContent)
-            {
+            if(hasContent) {
                 string text = TextNormalizer.NormalizeAll(sb.ToString());
                 blocks.Add(new ExtractedBlock(BlockType.Table, text, SheetName: sheetName));
             }
@@ -69,8 +67,7 @@ public sealed class XlsxExtractor : IDocumentExtractor
         DocFormat format = string.Equals(input.Extension, ".xls", StringComparison.OrdinalIgnoreCase)
             ? DocFormat.Xls : DocFormat.Xlsx;
 
-        return new ExtractedDocument
-        {
+        return new ExtractedDocument {
             Title = title,
             Blocks = blocks,
             Metadata = new ExtractedDocumentMetadata(
@@ -81,8 +78,7 @@ public sealed class XlsxExtractor : IDocumentExtractor
     }
 
     private static ExtractedDocument EmptyDocument(DocumentInput input, DocFormat format) =>
-        new()
-        {
+        new() {
             Title = input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Untitled",
             Blocks = [],
             Metadata = new ExtractedDocumentMetadata(Format: format)

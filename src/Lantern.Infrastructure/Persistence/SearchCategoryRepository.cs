@@ -70,8 +70,7 @@ public sealed class SearchCategoryRepository(IDbContextFactory<LanternDbContext>
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         SearchCategoryRecord? record = await db.SearchCategories.FirstOrDefaultAsync(c => c.Id == id, ct);
-        if (record != null)
-        {
+        if(record != null) {
             List<CrawlerCategoryRecord> assignments = await db.CrawlerCategories.Where(cc => cc.CategoryId == id).ToListAsync(ct);
             db.CrawlerCategories.RemoveRange(assignments);
             db.SearchCategories.Remove(record);
@@ -93,7 +92,7 @@ public sealed class SearchCategoryRepository(IDbContextFactory<LanternDbContext>
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         List<CrawlerCategoryRecord> existing = await db.CrawlerCategories.Where(cc => cc.CrawlerId == crawlerId).ToListAsync(ct);
         db.CrawlerCategories.RemoveRange(existing);
-        foreach (int catId in categoryIds.Distinct())
+        foreach(int catId in categoryIds.Distinct())
             db.CrawlerCategories.Add(new CrawlerCategoryRecord { CrawlerId = crawlerId, CategoryId = catId });
         await db.SaveChangesAsync(ct);
     }

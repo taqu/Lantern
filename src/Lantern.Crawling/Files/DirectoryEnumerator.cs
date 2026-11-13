@@ -12,94 +12,74 @@ public sealed class DirectoryEnumerator(ILogger<DirectoryEnumerator> logger)
         EnumerationState state,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var stack = new Stack<string>();
+        Stack<string> stack = new Stack<string>();
         stack.Push(canonicalRoot);
 
-        while (stack.Count > 0)
-        {
+        while(stack.Count > 0) {
             cancellationToken.ThrowIfCancellationRequested();
             string dir = stack.Pop();
 
             string[] files;
-            try
-            {
+            try {
                 files = Directory.GetFiles(dir);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
+            } catch(UnauthorizedAccessException ex) {
                 logger.LogWarning("Access denied enumerating {Directory}: {Message}", dir, ex.Message);
                 state.DirectoryErrors.Add($"Access denied: {dir}");
                 continue;
-            }
-            catch (IOException ex)
-            {
+            } catch(IOException ex) {
                 logger.LogWarning("IO error enumerating {Directory}: {Message}", dir, ex.Message);
                 state.DirectoryErrors.Add($"IO error: {dir}");
                 continue;
             }
 
-            foreach (string file in files)
-            {
+            foreach(string file in files) {
                 cancellationToken.ThrowIfCancellationRequested();
                 FileInfo info;
-                try { info = new FileInfo(file); }
-                catch (Exception ex)
-                {
+                try { info = new FileInfo(file); } catch(Exception ex) {
                     logger.LogDebug("Skipping inaccessible file {File}: {Message}", file, ex.Message);
                     continue;
                 }
-                if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
-                {
+                if((info.Attributes & FileAttributes.ReparsePoint) != 0) {
                     logger.LogDebug("Skipping reparse point (file): {File}", file);
                     continue;
                 }
-                if (!filter.ShouldIncludeFile(info)) continue;
+                if(!filter.ShouldIncludeFile(info)) continue;
                 string canonical;
-                try { canonical = DocumentIdentity.FilePath(file); }
-                catch { continue; }
+                try { canonical = DocumentIdentity.FilePath(file); } catch { continue; }
                 yield return new DiscoveredFile(canonical, info.Length, info.LastWriteTimeUtc);
             }
 
-            if (!filter.Recursive) continue;
+            if(!filter.Recursive) continue;
 
             string[] subdirs;
-            try
-            {
+            try {
                 subdirs = Directory.GetDirectories(dir);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
+            } catch(UnauthorizedAccessException ex) {
                 logger.LogWarning("Access denied enumerating subdirectories of {Directory}: {Message}", dir, ex.Message);
                 state.DirectoryErrors.Add($"Access denied (subdirs): {dir}");
                 continue;
-            }
-            catch (IOException ex)
-            {
+            } catch(IOException ex) {
                 logger.LogWarning("IO error enumerating subdirectories of {Directory}: {Message}", dir, ex.Message);
                 state.DirectoryErrors.Add($"IO error (subdirs): {dir}");
                 continue;
             }
 
-            foreach (string subdir in subdirs)
-            {
+            foreach(string subdir in subdirs) {
                 DirectoryInfo dirInfo;
-                try { dirInfo = new DirectoryInfo(subdir); }
-                catch { continue; }
+                try { dirInfo = new DirectoryInfo(subdir); } catch { continue; }
 
-                if (filter.ShouldExcludeDirectory(dirInfo)) continue;
+                if(filter.ShouldExcludeDirectory(dirInfo)) continue;
 
-                if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
-                {
+                if((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0) {
                     logger.LogDebug("Skipping reparse point (directory): {Directory}", subdir);
                     continue;
                 }
 
                 string canonicalSub;
-                try { canonicalSub = DocumentIdentity.FilePath(subdir); }
-                catch { continue; }
+                try { canonicalSub = DocumentIdentity.FilePath(subdir); } catch { continue; }
 
                 // Boundary check: must be a descendant of root
-                if (!IsDescendantOf(canonicalRoot, canonicalSub)) continue;
+                if(!IsDescendantOf(canonicalRoot, canonicalSub)) continue;
 
                 stack.Push(subdir);
             }

@@ -10,7 +10,7 @@ public sealed class ApplicationSetting
 
     public void Validate()
     {
-        if (string.IsNullOrWhiteSpace(DisplayName) || DisplayName.Length > 80 || DisplayName.Any(char.IsControl))
+        if(string.IsNullOrWhiteSpace(DisplayName) || DisplayName.Length > 80 || DisplayName.Any(char.IsControl))
             throw new ValidationException("Application name must contain 1–80 characters without control characters.");
         DisplayName = DisplayName.Trim();
     }

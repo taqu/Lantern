@@ -26,8 +26,7 @@ public sealed class CrawlerJobRecord
     public long FailedFiles { get; set; }
     public long DeletedFiles { get; set; }
 
-    public CrawlerJob ToDomain() => new()
-    {
+    public CrawlerJob ToDomain() => new() {
         Id = Id,
         CrawlerId = CrawlerId,
         CrawlerName = CrawlerName,
@@ -42,8 +41,7 @@ public sealed class CrawlerJobRecord
         ErrorMessage = ErrorMessage,
         CancellationRequested = CancellationRequested,
         RetryOfJobId = RetryOfJobId,
-        Progress = new JobProgress
-        {
+        Progress = new JobProgress {
             DiscoveredFiles = DiscoveredFiles,
             ProcessedFiles = ProcessedFiles,
             IndexedFiles = IndexedFiles,
@@ -54,8 +52,7 @@ public sealed class CrawlerJobRecord
         }
     };
 
-    public static CrawlerJobRecord FromDomain(CrawlerJob job) => new()
-    {
+    public static CrawlerJobRecord FromDomain(CrawlerJob job) => new() {
         Id = job.Id,
         CrawlerId = job.CrawlerId,
         CrawlerName = job.CrawlerName,

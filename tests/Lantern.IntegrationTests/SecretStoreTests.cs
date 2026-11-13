@@ -17,7 +17,7 @@ public sealed class SecretStoreTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir)) Directory.Delete(_dir, true);
+        if(Directory.Exists(_dir)) Directory.Delete(_dir, true);
     }
 
     [Fact]

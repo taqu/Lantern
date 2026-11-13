@@ -1,8 +1,6 @@
-using System.Collections.Generic;
 using Lantern.Core.Search;
 using Meilisearch;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Lantern.Infrastructure.Search;
 
@@ -14,25 +12,33 @@ public sealed class MeilisearchSearchService : ISearchService
     private const int PageSize = 10;
     private const double TaskTimeoutMs = 30_000;
 
-    private readonly MeilisearchClient _client;
+    private readonly IMeilisearchClientFactory _clientFactory;
+    private MeilisearchClient _client = null!;
     private readonly string _indexName;
     private readonly ILogger<MeilisearchSearchService> _logger;
     private readonly IDocumentIndexingService _indexing;
     private readonly HybridSearchOptions _hybridOptions;
 
     public MeilisearchSearchService(
-        MeilisearchClient client,
+        IMeilisearchClientFactory clientFactory,
         MeilisearchOptions options,
         ILogger<MeilisearchSearchService> logger,
         IDocumentIndexingService? indexing = null,
         HybridSearchOptions? hybridOptions = null)
     {
-        _client = client;
+        _clientFactory = clientFactory;
         _indexName = options.IndexName;
         _logger = logger;
-        _indexing = indexing ?? new MeilisearchIndexingService(_client, options,
+        _indexing = indexing ?? new MeilisearchIndexingService(_clientFactory, options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MeilisearchIndexingService>.Instance);
         _hybridOptions = hybridOptions ?? new HybridSearchOptions();
+    }
+
+    private void EnsureClient()
+    {
+        if(null == _client) {
+            _client = _clientFactory.GetSearchClient();
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -44,26 +50,26 @@ public sealed class MeilisearchSearchService : ISearchService
         int page,
         CancellationToken cancellationToken = default)
     {
-        if (!SearchQueryValidator.IsValid(query))
+        if(!SearchQueryValidator.IsValid(query))
             return EmptyResponse(query, page);
+
+        EnsureClient();
 
         page = SearchQueryValidator.NormalizePage(page);
         int offset = SearchQueryValidator.CalculateOffset(page, PageSize);
 
-        try
-        {
+        try {
             await _indexing.EnsureIndexAsync(cancellationToken);
             Meilisearch.Index index = _client.Index(_indexName);
-            var searchQuery = new SearchQuery
-            {
+            SearchQuery searchQuery = new SearchQuery {
                 Limit = PageSize,
                 Offset = offset,
             };
 
             ISearchable<MeiliDocument> searchable = await index.SearchAsync<MeiliDocument>(query, searchQuery, cancellationToken);
-            var results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
+            SearchResult<MeiliDocument> results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
 
-            var items = results.Hits.Select(h => new SearchPageItem(
+            List<SearchPageItem> items = results.Hits.Select(h => new SearchPageItem(
                 Id: h.Id,
                 Title: string.IsNullOrEmpty(h.Title) ? "(Untitled)" : h.Title,
                 Url: h.Uri ?? h.Url,
@@ -82,19 +88,13 @@ public sealed class MeilisearchSearchService : ISearchService
                 Page: page,
                 PageSize: PageSize,
                 Query: query);
-        }
-        catch (MeilisearchApiError ex)
-        {
+        } catch(MeilisearchApiError ex) {
             _logger.LogError(ex, "Meilisearch API error during SearchPageAsync for query '{Query}'", query);
             throw new SearchException("Meilisearch returned an error during search.", ex);
-        }
-        catch (HttpRequestException ex)
-        {
+        } catch(HttpRequestException ex) {
             _logger.LogError(ex, "HTTP error contacting Meilisearch during SearchPageAsync for query '{Query}'", query);
             throw new SearchException("Could not reach the Meilisearch server.", ex);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
-        {
+        } catch(Exception ex) when(ex is InvalidOperationException or TimeoutException) {
             _logger.LogError(ex, "Meilisearch index initialization did not complete");
             throw new SearchException("The search index could not be initialized. Please try again later.", ex);
         }
@@ -118,45 +118,43 @@ public sealed class MeilisearchSearchService : ISearchService
         SearchFilters? filters,
         CancellationToken cancellationToken = default)
     {
-        if (!SearchQueryValidator.IsValid(query))
+        if(!SearchQueryValidator.IsValid(query))
             return EmptyResponse(query, page);
+
+        EnsureClient();
 
         page = SearchQueryValidator.NormalizePage(page);
         int offset = SearchQueryValidator.CalculateOffset(page, PageSize);
 
-        try
-        {
+        try {
             Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
-            var searchQuery = new SearchQuery
-            {
+            SearchQuery searchQuery = new SearchQuery {
                 Limit = PageSize,
                 Offset = offset,
             };
 
             // Build filter expression
-            var filterParts = new List<string>();
-            if (!string.IsNullOrEmpty(filters?.CategoryKey))
+            List<string> filterParts = new List<string>();
+            if(!string.IsNullOrEmpty(filters?.CategoryKey))
                 filterParts.Add($"categoryIds = '{EscapeFilterValue(filters.CategoryKey)}'");
-            if (!string.IsNullOrEmpty(filters?.SourceType))
+            if(!string.IsNullOrEmpty(filters?.SourceType))
                 filterParts.Add($"sourceType = '{EscapeFilterValue(filters.SourceType)}'");
-            if (!string.IsNullOrEmpty(filters?.Extension))
+            if(!string.IsNullOrEmpty(filters?.Extension))
                 filterParts.Add($"extension = '{EscapeFilterValue(filters.Extension)}'");
-            if (filterParts.Count > 0)
+            if(filterParts.Count > 0)
                 searchQuery.Filter = string.Join(" AND ", filterParts);
 
-            if (mode == SearchMode.Hybrid && _hybridOptions.Enabled)
-            {
-                searchQuery.Hybrid = new HybridSearch
-                {
+            if(mode == SearchMode.Hybrid && _hybridOptions.Enabled) {
+                searchQuery.Hybrid = new HybridSearch {
                     Embedder = _hybridOptions.EmbedderName,
                     SemanticRatio = _hybridOptions.SemanticRatio
                 };
             }
 
             ISearchable<MeiliChunkDocument> searchable = await index.SearchAsync<MeiliChunkDocument>(query, searchQuery, cancellationToken);
-            var results = (Meilisearch.SearchResult<MeiliChunkDocument>)searchable;
+            SearchResult<MeiliChunkDocument> results = (Meilisearch.SearchResult<MeiliChunkDocument>)searchable;
 
-            var items = results.Hits.Select(h => new SearchPageItem(
+            List<SearchPageItem> items = results.Hits.Select(h => new SearchPageItem(
                 Id: h.Id,
                 Title: string.IsNullOrEmpty(h.Title) ? "(Untitled)" : h.Title,
                 Url: h.Uri ?? "",
@@ -176,14 +174,10 @@ public sealed class MeilisearchSearchService : ISearchService
                 Page: page,
                 PageSize: PageSize,
                 Query: query);
-        }
-        catch (MeilisearchApiError ex)
-        {
+        } catch(MeilisearchApiError ex) {
             _logger.LogError(ex, "Meilisearch API error during SearchChunksPageAsync for query '{Query}'", query);
             throw new SearchException("Meilisearch returned an error during chunk search.", ex);
-        }
-        catch (HttpRequestException ex)
-        {
+        } catch(HttpRequestException ex) {
             _logger.LogError(ex, "HTTP error contacting Meilisearch during SearchChunksPageAsync for query '{Query}'", query);
             throw new SearchException("Could not reach the Meilisearch server.", ex);
         }
@@ -201,19 +195,18 @@ public sealed class MeilisearchSearchService : ISearchService
         string query,
         CancellationToken cancellationToken = default)
     {
-        if (indexUid == _indexName) await _indexing.EnsureIndexAsync(cancellationToken);
+        if(indexUid == _indexName) await _indexing.EnsureIndexAsync(cancellationToken);
+        EnsureClient();
         Meilisearch.Index index = _client.Index(indexUid);
         ISearchable<MeiliDocument> searchable = await index.SearchAsync<MeiliDocument>(query, cancellationToken: cancellationToken);
-        var results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
+        SearchResult<MeiliDocument> results = (Meilisearch.SearchResult<MeiliDocument>)searchable;
 
-        return new SearchResult
-        {
+        return new SearchResult {
             IndexUid = indexUid,
             Query = query,
             TotalHits = results.EstimatedTotalHits,
             ProcessingTimeMs = results.ProcessingTimeMs,
-            Hits = results.Hits.Select(h => new SearchDocument
-            {
+            Hits = results.Hits.Select(h => new SearchDocument {
                 Id = h.Id,
                 Title = h.Title,
                 Content = h.Content,
@@ -238,15 +231,16 @@ public sealed class MeilisearchSearchService : ISearchService
         SearchDocument doc,
         CancellationToken cancellationToken = default)
     {
-        if (indexUid != _indexName) throw new ArgumentException("Use the configured indexing service for document writes.", nameof(indexUid));
+        if(indexUid != _indexName) throw new ArgumentException("Use the configured indexing service for document writes.", nameof(indexUid));
         await _indexing.UpsertAsync(doc, cancellationToken);
     }
 
     public async Task DeleteIndexAsync(string indexUid, CancellationToken cancellationToken = default)
     {
+        EnsureClient();
         TaskInfo task = await _client.DeleteIndexAsync(indexUid, cancellationToken);
         TaskResource result = await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TaskTimeoutMs, cancellationToken: cancellationToken);
-        if (result.Status != TaskInfoStatus.Succeeded) throw new InvalidOperationException($"Delete index task {task.TaskUid} failed: {result.Error}");
+        if(result.Status != TaskInfoStatus.Succeeded) throw new InvalidOperationException($"Delete index task {task.TaskUid} failed: {result.Error}");
     }
 
     // -----------------------------------------------------------------------
@@ -262,7 +256,7 @@ public sealed class MeilisearchSearchService : ISearchService
 
     private static string? BuildSnippet(string? content)
     {
-        if (string.IsNullOrEmpty(content)) return null;
+        if(string.IsNullOrEmpty(content)) return null;
         return content.Length <= 200 ? content : content[..200];
     }
 }

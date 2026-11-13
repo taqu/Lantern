@@ -18,8 +18,7 @@ public sealed class WebCrawlerProfile
     public bool RespectRobotsTxt { get; set; } = true;
     public bool IndexLinkedDocuments { get; set; } = true;
 
-    public WebCrawlerConfiguration ToConfiguration(string name) => new()
-    {
+    public WebCrawlerConfiguration ToConfiguration(string name) => new() {
         CrawlerId = CrawlerId,
         Name = name,
         StartUrls = [.. StartUrls],

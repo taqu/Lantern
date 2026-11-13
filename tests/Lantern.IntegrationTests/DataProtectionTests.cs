@@ -20,7 +20,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
     [Fact]
     public void DataProtection_ProtectAndUnprotect_RoundTrip()
     {
-        using var factory = new DpFactory(_dir);
+        using DpFactory factory = new DpFactory(_dir);
         IDataProtector dp = factory.Services
             .GetRequiredService<IDataProtectionProvider>()
             .CreateProtector("Lantern.Test.Credential");
@@ -37,8 +37,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
     {
         // Encrypt with the first host instance.
         string ciphertext;
-        using (var factory = new DpFactory(_dir))
-        {
+        using(DpFactory factory = new DpFactory(_dir)) {
             ciphertext = factory.Services
                 .GetRequiredService<IDataProtectionProvider>()
                 .CreateProtector("Lantern.Test.Credential")
@@ -46,8 +45,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
         }
 
         // Start a second host pointing at the same key directory — must decrypt.
-        using (var factory = new DpFactory(_dir))
-        {
+        using(DpFactory factory = new DpFactory(_dir)) {
             string recovered = factory.Services
                 .GetRequiredService<IDataProtectionProvider>()
                 .CreateProtector("Lantern.Test.Credential")
@@ -59,7 +57,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
     [Fact]
     public void DataProtection_PurposeIsolation_PreventsCrossRead()
     {
-        using var factory = new DpFactory(_dir);
+        using DpFactory factory = new DpFactory(_dir);
         IDataProtectionProvider provider = factory.Services
             .GetRequiredService<IDataProtectionProvider>();
 
@@ -71,7 +69,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
     [Fact]
     public void DataProtection_KeyRingDirectory_ContainsXmlKeyFiles()
     {
-        using var factory = new DpFactory(_dir);
+        using DpFactory factory = new DpFactory(_dir);
         // Force key material to be written by using the protector.
         factory.Services
             .GetRequiredService<IDataProtectionProvider>()
@@ -90,7 +88,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
         // encrypted AES key material for Data Protection, not application credentials.
         // Reading a key-ring file and passing its content to MeilisearchClient as a
         // Bearer token will always fail authentication.
-        using var factory = new DpFactory(_dir);
+        using DpFactory factory = new DpFactory(_dir);
         factory.Services
             .GetRequiredService<IDataProtectionProvider>()
             .CreateProtector("Lantern.Test.Init")
@@ -114,7 +112,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         await Task.Yield();
-        if (Directory.Exists(_dir))
+        if(Directory.Exists(_dir))
             Directory.Delete(_dir, true);
     }
 
@@ -131,8 +129,7 @@ public sealed class DataProtectionTests : IAsyncDisposable
             builder.UseSetting("Storage:DataProtectionKeysPath",
                 Path.Combine(directory, "keys"));
             builder.ConfigureAppConfiguration((_, cfg) =>
-                cfg.AddInMemoryCollection(new Dictionary<string, string?>
-                {
+                cfg.AddInMemoryCollection(new Dictionary<string, string?> {
                     ["Meilisearch:Url"] = "http://127.0.0.1:1",
                     ["Meilisearch:IndexName"] = "dp-test-index",
                     ["MeilisearchProcess:Managed"] = "false",

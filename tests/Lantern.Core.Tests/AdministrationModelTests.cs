@@ -15,7 +15,7 @@ public sealed class AdministrationModelTests
     public void DefaultsAndNormalizedSettingsAreValid()
     {
         Assert.Equal("Lantern", new ApplicationSetting().DisplayName);
-        var setting = new ApplicationSetting { DisplayName = "  社内検索  " };
+        ApplicationSetting setting = new ApplicationSetting { DisplayName = "  社内検索  " };
         setting.Validate();
         Assert.Equal("社内検索", setting.DisplayName);
         Assert.Throws<ValidationException>(() => new ApplicationSetting { DisplayName = new string('x', 81) }.Validate());
@@ -24,7 +24,7 @@ public sealed class AdministrationModelTests
     [Fact]
     public void CrawlerValidationPreservesStableIdentityAndUtc()
     {
-        var crawler = new CrawlerDefinition { Name = "  Documents  ", CrawlerType = "web", CreatedAt = DateTimeOffset.Now };
+        CrawlerDefinition crawler = new CrawlerDefinition { Name = "  Documents  ", CrawlerType = "web", CreatedAt = DateTimeOffset.Now };
         Guid id = crawler.Id;
         crawler.Validate();
         Assert.Equal(id, crawler.Id);

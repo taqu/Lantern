@@ -4,8 +4,7 @@ namespace Lantern.Infrastructure.Extraction;
 
 public sealed class DocumentFormatDetector
 {
-    private static readonly Dictionary<string, DocFormat> ExtensionMap = new(StringComparer.OrdinalIgnoreCase)
-    {
+    private static readonly Dictionary<string, DocFormat> ExtensionMap = new(StringComparer.OrdinalIgnoreCase) {
         // Legacy Office binary formats
         [".doc"] = DocFormat.Doc,
         [".xls"] = DocFormat.Xls,
@@ -127,22 +126,21 @@ public sealed class DocumentFormatDetector
     public DocFormat Detect(DocumentInput input)
     {
         string ext = input.Extension;
-        if (string.IsNullOrEmpty(ext) && input.FilePath != null)
+        if(string.IsNullOrEmpty(ext) && input.FilePath != null)
             ext = Path.GetExtension(input.FilePath).ToLowerInvariant();
 
-        if (!string.IsNullOrEmpty(ext) && ExtensionMap.TryGetValue(ext, out DocFormat format))
+        if(!string.IsNullOrEmpty(ext) && ExtensionMap.TryGetValue(ext, out DocFormat format))
             return format;
 
         // Check known extensionless filenames
         string? filename = input.FileName ?? (input.FilePath != null ? Path.GetFileName(input.FilePath) : null);
-        if (filename != null && string.IsNullOrEmpty(ext))
-        {
-            if (KnownTextFilenames.Contains(filename))
+        if(filename != null && string.IsNullOrEmpty(ext)) {
+            if(KnownTextFilenames.Contains(filename))
                 return DocFormat.GeneralText;
         }
 
         // Try magic bytes from file if available
-        if (input.FilePath != null && File.Exists(input.FilePath))
+        if(input.FilePath != null && File.Exists(input.FilePath))
             return DetectFromFile(input.FilePath);
 
         return DocFormat.Unknown;
@@ -150,22 +148,21 @@ public sealed class DocumentFormatDetector
 
     private static DocFormat DetectFromFile(string filePath)
     {
-        try
-        {
-            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        try {
+            using FileStream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             byte[] header = new byte[8192];
             int read = stream.Read(header, 0, header.Length);
-            if (read < 4) return DocFormat.Unknown;
+            if(read < 4) return DocFormat.Unknown;
 
-            if (header[0] == PdfMagic[0] && header[1] == PdfMagic[1] &&
+            if(header[0] == PdfMagic[0] && header[1] == PdfMagic[1] &&
                 header[2] == PdfMagic[2] && header[3] == PdfMagic[3])
                 return DocFormat.Pdf;
 
-            if (header[0] == ZipMagic[0] && header[1] == ZipMagic[1] &&
+            if(header[0] == ZipMagic[0] && header[1] == ZipMagic[1] &&
                 header[2] == ZipMagic[2] && header[3] == ZipMagic[3])
                 return DocFormat.Unknown; // Could be DOCX/XLSX/PPTX — rely on extension
 
-            if (read >= 8 &&
+            if(read >= 8 &&
                 header[0] == Ole2Magic[0] && header[1] == Ole2Magic[1] &&
                 header[2] == Ole2Magic[2] && header[3] == Ole2Magic[3] &&
                 header[4] == Ole2Magic[4] && header[5] == Ole2Magic[5] &&
@@ -174,15 +171,13 @@ public sealed class DocumentFormatDetector
 
             // Try text classification for unknown-extension files
             TextBinaryClassifier.Classification classification = TextBinaryClassifier.ClassifyBytes(header.AsSpan(0, read));
-            if (classification == TextBinaryClassifier.Classification.Text)
+            if(classification == TextBinaryClassifier.Classification.Text)
                 return DocFormat.GeneralText;
-        }
-        catch { }
+        } catch { }
         return DocFormat.Unknown;
     }
 
-    public static bool IsSupported(DocFormat format) => format switch
-    {
+    public static bool IsSupported(DocFormat format) => format switch {
         DocFormat.PlainText or DocFormat.Markdown or DocFormat.Html
             or DocFormat.Pdf or DocFormat.Docx or DocFormat.Xlsx
             or DocFormat.Pptx or DocFormat.Csv or DocFormat.GeneralText

@@ -13,9 +13,9 @@ public sealed class CrawlerDefinition
 
     public void Validate()
     {
-        if (Id == Guid.Empty || string.IsNullOrWhiteSpace(Name) || Name.Length > 120 || Name.Any(char.IsControl))
+        if(Id == Guid.Empty || string.IsNullOrWhiteSpace(Name) || Name.Length > 120 || Name.Any(char.IsControl))
             throw new ValidationException("A crawler requires a stable ID and a name of 1–120 characters.");
-        if (CrawlerType is not ("file" or "web")) throw new ValidationException("Crawler type must be file or web.");
+        if(CrawlerType is not ("file" or "web")) throw new ValidationException("Crawler type must be file or web.");
         Name = Name.Trim();
         CreatedAt = CreatedAt.ToUniversalTime();
         UpdatedAt = UpdatedAt.ToUniversalTime();

@@ -24,15 +24,15 @@ public sealed class FileFilter
 
     public bool ShouldIncludeFile(FileInfo info)
     {
-        if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
-        if (_includedExtensions.Count > 0 && !_includedExtensions.Contains(info.Extension)) return false;
-        if (_maxBytes > 0 && info.Length > _maxBytes) return false;
+        if(info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return false;
+        if(_includedExtensions.Count > 0 && !_includedExtensions.Contains(info.Extension)) return false;
+        if(_maxBytes > 0 && info.Length > _maxBytes) return false;
         return true;
     }
 
     public bool ShouldExcludeDirectory(DirectoryInfo dir)
     {
-        if (dir.Attributes.HasFlag(FileAttributes.ReparsePoint)) return true;
+        if(dir.Attributes.HasFlag(FileAttributes.ReparsePoint)) return true;
         string name = dir.Name;
         return _excludedDirectoryNames.Contains(name);
     }

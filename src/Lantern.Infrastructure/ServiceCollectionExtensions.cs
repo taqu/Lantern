@@ -10,7 +10,6 @@ using Lantern.Infrastructure.Secrets;
 using Meilisearch;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -47,12 +46,6 @@ public static class ServiceCollectionExtensions
         // (Program.cs) *after* the Meilisearch process manager so that the
         // managed server is already accepting requests before provisioning.
 
-        // Legacy singleton: back it with the Indexing role so existing consumers
-        // get a writable client without each being rewired individually. New code
-        // should take IMeilisearchClientFactory directly.
-        services.AddSingleton(sp =>
-            sp.GetRequiredService<IMeilisearchClientFactory>().GetIndexingClient());
-
         services.AddSingleton(sp => new MeilisearchIndexingService(
             sp.GetRequiredService<IMeilisearchClientFactory>(),
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value,
@@ -62,13 +55,11 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IMeilisearchClientFactory>().GetSearchClient(),
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value));
 
-        services.AddSingleton<ISearchService>(sp =>
-        {
+        services.AddSingleton<ISearchService>(sp => {
             MeilisearchOptions options = sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value;
-            MeilisearchClient client = sp.GetRequiredService<IMeilisearchClientFactory>().GetSearchClient();
             ILogger<MeilisearchSearchService> logger = sp.GetRequiredService<ILogger<MeilisearchSearchService>>();
             HybridSearchOptions hybridOptions = sp.GetRequiredService<IOptions<HybridSearchOptions>>().Value;
-            return new MeilisearchSearchService(client, options, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);
+            return new MeilisearchSearchService(sp.GetRequiredService<IMeilisearchClientFactory>(), options, logger, sp.GetRequiredService<IDocumentIndexingService>(), hybridOptions);
         });
 
         services.AddSingleton<ITextChunkingService, TextChunkingService>();

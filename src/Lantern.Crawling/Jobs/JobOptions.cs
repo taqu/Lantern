@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-
 namespace Lantern.Crawling.Jobs;
 
 public sealed class JobOptions

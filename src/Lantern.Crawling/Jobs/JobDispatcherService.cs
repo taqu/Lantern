@@ -47,10 +47,8 @@ public sealed class JobDispatcherService : BackgroundService
     // Called by the cancellation path to cancel an in-flight job CTS.
     public void SignalCancellation(Guid jobId)
     {
-        if (_activeCts.TryGetValue(jobId, out CancellationTokenSource? cts))
-        {
-            try { cts.Cancel(); }
-            catch (ObjectDisposedException) { }
+        if(_activeCts.TryGetValue(jobId, out CancellationTokenSource? cts)) {
+            try { cts.Cancel(); } catch(ObjectDisposedException) { }
         }
     }
 
@@ -63,20 +61,15 @@ public sealed class JobDispatcherService : BackgroundService
 
         _logger.LogInformation("Job dispatcher started (maxConcurrent={Max})", _options.Value.MaximumConcurrentJobs);
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try { await DispatchPendingAsync(stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception ex) { _logger.LogError(ex, "Dispatcher loop error"); }
+        while(!stoppingToken.IsCancellationRequested) {
+            try { await DispatchPendingAsync(stoppingToken); } catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) { break; } catch(Exception ex) { _logger.LogError(ex, "Dispatcher loop error"); }
 
             // Wait for a wake-up signal or the poll interval — returns false on timeout, throws only on shutdown.
-            try
-            {
+            try {
                 await _wakeUp.WaitAsync(
                     TimeSpan.FromSeconds(_options.Value.DispatcherPollIntervalSeconds),
                     stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            } catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) { break; }
         }
 
         _logger.LogInformation("Job dispatcher stopping; waiting for active jobs to finish");
@@ -85,26 +78,21 @@ public sealed class JobDispatcherService : BackgroundService
     private async Task RecoverAsync(CancellationToken ct)
     {
         const string reason = "Application was interrupted while this job was running.";
-        try
-        {
+        try {
             await _jobs.MarkInterruptedJobsFailedAsync(reason, ct);
             _logger.LogInformation("Startup recovery complete");
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             _logger.LogError(ex, "Startup recovery failed");
         }
     }
 
     private async Task DispatchPendingAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            if (!await _concurrency.WaitAsync(0)) break;
+        while(!stoppingToken.IsCancellationRequested) {
+            if(!await _concurrency.WaitAsync(0)) break;
 
             CrawlerJob? claimed = await TryClaimNextAsync(stoppingToken);
-            if (claimed == null)
-            {
+            if(claimed == null) {
                 _concurrency.Release();
                 break;
             }
@@ -117,10 +105,8 @@ public sealed class JobDispatcherService : BackgroundService
     private async Task<CrawlerJob?> TryClaimNextAsync(CancellationToken ct)
     {
         IReadOnlyList<CrawlerJob> pending = await _jobs.GetPendingJobsAsync(8, ct);
-        foreach (CrawlerJob job in pending)
-        {
-            if (await _jobs.ClaimJobAsync(job.Id, DateTimeOffset.UtcNow, ct))
-            {
+        foreach(CrawlerJob job in pending) {
+            if(await _jobs.ClaimJobAsync(job.Id, DateTimeOffset.UtcNow, ct)) {
                 await _jobs.AddEventAsync(new CrawlerJobEvent { JobId = job.Id, EventType = JobEventType.JobStarted, OccurredAt = DateTimeOffset.UtcNow }, ct);
                 return job;
             }
@@ -136,39 +122,31 @@ public sealed class JobDispatcherService : BackgroundService
         using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(jobCts.Token, stoppingToken);
         _activeCts[job.Id] = jobCts;
 
-        try
-        {
+        try {
             FileCrawlResult result;
             string crawlerType = DetectCrawlerType(job.ConfigurationSnapshot);
 
-            if (crawlerType == "web")
-            {
-                if (_webCrawler == null)
-                {
+            if(crawlerType == "web") {
+                if(_webCrawler == null) {
                     await FailJobAsync(job.Id, "Web crawler is not registered.", linkedCts.Token);
                     return;
                 }
                 WebCrawlerConfiguration? webConfig = ParseWebSnapshot(job.ConfigurationSnapshot);
-                if (webConfig == null)
-                {
+                if(webConfig == null) {
                     await FailJobAsync(job.Id, "Invalid or missing web crawler configuration snapshot", linkedCts.Token);
                     return;
                 }
                 result = await _webCrawler.CrawlAsync(webConfig, linkedCts.Token);
-            }
-            else
-            {
+            } else {
                 FileCrawlerConfiguration? config = CrawlerJobService.ParseSnapshot(job.ConfigurationSnapshot);
-                if (config == null)
-                {
+                if(config == null) {
                     await FailJobAsync(job.Id, "Invalid or missing configuration snapshot", linkedCts.Token);
                     return;
                 }
                 result = await _fileCrawler.CrawlAsync(config, linkedCts.Token);
             }
 
-            JobStatus status = result.Status switch
-            {
+            JobStatus status = result.Status switch {
                 CrawlStatus.Completed => JobStatus.Completed,
                 CrawlStatus.CompletedWithErrors => JobStatus.Completed,
                 CrawlStatus.Failed => JobStatus.Failed,
@@ -179,11 +157,10 @@ public sealed class JobDispatcherService : BackgroundService
             string? errorMessage = result.Errors.Count > 0
                 ? string.Join("; ", result.Errors.Take(5))
                 : null;
-            if (result.Status == CrawlStatus.CompletedWithErrors && errorMessage != null)
+            if(result.Status == CrawlStatus.CompletedWithErrors && errorMessage != null)
                 errorMessage = $"Completed with errors: {errorMessage}";
 
-            JobProgress progress = new()
-            {
+            JobProgress progress = new() {
                 DiscoveredFiles = result.DiscoveredFiles,
                 ProcessedFiles = result.ProcessedFiles,
                 IndexedFiles = result.IndexedFiles,
@@ -194,8 +171,7 @@ public sealed class JobDispatcherService : BackgroundService
             };
 
             await _jobs.CompleteJobAsync(job.Id, status, progress, errorMessage, result.FinishedAt, stoppingToken);
-            await _jobs.AddEventAsync(new CrawlerJobEvent
-            {
+            await _jobs.AddEventAsync(new CrawlerJobEvent {
                 JobId = job.Id,
                 EventType = status == JobStatus.Completed ? JobEventType.JobCompleted
                     : status == JobStatus.Canceled ? JobEventType.JobCanceled
@@ -205,24 +181,16 @@ public sealed class JobDispatcherService : BackgroundService
             }, stoppingToken);
 
             _logger.LogInformation("Job {JobId} finished with status {Status}", job.Id, status);
-        }
-        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
-        {
+        } catch(OperationCanceledException) when(!stoppingToken.IsCancellationRequested) {
             // Job-level cancellation (not app shutdown)
             await FailJobAsync(job.Id, "Canceled", stoppingToken, JobStatus.Canceled, JobEventType.JobCanceled);
-        }
-        catch (OperationCanceledException)
-        {
+        } catch(OperationCanceledException) {
             // App shutdown; mark as failed so it's recoverable on restart
             await FailJobAsync(job.Id, "Application shutting down", CancellationToken.None, JobStatus.Failed, JobEventType.JobInterrupted);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             _logger.LogError(ex, "Unhandled exception in job {JobId}", job.Id);
             await FailJobAsync(job.Id, $"Unhandled exception: {ex.Message}", stoppingToken);
-        }
-        finally
-        {
+        } finally {
             _activeCts.TryRemove(job.Id, out _);
             _concurrency.Release();
             _wakeUp.Release();
@@ -232,13 +200,10 @@ public sealed class JobDispatcherService : BackgroundService
     private async Task FailJobAsync(Guid jobId, string reason, CancellationToken ct,
         JobStatus status = JobStatus.Failed, JobEventType eventType = JobEventType.JobFailed)
     {
-        try
-        {
+        try {
             await _jobs.CompleteJobAsync(jobId, status, JobProgress.Empty, reason, DateTimeOffset.UtcNow, ct);
             await _jobs.AddEventAsync(new CrawlerJobEvent { JobId = jobId, EventType = eventType, OccurredAt = DateTimeOffset.UtcNow, Details = reason }, ct);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             _logger.LogError(ex, "Failed to persist job failure for {JobId}", jobId);
         }
     }
@@ -251,8 +216,7 @@ public sealed class JobDispatcherService : BackgroundService
 
     public override void Dispose()
     {
-        foreach (CancellationTokenSource cts in _activeCts.Values)
-        {
+        foreach(CancellationTokenSource cts in _activeCts.Values) {
             try { cts.Cancel(); cts.Dispose(); } catch { }
         }
         _concurrency?.Dispose();

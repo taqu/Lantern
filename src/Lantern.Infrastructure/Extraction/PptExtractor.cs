@@ -26,22 +26,20 @@ public sealed class PptExtractor : IDocumentExtractor
     private static ExtractedDocument Extract(DocumentInput input)
     {
         string? filePath = input.FilePath;
-        if (filePath == null)
+        if(filePath == null)
             throw new ArgumentException("PptExtractor requires FilePath");
 
-        try
-        {
-            using var storage = RootStorage.OpenRead(filePath);
+        try {
+            using RootStorage storage = RootStorage.OpenRead(filePath);
             byte[]? data = TryReadStream(storage, "PowerPoint Document");
-            if (data == null || data.Length < 8)
+            if(data == null || data.Length < 8)
                 return EmptyDocument(input);
 
             var blocks = ParseSlideBlocks(data);
             string title = input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Presentation";
             int slideCount = blocks.Count(b => b.SlideNumber.HasValue && b.Type == BlockType.Paragraph);
 
-            return new ExtractedDocument
-            {
+            return new ExtractedDocument {
                 Title = title,
                 Blocks = blocks,
                 Metadata = new ExtractedDocumentMetadata(
@@ -49,45 +47,35 @@ public sealed class PptExtractor : IDocumentExtractor
                     Format: DocFormat.Ppt,
                     SlideCount: slideCount)
             };
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
             throw new InvalidOperationException($"Failed to open .ppt file: {ex.Message}", ex);
         }
     }
 
     private static List<ExtractedBlock> ParseSlideBlocks(byte[] data)
     {
-        var blocks = new List<ExtractedBlock>();
+        List<ExtractedBlock> blocks = new List<ExtractedBlock>();
         int slideNumber = 0;
         bool inNotes = false;
         int i = 0;
 
-        while (i + 8 <= data.Length)
-        {
+        while(i + 8 <= data.Length) {
             // Header: recVer/recInstance (2 bytes) + recType (2 bytes) + recLen (4 bytes)
             ushort typeHi = (ushort)((data[i + 3] << 8) | data[i + 2]);
             uint recLen = (uint)((data[i + 7] << 24) | (data[i + 6] << 16) | (data[i + 5] << 8) | data[i + 4]);
 
-            if (typeHi == RecSlideAtom)
-            {
+            if(typeHi == RecSlideAtom) {
                 slideNumber++;
                 inNotes = false;
-            }
-            else if (typeHi == RecNotesAtom)
-            {
+            } else if(typeHi == RecNotesAtom) {
                 inNotes = true;
-            }
-            else if (typeHi == RecTextCharsAtom && recLen > 0 && slideNumber > 0)
-            {
+            } else if(typeHi == RecTextCharsAtom && recLen > 0 && slideNumber > 0) {
                 int dataStart = i + 8;
                 int dataEnd = (int)Math.Min(dataStart + recLen, (uint)data.Length);
-                if (dataEnd > dataStart)
-                {
+                if(dataEnd > dataStart) {
                     string text = Encoding.Unicode.GetString(data, dataStart, dataEnd - dataStart).TrimEnd('\0');
                     text = TextNormalizer.NormalizeAll(text);
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
+                    if(!string.IsNullOrWhiteSpace(text)) {
                         blocks.Add(new ExtractedBlock(
                             Type: inNotes ? BlockType.Paragraph : BlockType.Paragraph,
                             Text: text,
@@ -95,17 +83,13 @@ public sealed class PptExtractor : IDocumentExtractor
                             SectionTitle: inNotes ? $"Slide {slideNumber} Notes" : null));
                     }
                 }
-            }
-            else if (typeHi == RecTextBytesAtom && recLen > 0 && slideNumber > 0)
-            {
+            } else if(typeHi == RecTextBytesAtom && recLen > 0 && slideNumber > 0) {
                 int dataStart = i + 8;
                 int dataEnd = (int)Math.Min(dataStart + recLen, (uint)data.Length);
-                if (dataEnd > dataStart)
-                {
+                if(dataEnd > dataStart) {
                     string text = Encoding.Latin1.GetString(data, dataStart, dataEnd - dataStart).TrimEnd('\0');
                     text = TextNormalizer.NormalizeAll(text);
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
+                    if(!string.IsNullOrWhiteSpace(text)) {
                         blocks.Add(new ExtractedBlock(
                             Type: BlockType.Paragraph,
                             Text: text,
@@ -117,7 +101,7 @@ public sealed class PptExtractor : IDocumentExtractor
 
             // Advance past this record
             long advance = 8L + recLen;
-            if (advance <= 0 || advance > int.MaxValue) break;
+            if(advance <= 0 || advance > int.MaxValue) break;
             i += (int)advance;
         }
 
@@ -126,22 +110,18 @@ public sealed class PptExtractor : IDocumentExtractor
 
     private static byte[]? TryReadStream(RootStorage storage, string name)
     {
-        try
-        {
+        try {
             using CfbStream stream = storage.OpenStream(name);
-            using var ms = new MemoryStream();
+            using MemoryStream ms = new MemoryStream();
             stream.CopyTo(ms);
             return ms.ToArray();
-        }
-        catch
-        {
+        } catch {
             return null;
         }
     }
 
     private static ExtractedDocument EmptyDocument(DocumentInput input) =>
-        new()
-        {
+        new() {
             Title = input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Presentation",
             Blocks = [],
             Metadata = new ExtractedDocumentMetadata(Format: DocFormat.Ppt)

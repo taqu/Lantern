@@ -16,8 +16,8 @@ public sealed class MeilisearchMasterKeyAccessor(
 
     public async Task<string?> TryReadAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(_options.MasterKeyFile)) return null;
-        if (!File.Exists(_options.MasterKeyFile)) return null;
+        if(string.IsNullOrEmpty(_options.MasterKeyFile)) return null;
+        if(!File.Exists(_options.MasterKeyFile)) return null;
         string content = await File.ReadAllTextAsync(_options.MasterKeyFile, cancellationToken);
         return content.Trim();
     }

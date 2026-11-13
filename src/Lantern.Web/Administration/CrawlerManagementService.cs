@@ -1,6 +1,5 @@
 using Lantern.Core.Administration;
 using Lantern.Core.Crawling;
-using Lantern.Core.Jobs;
 using Lantern.Crawling.Jobs;
 using Lantern.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +31,7 @@ public sealed class CrawlerManagementService(
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         CrawlerDefinition? definition = await db.CrawlerDefinitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id, ct);
-        if (definition == null) return null;
+        if(definition == null) return null;
         FileCrawlerProfileRecord? fileRecord = await db.FileCrawlerProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.CrawlerId == id, ct);
         WebCrawlerProfileRecord? webRecord = await db.WebCrawlerProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.CrawlerId == id, ct);
         return new CrawlerWithProfile(definition, fileRecord?.ToDomain(), webRecord?.ToDomain());
@@ -48,7 +47,7 @@ public sealed class CrawlerManagementService(
     public async Task<Guid> CreateAsync(string name, bool enabled, FileCrawlerProfile profile, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
-        var definition = new CrawlerDefinition { Name = name, CrawlerType = "file", Enabled = enabled };
+        CrawlerDefinition definition = new CrawlerDefinition { Name = name, CrawlerType = "file", Enabled = enabled };
         profile.CrawlerId = definition.Id;
         db.CrawlerDefinitions.Add(definition);
         db.FileCrawlerProfiles.Add(FileCrawlerProfileRecord.FromDomain(profile));
@@ -59,7 +58,7 @@ public sealed class CrawlerManagementService(
     public async Task<Guid> CreateWebAsync(string name, bool enabled, WebCrawlerProfile profile, CancellationToken ct = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
-        var definition = new CrawlerDefinition { Name = name, CrawlerType = "web", Enabled = enabled };
+        CrawlerDefinition definition = new CrawlerDefinition { Name = name, CrawlerType = "web", Enabled = enabled };
         profile.CrawlerId = definition.Id;
         db.CrawlerDefinitions.Add(definition);
         db.WebCrawlerProfiles.Add(WebCrawlerProfileRecord.FromDomain(profile));
@@ -75,8 +74,7 @@ public sealed class CrawlerManagementService(
         definition.Enabled = enabled;
         definition.UpdatedAt = DateTimeOffset.UtcNow;
         FileCrawlerProfileRecord? existing = await db.FileCrawlerProfiles.FirstOrDefaultAsync(p => p.CrawlerId == id, ct);
-        if (existing != null)
-        {
+        if(existing != null) {
             existing.RootPath = profile.RootPath;
             existing.Recursive = profile.Recursive;
             existing.UseAllSupportedFormats = profile.UseAllSupportedFormats;
@@ -84,9 +82,7 @@ public sealed class CrawlerManagementService(
             existing.ExcludedDirectories = profile.ExcludedDirectories.Count > 0 ? string.Join(",", profile.ExcludedDirectories) : null;
             existing.MaxFileSizeMB = profile.MaxFileSizeMB;
             existing.MaxConcurrentFiles = profile.MaxConcurrentFiles;
-        }
-        else
-        {
+        } else {
             profile.CrawlerId = id;
             db.FileCrawlerProfiles.Add(FileCrawlerProfileRecord.FromDomain(profile));
         }
@@ -101,8 +97,7 @@ public sealed class CrawlerManagementService(
         definition.Enabled = enabled;
         definition.UpdatedAt = DateTimeOffset.UtcNow;
         WebCrawlerProfileRecord? existing = await db.WebCrawlerProfiles.FirstOrDefaultAsync(p => p.CrawlerId == id, ct);
-        if (existing != null)
-        {
+        if(existing != null) {
             existing.StartUrls = WebCrawlerProfileRecord.FromDomain(profile).StartUrls;
             existing.AllowedHosts = WebCrawlerProfileRecord.FromDomain(profile).AllowedHosts;
             existing.AllowedPathPrefixes = WebCrawlerProfileRecord.FromDomain(profile).AllowedPathPrefixes;
@@ -115,9 +110,7 @@ public sealed class CrawlerManagementService(
             existing.FollowRedirects = profile.FollowRedirects;
             existing.RespectRobotsTxt = profile.RespectRobotsTxt;
             existing.IndexLinkedDocuments = profile.IndexLinkedDocuments;
-        }
-        else
-        {
+        } else {
             profile.CrawlerId = id;
             db.WebCrawlerProfiles.Add(WebCrawlerProfileRecord.FromDomain(profile));
         }
@@ -150,18 +143,15 @@ public sealed class CrawlerManagementService(
     public async Task<JobSubmissionResult> TryStartAsync(Guid id, CancellationToken ct = default)
     {
         CrawlerWithProfile? item = await GetAsync(id, ct);
-        if (item == null) return new JobSubmissionResult(JobSubmissionStatus.NotFound, null);
-        if (!item.Definition.Enabled) return new JobSubmissionResult(JobSubmissionStatus.Disabled, null);
+        if(item == null) return new JobSubmissionResult(JobSubmissionStatus.NotFound, null);
+        if(!item.Definition.Enabled) return new JobSubmissionResult(JobSubmissionStatus.Disabled, null);
 
-        if (item.Definition.CrawlerType == "web")
-        {
-            if (item.WebProfile == null) return new JobSubmissionResult(JobSubmissionStatus.InvalidConfiguration, null);
+        if(item.Definition.CrawlerType == "web") {
+            if(item.WebProfile == null) return new JobSubmissionResult(JobSubmissionStatus.InvalidConfiguration, null);
             WebCrawlerConfiguration webConfig = item.WebProfile.ToConfiguration(item.Definition.Name);
             return await jobService.SubmitManualJobAsync(id, item.Definition.Name, webConfig, ct);
-        }
-        else
-        {
-            if (item.Profile == null) return new JobSubmissionResult(JobSubmissionStatus.InvalidConfiguration, null);
+        } else {
+            if(item.Profile == null) return new JobSubmissionResult(JobSubmissionStatus.InvalidConfiguration, null);
             FileCrawlerConfiguration config = item.Profile.ToConfiguration(item.Definition.Name);
             return await jobService.SubmitManualJobAsync(id, item.Definition.Name, config, ct);
         }

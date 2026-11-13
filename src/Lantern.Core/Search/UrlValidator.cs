@@ -11,7 +11,7 @@ public static class UrlValidator
     /// </summary>
     public static bool IsSafeDisplayUrl(string? url)
     {
-        if (string.IsNullOrEmpty(url)) return false;
+        if(string.IsNullOrEmpty(url)) return false;
         return url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
     }

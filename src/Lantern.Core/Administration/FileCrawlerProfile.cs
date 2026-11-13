@@ -13,8 +13,7 @@ public sealed class FileCrawlerProfile
     public int MaxFileSizeMB { get; set; } = 100;
     public int MaxConcurrentFiles { get; set; } = 2;
 
-    public FileCrawlerConfiguration ToConfiguration(string name) => new()
-    {
+    public FileCrawlerConfiguration ToConfiguration(string name) => new() {
         CrawlerId = CrawlerId,
         Name = name,
         RootPath = RootPath,

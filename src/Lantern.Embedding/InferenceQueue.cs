@@ -13,8 +13,7 @@ public sealed class InferenceQueue
 
     public InferenceQueue(int capacity)
     {
-        _channel = Channel.CreateBounded<EmbeddingRequestItem>(new BoundedChannelOptions(capacity)
-        {
+        _channel = Channel.CreateBounded<EmbeddingRequestItem>(new BoundedChannelOptions(capacity) {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = false
@@ -25,15 +24,12 @@ public sealed class InferenceQueue
 
     public async ValueTask<bool> TryEnqueueAsync(EmbeddingRequestItem item, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
-        try
-        {
+        try {
             await _channel.Writer.WriteAsync(item, cts.Token);
             return true;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
+        } catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested) {
             return false; // timeout
         }
     }

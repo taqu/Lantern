@@ -27,8 +27,7 @@ public sealed class MeilisearchProcessManager(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_opts.Managed)
-        {
+        if(!_opts.Managed) {
             logger.LogInformation("Meilisearch process management is disabled. Lantern expects an external instance at the configured URL.");
             return;
         }
@@ -36,33 +35,28 @@ public sealed class MeilisearchProcessManager(
         logger.LogInformation("Starting managed Meilisearch process...");
 
         string exePath = ResolveExecutablePath();
-        if (!File.Exists(exePath))
-        {
+        if(!File.Exists(exePath)) {
             string msg = $"Meilisearch executable not found: {exePath}";
-            if (_opts.FailOnStartupError) throw new FileNotFoundException(msg);
+            if(_opts.FailOnStartupError) throw new FileNotFoundException(msg);
             logger.LogError("{Message}", msg);
             return;
         }
 
         string masterKey = await ReadMasterKeyAsync(cancellationToken);
-        if (string.IsNullOrEmpty(masterKey))
-        {
+        if(string.IsNullOrEmpty(masterKey)) {
             string msg = $"Meilisearch master key could not be read from: {_opts.MasterKeyFile}";
-            if (_opts.FailOnStartupError) throw new InvalidOperationException(msg);
+            if(_opts.FailOnStartupError) throw new InvalidOperationException(msg);
             logger.LogError("{Message}", msg);
             return;
         }
 
-        if (!string.IsNullOrEmpty(_opts.DataDirectory))
+        if(!string.IsNullOrEmpty(_opts.DataDirectory))
             Directory.CreateDirectory(_opts.DataDirectory);
 
-        try
-        {
+        try {
             await LaunchAndWaitForReadinessAsync(exePath, masterKey, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            if (_opts.FailOnStartupError) throw;
+        } catch(Exception ex) {
+            if(_opts.FailOnStartupError) throw;
             logger.LogError(ex, "Meilisearch failed to start. Search will be unavailable.");
             return;
         }
@@ -76,28 +70,19 @@ public sealed class MeilisearchProcessManager(
         _stopping = true;
         _monitorCts?.Cancel();
 
-        try { await _monitorTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken); }
-        catch (OperationCanceledException) { }
-        catch (TimeoutException) { }
+        try { await _monitorTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken); } catch(OperationCanceledException) { } catch(TimeoutException) { }
 
-        if (_process is { HasExited: false } proc)
-        {
+        if(_process is { HasExited: false } proc) {
             logger.LogInformation("Stopping managed Meilisearch process (PID {Pid})...", proc.Id);
-            try
-            {
+            try {
                 proc.CloseMainWindow();
-                if (!proc.WaitForExit(5000))
-                {
+                if(!proc.WaitForExit(5000)) {
                     proc.Kill();
                     logger.LogWarning("Meilisearch process did not exit gracefully; it was terminated.");
-                }
-                else
-                {
+                } else {
                     logger.LogInformation("Meilisearch process stopped.");
                 }
-            }
-            catch (Exception ex)
-            {
+            } catch(Exception ex) {
                 logger.LogError(ex, "Error while stopping Meilisearch process.");
             }
         }
@@ -115,22 +100,21 @@ public sealed class MeilisearchProcessManager(
     private string ResolveExecutablePath()
     {
         string path = _opts.ExecutablePath;
-        if (Path.IsPathRooted(path)) return path;
+        if(Path.IsPathRooted(path)) return path;
         string appBase = AppContext.BaseDirectory;
         return Path.GetFullPath(path, appBase);
     }
 
     private async Task<string> ReadMasterKeyAsync(CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(_opts.MasterKeyFile)) return "";
-        if (!File.Exists(_opts.MasterKeyFile)) return "";
+        if(string.IsNullOrEmpty(_opts.MasterKeyFile)) return "";
+        if(!File.Exists(_opts.MasterKeyFile)) return "";
         return (await File.ReadAllTextAsync(_opts.MasterKeyFile, ct)).Trim();
     }
 
     private async Task LaunchAndWaitForReadinessAsync(string exePath, string masterKey, CancellationToken ct)
     {
-        var startInfo = new ProcessStartInfo
-        {
+        ProcessStartInfo startInfo = new ProcessStartInfo {
             FileName = exePath,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -150,31 +134,26 @@ public sealed class MeilisearchProcessManager(
 
         logger.LogInformation("Meilisearch process started (PID {Pid}). Waiting for readiness...", _process.Id);
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(_opts.StartupTimeoutSeconds));
 
         string healthUrl = $"http://{_opts.BindAddress}:{_opts.Port}/health";
-        using var http = new HttpClient();
+        using HttpClient http = new HttpClient();
 
-        while (!timeout.IsCancellationRequested)
-        {
-            if (_process.HasExited)
+        while(!timeout.IsCancellationRequested) {
+            if(_process.HasExited)
                 throw new InvalidOperationException(
                     $"Meilisearch process exited unexpectedly with code {_process.ExitCode}.");
 
             await Task.Delay(2000, timeout.Token).ConfigureAwait(false);
 
-            try
-            {
+            try {
                 using var response = await http.GetAsync(healthUrl, timeout.Token).ConfigureAwait(false);
-                if (response.IsSuccessStatusCode)
-                {
+                if(response.IsSuccessStatusCode) {
                     logger.LogInformation("Meilisearch is ready on {BindAddress}:{Port}.", _opts.BindAddress, _opts.Port);
                     return;
                 }
-            }
-            catch (HttpRequestException) { }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { break; }
+            } catch(HttpRequestException) { } catch(OperationCanceledException) when(!ct.IsCancellationRequested) { break; }
         }
 
         throw new TimeoutException(
@@ -183,20 +162,16 @@ public sealed class MeilisearchProcessManager(
 
     private async Task MonitorLoopAsync(CancellationToken ct)
     {
-        while (!ct.IsCancellationRequested && !_stopping)
-        {
-            try { await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) { return; }
+        while(!ct.IsCancellationRequested && !_stopping) {
+            try { await Task.Delay(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false); } catch(OperationCanceledException) { return; }
 
-            if (_process is { HasExited: true } dead)
-            {
-                if (_stopping) return;
+            if(_process is { HasExited: true } dead) {
+                if(_stopping) return;
 
                 logger.LogWarning("Meilisearch process (PID {Pid}) exited with code {Code}.",
                     dead.Id, dead.ExitCode);
 
-                if (_restartCount >= _opts.MaxRestartAttempts)
-                {
+                if(_restartCount >= _opts.MaxRestartAttempts) {
                     logger.LogError(
                         "Meilisearch has crashed {Count} time(s) and will not be restarted automatically.",
                         _restartCount);
@@ -207,14 +182,11 @@ public sealed class MeilisearchProcessManager(
                 logger.LogInformation("Restarting Meilisearch (attempt {Attempt}/{Max})...",
                     _restartCount, _opts.MaxRestartAttempts);
 
-                try
-                {
+                try {
                     await Task.Delay(TimeSpan.FromSeconds(_opts.RestartDelaySeconds), ct).ConfigureAwait(false);
                     string masterKey = await ReadMasterKeyAsync(ct).ConfigureAwait(false);
                     await LaunchAndWaitForReadinessAsync(ResolveExecutablePath(), masterKey, ct).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (!ct.IsCancellationRequested)
-                {
+                } catch(Exception ex) when(!ct.IsCancellationRequested) {
                     logger.LogError(ex, "Meilisearch restart attempt {Attempt} failed.", _restartCount);
                 }
             }

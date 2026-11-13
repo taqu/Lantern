@@ -120,8 +120,8 @@ public sealed class CrawlerJobRepository(IDbContextFactory<LanternDbContext> fac
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         IQueryable<CrawlerJobRecord> query = db.CrawlerJobs.AsNoTracking();
-        if (crawlerId.HasValue) query = query.Where(j => j.CrawlerId == crawlerId.Value);
-        if (status.HasValue) { string s = status.Value.ToString(); query = query.Where(j => j.Status == s); }
+        if(crawlerId.HasValue) query = query.Where(j => j.CrawlerId == crawlerId.Value);
+        if(status.HasValue) { string s = status.Value.ToString(); query = query.Where(j => j.Status == s); }
         int total = await query.CountAsync(ct);
         List<CrawlerJobRecord> recs = await query
             .OrderByDescending(j => j.CreatedAt)

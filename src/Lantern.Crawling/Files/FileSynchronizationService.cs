@@ -1,3 +1,4 @@
+using System.Text;
 using Lantern.Core.Administration;
 using Lantern.Core.Crawling;
 using Lantern.Core.Extraction;
@@ -19,7 +20,7 @@ public sealed class FileSynchronizationService(
 
     private async Task<string[]> GetCategoryIdsAsync(Guid crawlerId, CancellationToken cancellationToken)
     {
-        if (_categoryIds != null && _lastCrawlerIdForCategories == crawlerId)
+        if(_categoryIds != null && _lastCrawlerIdForCategories == crawlerId)
             return _categoryIds;
         _categoryIds = await categoryResolver.GetCategoryKeysAsync(crawlerId, cancellationToken);
         _lastCrawlerIdForCategories = crawlerId;
@@ -35,10 +36,9 @@ public sealed class FileSynchronizationService(
         FileState? existing = await stateRepository.FindAsync(crawlerId, file.CanonicalPath, cancellationToken);
 
         // Unchanged check
-        if (existing is { SyncStatus: CrawlSyncStatus.Indexed }
+        if(existing is { SyncStatus: CrawlSyncStatus.Indexed }
             && existing.FileSize == file.FileSize
-            && existing.LastWriteTimeUtc == file.LastWriteTimeUtc)
-        {
+            && existing.LastWriteTimeUtc == file.LastWriteTimeUtc) {
             existing.LastSeenScanId = scanId;
             await stateRepository.SaveAsync(existing, cancellationToken);
             return (FileSyncOutcome.Unchanged, null);
@@ -49,22 +49,18 @@ public sealed class FileSynchronizationService(
         string fileName = Path.GetFileName(file.CanonicalPath);
         string uri = new Uri(file.CanonicalPath).AbsoluteUri;
 
-        var input = DocumentInput.FromFile(file.CanonicalPath);
+        DocumentInput input = DocumentInput.FromFile(file.CanonicalPath);
         DocumentProcessingResult result;
-        try
-        {
+        try {
             result = await processingService.ProcessAsync(
                 input, documentId, fileName, uri, crawlerId.ToString(), "file", cancellationToken);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             logger.LogError(ex, "Extraction threw for {Path}", file.CanonicalPath);
             await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, ex.Message, cancellationToken);
             return (FileSyncOutcome.Failed, ex.Message);
         }
 
-        if (!result.Success)
-        {
+        if(!result.Success) {
             await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, result.FailureMessage, cancellationToken);
             return (FileSyncOutcome.Failed, result.FailureMessage);
         }
@@ -72,14 +68,11 @@ public sealed class FileSynchronizationService(
         // Snapshot metadata before and after to detect mid-processing changes
         long sizeAfter;
         DateTimeOffset lwAfter;
-        try
-        {
-            var info = new FileInfo(file.CanonicalPath);
+        try {
+            FileInfo info = new FileInfo(file.CanonicalPath);
             sizeAfter = info.Length;
             lwAfter = info.LastWriteTimeUtc;
-        }
-        catch
-        {
+        } catch {
             sizeAfter = file.FileSize;
             lwAfter = file.LastWriteTimeUtc;
         }
@@ -90,10 +83,8 @@ public sealed class FileSynchronizationService(
         string[] categoryIds = await GetCategoryIdsAsync(crawlerId, cancellationToken);
 
         SearchDocument doc;
-        try
-        {
-            doc = DocumentNormalizer.Normalize(new SearchDocument
-            {
+        try {
+            doc = DocumentNormalizer.Normalize(new SearchDocument {
                 SourceType = "file",
                 SourceId = crawlerId.ToString(),
                 Path = file.CanonicalPath,
@@ -105,17 +96,14 @@ public sealed class FileSynchronizationService(
                 IndexedAt = DateTimeOffset.UtcNow,
                 CategoryIds = categoryIds
             });
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             logger.LogError(ex, "Document normalization failed for {Path}", file.CanonicalPath);
             await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, ex.Message, cancellationToken);
             return (FileSyncOutcome.Failed, ex.Message);
         }
 
         IReadOnlyList<SearchChunk> chunks = categoryIds.Length > 0
-            ? (result.Chunks ?? []).Select(c => new SearchChunk
-            {
+            ? (result.Chunks ?? []).Select(c => new SearchChunk {
                 Id = c.Id,
                 DocumentId = c.DocumentId,
                 SourceId = c.SourceId,
@@ -137,13 +125,10 @@ public sealed class FileSynchronizationService(
             }).ToList()
             : result.Chunks ?? [];
 
-        try
-        {
+        try {
             await documentIndexing.UpsertAsync(doc, cancellationToken);
             await chunkIndexing.ReplaceDocumentChunksAsync(documentId, chunks, cancellationToken);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             logger.LogError(ex, "Indexing failed for {Path}", file.CanonicalPath);
             await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, ex.Message, cancellationToken);
             return (FileSyncOutcome.Failed, ex.Message);
@@ -158,14 +143,11 @@ public sealed class FileSynchronizationService(
         state.LastIndexedAt = DateTimeOffset.UtcNow;
         state.LastError = null;
 
-        if (sizeAfter != file.FileSize || lwAfter != file.LastWriteTimeUtc)
-        {
+        if(sizeAfter != file.FileSize || lwAfter != file.LastWriteTimeUtc) {
             // File changed while we were processing it; mark for retry next scan
             state.SyncStatus = CrawlSyncStatus.PendingRetry;
             logger.LogWarning("File changed during processing: {Path}", file.CanonicalPath);
-        }
-        else
-        {
+        } else {
             state.SyncStatus = CrawlSyncStatus.Indexed;
         }
 
@@ -183,8 +165,7 @@ public sealed class FileSynchronizationService(
         CancellationToken cancellationToken)
     {
         // Preserve existing indexed state – only update scan tracking and error fields
-        FileState state = existing ?? new FileState
-        {
+        FileState state = existing ?? new FileState {
             CrawlerId = crawlerId,
             DocumentId = documentId,
             CanonicalPath = file.CanonicalPath,
@@ -194,18 +175,16 @@ public sealed class FileSynchronizationService(
         state.LastSeenScanId = scanId;
         state.SyncStatus = CrawlSyncStatus.Failed;
         state.LastError = error;
-        try { await stateRepository.SaveAsync(state, cancellationToken); }
-        catch (Exception ex) { logger.LogError(ex, "Could not persist failure state for {Path}", file.CanonicalPath); }
+        try { await stateRepository.SaveAsync(state, cancellationToken); } catch(Exception ex) { logger.LogError(ex, "Could not persist failure state for {Path}", file.CanonicalPath); }
     }
 
     private static string BuildContent(Core.Extraction.ExtractedDocument doc)
     {
-        if (doc.Blocks.Count == 0) return "";
-        var builder = new System.Text.StringBuilder();
-        foreach (ExtractedBlock block in doc.Blocks)
-        {
+        if(doc.Blocks.Count == 0) return "";
+        StringBuilder builder = new System.Text.StringBuilder();
+        foreach(ExtractedBlock block in doc.Blocks) {
             builder.Append(block.Text);
-            if (builder.Length >= 4096) break;
+            if(builder.Length >= 4096) break;
             builder.Append(' ');
         }
         return builder.ToString().Trim();

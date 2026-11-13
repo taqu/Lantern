@@ -13,8 +13,7 @@ public sealed class FileCrawlerProfileRecord
     public int MaxFileSizeMB { get; set; } = 100;
     public int MaxConcurrentFiles { get; set; } = 2;
 
-    public FileCrawlerProfile ToDomain() => new()
-    {
+    public FileCrawlerProfile ToDomain() => new() {
         CrawlerId = CrawlerId,
         RootPath = RootPath,
         Recursive = Recursive,
@@ -25,8 +24,7 @@ public sealed class FileCrawlerProfileRecord
         MaxConcurrentFiles = MaxConcurrentFiles
     };
 
-    public static FileCrawlerProfileRecord FromDomain(FileCrawlerProfile profile) => new()
-    {
+    public static FileCrawlerProfileRecord FromDomain(FileCrawlerProfile profile) => new() {
         CrawlerId = profile.CrawlerId,
         RootPath = profile.RootPath,
         Recursive = profile.Recursive,
@@ -39,7 +37,7 @@ public sealed class FileCrawlerProfileRecord
 
     private static IReadOnlyList<string> ParseList(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return [];
+        if(string.IsNullOrWhiteSpace(raw)) return [];
         return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }

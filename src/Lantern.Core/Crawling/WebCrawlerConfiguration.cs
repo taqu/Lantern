@@ -22,24 +22,23 @@ public sealed class WebCrawlerConfiguration
 
     public void Validate()
     {
-        if (CrawlerId == Guid.Empty)
+        if(CrawlerId == Guid.Empty)
             throw new ValidationException("Crawler ID is required.");
-        if (StartUrls.Count == 0)
+        if(StartUrls.Count == 0)
             throw new ValidationException("At least one start URL is required.");
-        if (AllowedHosts.Count == 0)
+        if(AllowedHosts.Count == 0)
             throw new ValidationException("At least one allowed host is required.");
-        foreach (string url in StartUrls)
-        {
-            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? u)
+        foreach(string url in StartUrls) {
+            if(!Uri.TryCreate(url, UriKind.Absolute, out Uri? u)
                 || (u.Scheme != "http" && u.Scheme != "https")
                 || !string.IsNullOrEmpty(u.UserInfo))
                 throw new ValidationException($"Invalid start URL: {url}");
         }
-        if (MaximumDepth <= 0) throw new ValidationException("MaximumDepth must be positive.");
-        if (MaximumPages <= 0) throw new ValidationException("MaximumPages must be positive.");
-        if (MaximumConcurrentRequests <= 0 || MaximumConcurrentRequests > 16)
+        if(MaximumDepth <= 0) throw new ValidationException("MaximumDepth must be positive.");
+        if(MaximumPages <= 0) throw new ValidationException("MaximumPages must be positive.");
+        if(MaximumConcurrentRequests <= 0 || MaximumConcurrentRequests > 16)
             throw new ValidationException("MaximumConcurrentRequests must be between 1 and 16.");
-        if (MaximumResponseSizeMB <= 0 || MaximumResponseSizeMB > 1000)
+        if(MaximumResponseSizeMB <= 0 || MaximumResponseSizeMB > 1000)
             throw new ValidationException("MaximumResponseSizeMB must be between 1 and 1000.");
     }
 }

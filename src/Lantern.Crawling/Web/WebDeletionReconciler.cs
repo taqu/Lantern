@@ -27,26 +27,22 @@ public sealed class WebDeletionReconciler(
     /// </summary>
     public async Task<int> ReconcileAsync(Guid crawlerId, Guid scanId, CancellationToken ct)
     {
-        if (_confirmedGone.Count == 0) return 0;
+        if(_confirmedGone.Count == 0) return 0;
 
         IReadOnlyList<UrlState> notSeen = await stateRepository.GetNotSeenInScanAsync(crawlerId, scanId, ct);
         int deleted = 0;
 
-        foreach (UrlState state in notSeen)
-        {
-            if (!_confirmedGone.Contains(state.CanonicalUrl)) continue;
-            if (string.IsNullOrEmpty(state.DocumentId)) continue;
+        foreach(UrlState state in notSeen) {
+            if(!_confirmedGone.Contains(state.CanonicalUrl)) continue;
+            if(string.IsNullOrEmpty(state.DocumentId)) continue;
 
-            try
-            {
+            try {
                 await chunkIndexing.DeleteChunksByDocumentAsync(state.DocumentId, ct);
                 await documentIndexing.DeleteAsync(state.DocumentId, ct);
                 await stateRepository.DeleteAsync(state.Id, ct);
                 deleted++;
                 logger.LogInformation("Removed confirmed-gone URL {Url}", state.CanonicalUrl);
-            }
-            catch (Exception ex)
-            {
+            } catch(Exception ex) {
                 logger.LogWarning(ex, "Failed to delete indexed content for {Url}", state.CanonicalUrl);
             }
         }

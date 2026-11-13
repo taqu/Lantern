@@ -19,24 +19,21 @@ public sealed class DocxExtractor : IDocumentExtractor
         Stream stream;
         bool ownsStream = false;
 
-        if (input.FilePath != null)
-        {
+        if(input.FilePath != null) {
             stream = File.OpenRead(input.FilePath);
             ownsStream = true;
-        }
-        else if (input.Stream != null)
+        } else if(input.Stream != null)
             stream = input.Stream;
         else
             throw new ArgumentException("No source in DocumentInput");
 
-        try
-        {
-            using var doc = WordprocessingDocument.Open(stream, isEditable: false);
+        try {
+            using WordprocessingDocument doc = WordprocessingDocument.Open(stream, isEditable: false);
             Body? body = doc.MainDocumentPart?.Document?.Body;
-            if (body == null)
+            if(body == null)
                 return EmptyDocument(input, DocFormat.Docx);
 
-            var blocks = new List<ExtractedBlock>();
+            List<ExtractedBlock> blocks = new List<ExtractedBlock>();
             string? currentSection = null;
 
             // Get package properties safely
@@ -44,43 +41,34 @@ public sealed class DocxExtractor : IDocumentExtractor
             DateTimeOffset? created = null;
             DateTimeOffset? modified = null;
             string? docTitle = null;
-            try
-            {
+            try {
                 IPackageProperties? props = doc.PackageProperties;
                 author = props?.Creator;
                 docTitle = props?.Title?.Trim();
-                if (props?.Created is DateTime createdDt) created = new DateTimeOffset(createdDt);
-                if (props?.Modified is DateTime modifiedDt) modified = new DateTimeOffset(modifiedDt);
-            }
-            catch { /* Ignore properties errors */ }
+                if(props?.Created is DateTime createdDt) created = new DateTimeOffset(createdDt);
+                if(props?.Modified is DateTime modifiedDt) modified = new DateTimeOffset(modifiedDt);
+            } catch { /* Ignore properties errors */ }
 
-            foreach (DocumentFormat.OpenXml.OpenXmlElement element in body.ChildElements)
-            {
-                if (element is Paragraph para)
-                {
+            foreach(DocumentFormat.OpenXml.OpenXmlElement element in body.ChildElements) {
+                if(element is Paragraph para) {
                     string text = GetParagraphText(para);
-                    if (string.IsNullOrWhiteSpace(text)) continue;
+                    if(string.IsNullOrWhiteSpace(text)) continue;
 
                     text = TextNormalizer.Normalize(text.Trim());
                     string styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value ?? "";
                     bool isHeading = styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) ||
                                      styleId.StartsWith("heading", StringComparison.OrdinalIgnoreCase);
 
-                    if (isHeading)
-                    {
+                    if(isHeading) {
                         int level = ExtractHeadingLevel(styleId);
-                        if (level <= 2) currentSection = text;
+                        if(level <= 2) currentSection = text;
                         blocks.Add(new ExtractedBlock(BlockType.Heading, text, SectionTitle: currentSection, HeadingLevel: level));
-                    }
-                    else
-                    {
+                    } else {
                         blocks.Add(new ExtractedBlock(BlockType.Paragraph, text, SectionTitle: currentSection));
                     }
-                }
-                else if (element is Table table)
-                {
+                } else if(element is Table table) {
                     string tableText = ExtractTableText(table);
-                    if (!string.IsNullOrEmpty(tableText))
+                    if(!string.IsNullOrEmpty(tableText))
                         blocks.Add(new ExtractedBlock(BlockType.Table, tableText, SectionTitle: currentSection));
                 }
             }
@@ -89,8 +77,7 @@ public sealed class DocxExtractor : IDocumentExtractor
                 ? docTitle
                 : (input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Untitled");
 
-            return new ExtractedDocument
-            {
+            return new ExtractedDocument {
                 Title = title,
                 Blocks = blocks,
                 Metadata = new ExtractedDocumentMetadata(
@@ -100,19 +87,16 @@ public sealed class DocxExtractor : IDocumentExtractor
                     ModifiedAt: modified,
                     Format: DocFormat.Docx)
             };
-        }
-        finally
-        {
-            if (ownsStream) stream.Dispose();
+        } finally {
+            if(ownsStream) stream.Dispose();
         }
     }
 
     private static string GetParagraphText(Paragraph para)
     {
-        var sb = new StringBuilder();
-        foreach (Run run in para.Descendants<Run>())
-        {
-            foreach (Text text in run.Descendants<Text>())
+        StringBuilder sb = new StringBuilder();
+        foreach(Run run in para.Descendants<Run>()) {
+            foreach(Text text in run.Descendants<Text>())
                 sb.Append(text.Text);
         }
         return sb.ToString();
@@ -120,9 +104,8 @@ public sealed class DocxExtractor : IDocumentExtractor
 
     private static string ExtractTableText(Table table)
     {
-        var sb = new StringBuilder();
-        foreach (TableRow row in table.Descendants<TableRow>())
-        {
+        StringBuilder sb = new StringBuilder();
+        foreach(TableRow row in table.Descendants<TableRow>()) {
             IEnumerable<string> cells = row.Descendants<TableCell>().Select(c => c.InnerText.Trim());
             sb.AppendLine(string.Join(" | ", cells));
         }
@@ -131,14 +114,13 @@ public sealed class DocxExtractor : IDocumentExtractor
 
     private static int ExtractHeadingLevel(string styleId)
     {
-        for (int i = 1; i <= 6; i++)
-            if (styleId.EndsWith(i.ToString())) return i;
+        for(int i = 1; i <= 6; i++)
+            if(styleId.EndsWith(i.ToString())) return i;
         return 1;
     }
 
     private static ExtractedDocument EmptyDocument(DocumentInput input, DocFormat format) =>
-        new()
-        {
+        new() {
             Title = input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Untitled",
             Blocks = [],
             Metadata = new ExtractedDocumentMetadata(Format: format)

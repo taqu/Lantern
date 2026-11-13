@@ -1,4 +1,3 @@
-using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -13,8 +12,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "AdministratorAccounts",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<int>(type: "INTEGER", nullable: false),
                     Username = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
                     PasswordHash = table.Column<string>(type: "TEXT", nullable: false),
@@ -22,21 +20,18 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     FailedAttempts = table.Column<int>(type: "INTEGER", nullable: false),
                     LockedUntil = table.Column<DateTimeOffset>(type: "TEXT", nullable: true)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_AdministratorAccounts", x => x.Id);
                     table.CheckConstraint("CK_Admin_Singleton", "Id = 1");
                 });
 
             migrationBuilder.CreateTable(
                 name: "ApplicationSettings",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<int>(type: "INTEGER", nullable: false),
                     DisplayName = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_ApplicationSettings", x => x.Id);
                     table.CheckConstraint("CK_Settings_Name", "length(trim(DisplayName)) BETWEEN 1 AND 80");
                     table.CheckConstraint("CK_Settings_Singleton", "Id = 1");
@@ -44,8 +39,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
 
             migrationBuilder.CreateTable(
                 name: "CrawlerDefinitions",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
                     Name = table.Column<string>(type: "TEXT", maxLength: 120, nullable: false),
                     CrawlerType = table.Column<string>(type: "TEXT", maxLength: 4, nullable: false),
@@ -53,8 +47,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawlerDefinitions", x => x.Id);
                     table.CheckConstraint("CK_Crawler_Name", "length(trim(Name)) BETWEEN 1 AND 120");
                     table.CheckConstraint("CK_Crawler_Type", "CrawlerType IN ('file', 'web')");

@@ -13,29 +13,23 @@ public sealed class HostRateLimiter(int delayMs, int maxConcurrentPerHost) : IDi
         string host = UrlNormalizer.GetHost(url) ?? url;
         HostSlot slot = GetOrCreate(host);
         await slot.Semaphore.WaitAsync(ct);
-        try
-        {
+        try {
             DateTimeOffset now = DateTimeOffset.UtcNow;
             DateTimeOffset earliest = slot.NextAllowedAt;
-            if (earliest > now)
-            {
+            if(earliest > now) {
                 int waitMs = (int)(earliest - now).TotalMilliseconds;
                 await Task.Delay(waitMs, ct);
             }
             slot.NextAllowedAt = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
-        }
-        finally
-        {
+        } finally {
             slot.Semaphore.Release();
         }
     }
 
     private HostSlot GetOrCreate(string host)
     {
-        lock (_lock)
-        {
-            if (!_slots.TryGetValue(host, out HostSlot? slot))
-            {
+        lock(_lock) {
+            if(!_slots.TryGetValue(host, out HostSlot? slot)) {
                 slot = new HostSlot(new SemaphoreSlim(maxConcurrentPerHost, maxConcurrentPerHost));
                 _slots[host] = slot;
             }
@@ -45,9 +39,8 @@ public sealed class HostRateLimiter(int delayMs, int maxConcurrentPerHost) : IDi
 
     public void Dispose()
     {
-        lock (_lock)
-        {
-            foreach (HostSlot slot in _slots.Values)
+        lock(_lock) {
+            foreach(HostSlot slot in _slots.Values)
                 slot.Semaphore.Dispose();
             _slots.Clear();
         }

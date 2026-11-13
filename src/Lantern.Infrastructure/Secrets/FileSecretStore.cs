@@ -28,7 +28,7 @@ public sealed class FileSecretStore : ISecretStore
     public async Task<string?> TryReadAsync(string name, CancellationToken cancellationToken)
     {
         string path = PathFor(name);
-        if (!File.Exists(path)) return null;
+        if(!File.Exists(path)) return null;
         string content = await File.ReadAllTextAsync(path, cancellationToken);
         return content.Trim();
     }
@@ -47,20 +47,20 @@ public sealed class FileSecretStore : ISecretStore
     public Task DeleteAsync(string name, CancellationToken cancellationToken)
     {
         string path = PathFor(name);
-        if (File.Exists(path)) File.Delete(path);
+        if(File.Exists(path)) File.Delete(path);
         return Task.CompletedTask;
     }
 
     private string PathFor(string name)
     {
-        if (string.IsNullOrEmpty(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        if(string.IsNullOrEmpty(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             throw new ArgumentException("Secret name must be a non-empty filesystem-safe identifier.", nameof(name));
         return Path.Combine(_directory, name + ".txt");
     }
 
     private static void RestrictPermissions(string path)
     {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+        if(!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
         File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 }

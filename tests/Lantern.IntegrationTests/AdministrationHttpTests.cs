@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Lantern.Core.Administration;
 using Lantern.Web.Administration;
@@ -49,14 +50,12 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
     [Fact]
     public async Task AnonymousAdminAndDirectActionsAreDeniedWhileSearchIsPublic()
     {
-        foreach (string? path in new[] { "/admin", "/admin/crawlers", "/admin/jobs", "/admin/index", "/admin/settings", "/admin/system" })
-        {
+        foreach(string? path in new[] { "/admin", "/admin/crawlers", "/admin/jobs", "/admin/index", "/admin/settings", "/admin/system" }) {
             HttpResponseMessage response = await _client.GetAsync(path);
             Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
             Assert.StartsWith("https://localhost/account/login", response.Headers.Location!.ToString());
         }
-        foreach (string? path in new[] { "/admin/actions/settings", "/admin/actions/logout", "/admin/actions/test-connection" })
-        {
+        foreach(string? path in new[] { "/admin/actions/settings", "/admin/actions/logout", "/admin/actions/test-connection" }) {
             HttpResponseMessage response = await _client.PostAsync(path, new FormUrlEncodedContent(new Dictionary<string, string>()));
             Assert.Contains(response.StatusCode, new[] { HttpStatusCode.Redirect, HttpStatusCode.Unauthorized });
         }
@@ -87,8 +86,7 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsync("/account/sign-in", new FormUrlEncodedContent(new Dictionary<string, string>()))).StatusCode);
         string token = await TokenAsync("/account/login");
         HttpResponseMessage? response = null;
-        for (int i = 0; i < 10; i++)
-        {
+        for(int i = 0; i < 10; i++) {
             response?.Dispose();
             response = await PostAsync("/account/sign-in", token, ("username", "admin"), ("password", "wrong"));
         }
@@ -101,7 +99,7 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
     {
         using IServiceScope scope = _factory.Services.CreateScope();
         Microsoft.AspNetCore.Authorization.IAuthorizationService authorization = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-        var ordinaryUser = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+        ClaimsPrincipal ordinaryUser = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
             new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "ordinary") }, "test"));
         Assert.False((await authorization.AuthorizeAsync(ordinaryUser, null, AdministratorAuthentication.Policy)).Succeeded);
         Assert.False((await authorization.AuthorizeAsync(new System.Security.Claims.ClaimsPrincipal(), null, AdministratorAuthentication.Policy)).Succeeded);
@@ -117,7 +115,7 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
         Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
-        foreach (string? path in new[] { "/admin", "/admin/crawlers", "/admin/jobs", "/admin/index", "/admin/settings", "/admin/system" })
+        foreach(string? path in new[] { "/admin", "/admin/crawlers", "/admin/jobs", "/admin/index", "/admin/settings", "/admin/system" })
             Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync(path)).StatusCode);
         string settingsHtml = await _client.GetStringAsync("/admin/settings");
         Assert.DoesNotContain("PasswordHash", settingsHtml);
@@ -143,8 +141,7 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
     [Fact]
     public async Task SecurityHeadersAreSetOnEveryResponse()
     {
-        foreach (string path in new[] { "/search", "/account/login" })
-        {
+        foreach(string path in new[] { "/search", "/account/login" }) {
             HttpResponseMessage response = await _client.GetAsync(path);
             Assert.True(response.Headers.TryGetValues("X-Content-Type-Options", out IEnumerable<string>? xct));
             Assert.Equal("nosniff", xct!.First());
@@ -171,8 +168,7 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
     [Fact]
     public async Task CategoryAdminRequiresAuthentication()
     {
-        foreach (string path in new[] { "/admin/categories", "/admin/categories/create" })
-        {
+        foreach(string path in new[] { "/admin/categories", "/admin/categories/create" }) {
             HttpResponseMessage response = await _client.GetAsync(path);
             Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
             Assert.StartsWith("https://localhost/account/login", response.Headers.Location!.ToString());
@@ -187,8 +183,7 @@ public sealed class AdministrationHttpTests : IAsyncLifetime
             builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole().SetMinimumLevel(LogLevel.Warning));
             builder.UseSetting("Storage:DatabasePath", Path.Combine(directory, "database", "lantern.db"));
             builder.UseSetting("Storage:DataProtectionKeysPath", Path.Combine(directory, "keys"));
-            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?> {
                 ["Meilisearch:Url"] = "http://127.0.0.1:1",
                 ["Meilisearch:IndexName"] = "http-test-index",
                 ["MeilisearchProcess:Managed"] = "false",

@@ -9,6 +9,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
 {
     private readonly string _name = $"lantern-phase2-test-{Guid.NewGuid():N}";
     private readonly string? _key = Environment.GetEnvironmentVariable("MEILI_MASTER_KEY");
+    private MeilisearchCredentialManager _meilisearchCredentialManager = null!;
     private MeilisearchClient _client = null!;
     private MeilisearchIndexingService _service = null!;
 
@@ -21,17 +22,14 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_key == null) return;
-        try
-        {
+        if(_key == null) return;
+        try {
             await _client.GetIndexAsync(_name);
             await _service.WaitAsync((await _client.DeleteIndexAsync(_name)).TaskUid, "test cleanup");
-        }
-        catch (MeilisearchApiError ex) when (ex.Code == "index_not_found") { }
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") { }
     }
 
-    private static SearchDocument Doc(int i, string content = "日本語 lantern foundation") => new()
-    {
+    private static SearchDocument Doc(int i, string content = "日本語 lantern foundation") => new() {
         SourceId = "test",
         SourceType = "web",
         Uri = $"https://example.com/{i}",
@@ -54,7 +52,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Assert.Equal(new[] { "indexedAt", "modifiedAt", "size" }, settings.SortableAttributes!.Order());
         Assert.Equal(5, settings.FilterableAttributes!.Count());
         await _service.UpsertAsync(Doc(0));
-        var reinitialize = new MeilisearchIndexingService(_client, new MeilisearchOptions { IndexName = _name }, NullLogger<MeilisearchIndexingService>.Instance);
+        MeilisearchIndexingService reinitialize = new MeilisearchIndexingService(_client, new MeilisearchOptions { IndexName = _name }, NullLogger<MeilisearchIndexingService>.Instance);
         await reinitialize.EnsureIndexAsync();
         Assert.Equal(1L, (await index.GetStatsAsync()).NumberOfDocuments);
         await _service.UpsertBatchAsync(Enumerable.Range(1, 5).Select(i => Doc(i)));
@@ -70,8 +68,8 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Assert.Equal("https://example.com/0", hit.Uri);
         Assert.Equal("web", hit.SourceType);
         Assert.Equal("text/html", hit.MimeType);
-        var searchOpts = new MeilisearchOptions { Url = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", IndexName = _name };
-        var search = new MeilisearchSearchService(_client, searchOpts,
+        MeilisearchOptions searchOpts = new MeilisearchOptions { Url = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", IndexName = _name };
+        MeilisearchSearchService search = new MeilisearchSearchService(_client, searchOpts,
             NullLogger<MeilisearchSearchService>.Instance, _service);
         SearchPageResponse page = await search.SearchPageAsync("replacement", 1);
         Assert.Equal(hit.Uri, Assert.Single(page.Items).Url);
@@ -108,7 +106,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
     public async Task CancellationDoesNotReportSuccess()
     {
         Skip.If(_key == null, "Set MEILI_MASTER_KEY to run against a real Meilisearch instance.");
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.UpsertAsync(Doc(0), cts.Token));
     }

@@ -1,4 +1,3 @@
-using Lantern.Core.Administration;
 using Lantern.Core.Crawling;
 using Lantern.Core.Jobs;
 using Microsoft.Extensions.Hosting;
@@ -33,29 +32,20 @@ public sealed class CrawlerSchedulerService(
 
         int consecutiveFailures = 0;
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
+        while(!stoppingToken.IsCancellationRequested) {
+            try {
                 await CheckSchedulesAsync(stoppingToken);
                 consecutiveFailures = 0;
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
+            } catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
                 break;
-            }
-            catch (Exception ex) when (IsPermanentError(ex))
-            {
+            } catch(Exception ex) when(IsPermanentError(ex)) {
                 logger.LogCritical(ex, "Scheduler encountered a permanent error and will stop. Fix the application before restarting.");
                 _status = new(SchedulerState.Faulted, ex.Message, DateTimeOffset.UtcNow);
                 return;
-            }
-            catch (Exception ex)
-            {
+            } catch(Exception ex) {
                 consecutiveFailures++;
 
-                if (consecutiveFailures >= MaxConsecutiveFailures)
-                {
+                if(consecutiveFailures >= MaxConsecutiveFailures) {
                     logger.LogCritical(ex, "Scheduler failed {Count} consecutive times and will stop", consecutiveFailures);
                     _status = new(SchedulerState.Faulted, ex.Message, DateTimeOffset.UtcNow);
                     return;
@@ -67,13 +57,11 @@ public sealed class CrawlerSchedulerService(
                 logger.LogWarning(ex, "Scheduler check failed (attempt {Attempt}/{Max}); retrying in {Seconds}s",
                     consecutiveFailures, MaxConsecutiveFailures, delay.TotalSeconds);
 
-                try { await Task.Delay(delay, stoppingToken); }
-                catch (OperationCanceledException) { break; }
+                try { await Task.Delay(delay, stoppingToken); } catch(OperationCanceledException) { break; }
                 continue;
             }
 
-            try { await Task.Delay(TimeSpan.FromSeconds(options.Value.DispatcherPollIntervalSeconds), stoppingToken); }
-            catch (OperationCanceledException) { break; }
+            try { await Task.Delay(TimeSpan.FromSeconds(options.Value.DispatcherPollIntervalSeconds), stoppingToken); } catch(OperationCanceledException) { break; }
         }
 
         _status = new(SchedulerState.Stopped, null, null);
@@ -82,10 +70,9 @@ public sealed class CrawlerSchedulerService(
 
     private static bool IsPermanentError(Exception ex)
     {
-        if (ex is InvalidOperationException)
-        {
+        if(ex is InvalidOperationException) {
             string msg = ex.Message;
-            if (msg.Contains("could not be translated", StringComparison.OrdinalIgnoreCase)
+            if(msg.Contains("could not be translated", StringComparison.OrdinalIgnoreCase)
                 || msg.Contains("translation", StringComparison.OrdinalIgnoreCase)
                 || msg.Contains("LINQ", StringComparison.OrdinalIgnoreCase))
                 return true;
@@ -97,22 +84,16 @@ public sealed class CrawlerSchedulerService(
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         IReadOnlyList<CrawlerSchedule> due = await schedules.GetDueSchedulesAsync(now, ct);
-        if (due.Count == 0) return;
+        if(due.Count == 0) return;
 
         logger.LogInformation("Scheduler: {Count} schedule(s) due", due.Count);
 
-        foreach (CrawlerSchedule schedule in due)
-        {
-            try
-            {
+        foreach(CrawlerSchedule schedule in due) {
+            try {
                 await ProcessDueScheduleAsync(schedule, now, ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
+            } catch(OperationCanceledException) when(ct.IsCancellationRequested) {
                 throw;
-            }
-            catch (Exception ex)
-            {
+            } catch(Exception ex) {
                 logger.LogError(ex, "Failed to process schedule for crawler {CrawlerId}", schedule.CrawlerId);
             }
         }
@@ -127,8 +108,7 @@ public sealed class CrawlerSchedulerService(
         await schedules.UpdateLastTriggeredAsync(schedule.CrawlerId, now, nextRun, ct);
 
         string? snapshot = await GetLatestSnapshotAsync(schedule.CrawlerId, ct);
-        if (snapshot == null)
-        {
+        if(snapshot == null) {
             logger.LogWarning("Scheduler: no configuration snapshot found for crawler {CrawlerId}; skipping", schedule.CrawlerId);
             return;
         }
@@ -136,11 +116,9 @@ public sealed class CrawlerSchedulerService(
         string crawlerType = CrawlerJobService.DetectCrawlerType(snapshot);
         bool created;
 
-        if (crawlerType == "web")
-        {
+        if(crawlerType == "web") {
             WebCrawlerConfiguration? webConfig = CrawlerJobService.ParseWebSnapshot(snapshot);
-            if (webConfig == null)
-            {
+            if(webConfig == null) {
                 logger.LogWarning("Scheduler: could not parse web configuration for crawler {CrawlerId}; skipping", schedule.CrawlerId);
                 return;
             }
@@ -150,12 +128,9 @@ public sealed class CrawlerSchedulerService(
                 webConfig,
                 schedule.NextRunAt ?? now,
                 ct);
-        }
-        else
-        {
+        } else {
             FileCrawlerConfiguration? config = CrawlerJobService.ParseSnapshot(snapshot);
-            if (config == null)
-            {
+            if(config == null) {
                 logger.LogWarning("Scheduler: could not parse configuration for crawler {CrawlerId}; skipping", schedule.CrawlerId);
                 return;
             }
@@ -167,7 +142,7 @@ public sealed class CrawlerSchedulerService(
                 ct);
         }
 
-        if (created) dispatcher.SignalNewJob();
+        if(created) dispatcher.SignalNewJob();
     }
 
     private async Task<string?> GetLatestSnapshotAsync(Guid crawlerId, CancellationToken ct)

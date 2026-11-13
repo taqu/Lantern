@@ -21,8 +21,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<ApplicationSetting> settings = modelBuilder.Entity<ApplicationSetting>();
-        settings.ToTable("ApplicationSettings", t =>
-        {
+        settings.ToTable("ApplicationSettings", t => {
             t.HasCheckConstraint("CK_Settings_Singleton", "Id = 1");
             t.HasCheckConstraint("CK_Settings_Name", "length(trim(DisplayName)) BETWEEN 1 AND 80");
         });
@@ -31,8 +30,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
         settings.Property(x => x.DisplayName).IsRequired().HasMaxLength(80);
 
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CrawlerDefinition> crawler = modelBuilder.Entity<CrawlerDefinition>();
-        crawler.ToTable("CrawlerDefinitions", t =>
-        {
+        crawler.ToTable("CrawlerDefinitions", t => {
             t.HasCheckConstraint("CK_Crawler_Type", "CrawlerType IN ('file', 'web')");
             t.HasCheckConstraint("CK_Crawler_Name", "length(trim(Name)) BETWEEN 1 AND 120");
         });
@@ -60,8 +58,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
         fileState.HasIndex(x => new { x.CrawlerId, x.LastSeenScanId });
 
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<FileCrawlerProfileRecord> profile = modelBuilder.Entity<FileCrawlerProfileRecord>();
-        profile.ToTable("FileCrawlerProfiles", t =>
-        {
+        profile.ToTable("FileCrawlerProfiles", t => {
             t.HasCheckConstraint("CK_FileCrawlerProfile_MaxFileSizeMB", "MaxFileSizeMB BETWEEN 1 AND 10000");
             t.HasCheckConstraint("CK_FileCrawlerProfile_MaxConcurrentFiles", "MaxConcurrentFiles BETWEEN 1 AND 32");
             t.HasCheckConstraint("CK_FileCrawlerProfile_RootPath", "length(trim(RootPath)) > 0");
@@ -71,8 +68,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
         profile.Property(x => x.RootPath).IsRequired();
 
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CrawlerJobRecord> job = modelBuilder.Entity<CrawlerJobRecord>();
-        job.ToTable("CrawlerJobs", t =>
-        {
+        job.ToTable("CrawlerJobs", t => {
             t.HasCheckConstraint("CK_Job_Status", "Status IN ('Pending','Running','Completed','Failed','Canceled')");
             t.HasCheckConstraint("CK_Job_Trigger", "Trigger IN ('Manual','Scheduled','Retry')");
             t.HasCheckConstraint("CK_Job_AttemptNumber", "AttemptNumber >= 1");
@@ -103,8 +99,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
         evt.HasIndex(x => x.OccurredAt);
 
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<WebCrawlerProfileRecord> webProfile = modelBuilder.Entity<WebCrawlerProfileRecord>();
-        webProfile.ToTable("WebCrawlerProfiles", t =>
-        {
+        webProfile.ToTable("WebCrawlerProfiles", t => {
             t.HasCheckConstraint("CK_WebProfile_MaximumDepth", "MaximumDepth BETWEEN 1 AND 100");
             t.HasCheckConstraint("CK_WebProfile_MaximumPages", "MaximumPages BETWEEN 1 AND 1000000");
             t.HasCheckConstraint("CK_WebProfile_MaximumConcurrentRequests", "MaximumConcurrentRequests BETWEEN 1 AND 16");
@@ -123,8 +118,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
         urlState.HasIndex(x => new { x.CrawlerId, x.LastSeenScanId });
 
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<SearchCategoryRecord> category = modelBuilder.Entity<SearchCategoryRecord>();
-        category.ToTable("SearchCategories", t =>
-        {
+        category.ToTable("SearchCategories", t => {
             t.HasCheckConstraint("CK_Category_Key", "length(trim(Key)) BETWEEN 1 AND 60");
             t.HasCheckConstraint("CK_Category_Name", "length(trim(Name)) BETWEEN 1 AND 80");
         });
@@ -157,22 +151,21 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
 
     private static void ValidateFileCrawlerProfile(FileCrawlerProfileRecord fp)
     {
-        if (string.IsNullOrWhiteSpace(fp.RootPath))
+        if(string.IsNullOrWhiteSpace(fp.RootPath))
             throw new System.ComponentModel.DataAnnotations.ValidationException("Root path is required.");
-        if (fp.MaxFileSizeMB is < 1 or > 10000)
+        if(fp.MaxFileSizeMB is < 1 or > 10000)
             throw new System.ComponentModel.DataAnnotations.ValidationException("MaxFileSizeMB must be between 1 and 10000.");
-        if (fp.MaxConcurrentFiles is < 1 or > 32)
+        if(fp.MaxConcurrentFiles is < 1 or > 32)
             throw new System.ComponentModel.DataAnnotations.ValidationException("MaxConcurrentFiles must be between 1 and 32.");
     }
 
     private void ValidateChanges()
     {
-        foreach (Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry? entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
-        {
-            if (entry.Entity is ApplicationSetting settings) settings.Validate();
-            if (entry.Entity is CrawlerDefinition crawler) crawler.Validate();
-            if (entry.Entity is FileCrawlerProfileRecord fp) ValidateFileCrawlerProfile(fp);
-            if (entry.Entity is SearchCategoryRecord cat) cat.ToDomain().Validate();
+        foreach(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry? entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified)) {
+            if(entry.Entity is ApplicationSetting settings) settings.Validate();
+            if(entry.Entity is CrawlerDefinition crawler) crawler.Validate();
+            if(entry.Entity is FileCrawlerProfileRecord fp) ValidateFileCrawlerProfile(fp);
+            if(entry.Entity is SearchCategoryRecord cat) cat.ToDomain().Validate();
         }
     }
 }

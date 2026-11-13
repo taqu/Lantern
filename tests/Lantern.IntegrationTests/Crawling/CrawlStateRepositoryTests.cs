@@ -19,8 +19,7 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
         Directory.CreateDirectory(_dir);
         _services = new ServiceCollection()
             .AddDbContextFactory<LanternDbContext>(o =>
-                o.UseSqlite(new SqliteConnectionStringBuilder
-                {
+                o.UseSqlite(new SqliteConnectionStringBuilder {
                     DataSource = Path.Combine(_dir, "test.db"),
                     Pooling = false
                 }.ToString()))
@@ -40,10 +39,9 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task SaveAndFindRoundTrip()
     {
-        var crawlerId = Guid.NewGuid();
+        Guid crawlerId = Guid.NewGuid();
         CrawlStateRepository repo = CreateRepo();
-        var state = new FileState
-        {
+        FileState state = new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc1",
             CanonicalPath = @"C:\docs\report.pdf",
@@ -64,10 +62,9 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task SaveUpdatesExistingRecord()
     {
-        var crawlerId = Guid.NewGuid();
+        Guid crawlerId = Guid.NewGuid();
         CrawlStateRepository repo = CreateRepo();
-        var state = new FileState
-        {
+        FileState state = new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc1",
             CanonicalPath = @"C:\docs\file.txt",
@@ -91,13 +88,12 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetNotSeenInScanExcludesCurrentScan()
     {
-        var crawlerId = Guid.NewGuid();
+        Guid crawlerId = Guid.NewGuid();
         CrawlStateRepository repo = CreateRepo();
-        var oldScan = Guid.NewGuid();
-        var newScan = Guid.NewGuid();
+        Guid oldScan = Guid.NewGuid();
+        Guid newScan = Guid.NewGuid();
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "old",
             CanonicalPath = @"C:\old.txt",
@@ -106,8 +102,7 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
             LastSeenScanId = oldScan,
             SyncStatus = CrawlSyncStatus.Indexed
         });
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "current",
             CanonicalPath = @"C:\current.txt",
@@ -126,13 +121,12 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetNotSeenExcludesFailedRecords()
     {
-        var crawlerId = Guid.NewGuid();
+        Guid crawlerId = Guid.NewGuid();
         CrawlStateRepository repo = CreateRepo();
-        var oldScan = Guid.NewGuid();
-        var newScan = Guid.NewGuid();
+        Guid oldScan = Guid.NewGuid();
+        Guid newScan = Guid.NewGuid();
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "failed",
             CanonicalPath = @"C:\failed.txt",
@@ -149,10 +143,9 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task DeleteRemovesRecord()
     {
-        var crawlerId = Guid.NewGuid();
+        Guid crawlerId = Guid.NewGuid();
         CrawlStateRepository repo = CreateRepo();
-        var state = new FileState
-        {
+        FileState state = new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc",
             CanonicalPath = @"C:\del.txt",
@@ -172,11 +165,10 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task StatePersistsAcrossContextInstances()
     {
-        var crawlerId = Guid.NewGuid();
+        Guid crawlerId = Guid.NewGuid();
         string path = @"C:\persist.txt";
 
-        await CreateRepo().SaveAsync(new FileState
-        {
+        await CreateRepo().SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc",
             CanonicalPath = path,
@@ -194,14 +186,13 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetNotSeenIsScopedToCrawler()
     {
-        var crawler1 = Guid.NewGuid();
-        var crawler2 = Guid.NewGuid();
+        Guid crawler1 = Guid.NewGuid();
+        Guid crawler2 = Guid.NewGuid();
         CrawlStateRepository repo = CreateRepo();
-        var oldScan = Guid.NewGuid();
-        var newScan = Guid.NewGuid();
+        Guid oldScan = Guid.NewGuid();
+        Guid newScan = Guid.NewGuid();
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawler1,
             DocumentId = "doc1",
             CanonicalPath = @"C:\a.txt",
@@ -210,8 +201,7 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
             LastSeenScanId = oldScan,
             SyncStatus = CrawlSyncStatus.Indexed
         });
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawler2,
             DocumentId = "doc2",
             CanonicalPath = @"C:\b.txt",

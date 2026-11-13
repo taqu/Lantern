@@ -19,25 +19,25 @@ public sealed class MeilisearchCredentialManagerTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir)) Directory.Delete(_dir, true);
+        if(Directory.Exists(_dir)) Directory.Delete(_dir, true);
     }
 
     [Fact]
     public async Task EnsureCredentials_NoMasterKey_LoadsAllRolesFromSecretStore()
     {
         FileSecretStore store = NewStore();
-        await store.WriteAsync("meili-search-key",   "search-value",   CancellationToken.None);
+        await store.WriteAsync("meili-search-key", "search-value", CancellationToken.None);
         await store.WriteAsync("meili-indexing-key", "indexing-value", CancellationToken.None);
-        await store.WriteAsync("meili-admin-key",    "admin-value",    CancellationToken.None);
+        await store.WriteAsync("meili-admin-key", "admin-value", CancellationToken.None);
 
         MeilisearchCredentialManager mgr = NewManager(store, masterKey: null);
 
         await mgr.EnsureCredentialsAsync(CancellationToken.None);
 
         Assert.True(mgr.IsReady);
-        Assert.Equal("search-value",   mgr.GetCredential(MeilisearchCredentialRole.Search).KeyValue);
+        Assert.Equal("search-value", mgr.GetCredential(MeilisearchCredentialRole.Search).KeyValue);
         Assert.Equal("indexing-value", mgr.GetCredential(MeilisearchCredentialRole.Indexing).KeyValue);
-        Assert.Equal("admin-value",    mgr.GetCredential(MeilisearchCredentialRole.Admin).KeyValue);
+        Assert.Equal("admin-value", mgr.GetCredential(MeilisearchCredentialRole.Admin).KeyValue);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class MeilisearchCredentialManagerTests : IDisposable
     {
         FileSecretStore store = NewStore();
         // Only two of the three required role keys are present.
-        await store.WriteAsync("meili-search-key",   "s", CancellationToken.None);
+        await store.WriteAsync("meili-search-key", "s", CancellationToken.None);
         await store.WriteAsync("meili-indexing-key", "i", CancellationToken.None);
 
         MeilisearchCredentialManager mgr = NewManager(store, masterKey: null);
@@ -67,9 +67,9 @@ public sealed class MeilisearchCredentialManagerTests : IDisposable
     public async Task EnsureCredentials_IsIdempotent()
     {
         FileSecretStore store = NewStore();
-        await store.WriteAsync("meili-search-key",   "s", CancellationToken.None);
+        await store.WriteAsync("meili-search-key", "s", CancellationToken.None);
         await store.WriteAsync("meili-indexing-key", "i", CancellationToken.None);
-        await store.WriteAsync("meili-admin-key",    "a", CancellationToken.None);
+        await store.WriteAsync("meili-admin-key", "a", CancellationToken.None);
 
         MeilisearchCredentialManager mgr = NewManager(store, masterKey: null);
         await mgr.EnsureCredentialsAsync(CancellationToken.None);

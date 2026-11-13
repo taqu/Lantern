@@ -31,7 +31,7 @@ public sealed class MeilisearchOptions
     /// </summary>
     public string ResolveApiKey()
     {
-        if (!string.IsNullOrEmpty(ApiKeyFile) && File.Exists(ApiKeyFile))
+        if(!string.IsNullOrEmpty(ApiKeyFile) && File.Exists(ApiKeyFile))
             return File.ReadAllText(ApiKeyFile).Trim();
         return Environment.GetEnvironmentVariable("MEILI_API_KEY") ?? "";
     }

@@ -26,13 +26,11 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
     public async Task SaveAsync(FileState state, CancellationToken cancellationToken = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(cancellationToken);
-        if (state.Id == 0)
-        {
+        if(state.Id == 0) {
             CrawledFileState? existing = await db.CrawledFileStates
                 .Where(e => e.CrawlerId == state.CrawlerId && e.CanonicalPath == state.CanonicalPath)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (existing != null)
-            {
+            if(existing != null) {
                 ApplyToEntity(state, existing);
                 await db.SaveChangesAsync(cancellationToken);
                 state.Id = existing.Id;
@@ -45,7 +43,7 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
             return;
         }
         CrawledFileState? tracked = await db.CrawledFileStates.FindAsync([state.Id], cancellationToken);
-        if (tracked == null) throw new InvalidOperationException($"CrawledFileState {state.Id} not found.");
+        if(tracked == null) throw new InvalidOperationException($"CrawledFileState {state.Id} not found.");
         ApplyToEntity(state, tracked);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -56,8 +54,7 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
         await db.CrawledFileStates.Where(e => e.Id == id).ExecuteDeleteAsync(cancellationToken);
     }
 
-    private static FileState ToDto(CrawledFileState e) => new()
-    {
+    private static FileState ToDto(CrawledFileState e) => new() {
         Id = e.Id,
         CrawlerId = e.CrawlerId,
         DocumentId = e.DocumentId,
@@ -70,8 +67,7 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
         LastError = e.LastError
     };
 
-    private static CrawledFileState ToEntity(FileState s) => new()
-    {
+    private static CrawledFileState ToEntity(FileState s) => new() {
         CrawlerId = s.CrawlerId,
         DocumentId = s.DocumentId,
         CanonicalPath = s.CanonicalPath,

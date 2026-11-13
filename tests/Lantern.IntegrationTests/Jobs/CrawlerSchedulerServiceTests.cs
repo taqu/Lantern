@@ -23,7 +23,7 @@ public sealed class CrawlerSchedulerServiceTests
     private static async Task WaitForFinalStateAsync(CrawlerSchedulerService svc, TimeSpan timeout)
     {
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
-        while (svc.GetStatus().State is SchedulerState.Starting or SchedulerState.Running
+        while(svc.GetStatus().State is SchedulerState.Starting or SchedulerState.Running
                && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(2);
     }
@@ -33,10 +33,10 @@ public sealed class CrawlerSchedulerServiceTests
     [Fact]
     public async Task ExecuteAsync_CancellationTransitionsToStopped()
     {
-        var repo = new FakeScheduleRepository(_ => []);
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => []);
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
 
         // Let the service run at least one cycle (transitions to Running).
@@ -51,11 +51,11 @@ public sealed class CrawlerSchedulerServiceTests
     [Fact]
     public async Task ExecuteAsync_PermanentErrorTransitionsToFaultedImmediately()
     {
-        var repo = new FakeScheduleRepository(_ => throw new InvalidOperationException(
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => throw new InvalidOperationException(
             "The LINQ expression could not be translated."));
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
         await WaitForFinalStateAsync(svc, TimeSpan.FromSeconds(5));
         await svc.StopAsync(CancellationToken.None);
@@ -67,14 +67,13 @@ public sealed class CrawlerSchedulerServiceTests
     public async Task ExecuteAsync_PermanentErrorCallsRepositoryExactlyOnce()
     {
         int callCount = 0;
-        var repo = new FakeScheduleRepository(_ =>
-        {
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => {
             Interlocked.Increment(ref callCount);
             throw new InvalidOperationException("could not be translated");
         });
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
         await WaitForFinalStateAsync(svc, TimeSpan.FromSeconds(5));
         await svc.StopAsync(CancellationToken.None);
@@ -88,14 +87,13 @@ public sealed class CrawlerSchedulerServiceTests
     public async Task ExecuteAsync_UnknownErrorExhaustsRetryAndFaults()
     {
         int callCount = 0;
-        var repo = new FakeScheduleRepository(_ =>
-        {
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => {
             Interlocked.Increment(ref callCount);
             throw new Exception("transient failure");
         });
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
         await WaitForFinalStateAsync(svc, TimeSpan.FromSeconds(5));
         await svc.StopAsync(CancellationToken.None);
@@ -109,15 +107,14 @@ public sealed class CrawlerSchedulerServiceTests
     {
         int callCount = 0;
         // Fail 4 times (below limit), then succeed.
-        var repo = new FakeScheduleRepository(_ =>
-        {
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => {
             int n = Interlocked.Increment(ref callCount);
-            if (n <= 4) throw new Exception("transient");
+            if(n <= 4) throw new Exception("transient");
             return [];
         });
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
 
         // Wait until at least 5 calls have happened (4 failures + 1 success).
@@ -133,10 +130,10 @@ public sealed class CrawlerSchedulerServiceTests
     [Fact]
     public async Task GetStatus_ReturnsRunningWhileSchedulerIsActive()
     {
-        var repo = new FakeScheduleRepository(_ => []);
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => []);
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
 
         await WaitForStateAsync(svc, s => s == SchedulerState.Running, TimeSpan.FromSeconds(2));
@@ -149,10 +146,10 @@ public sealed class CrawlerSchedulerServiceTests
     public async Task GetStatus_FaultedStatusPreservesErrorMessage()
     {
         const string errorMsg = "The LINQ expression could not be translated.";
-        var repo = new FakeScheduleRepository(_ => throw new InvalidOperationException(errorMsg));
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => throw new InvalidOperationException(errorMsg));
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
         await WaitForFinalStateAsync(svc, TimeSpan.FromSeconds(5));
         await svc.StopAsync(CancellationToken.None);
@@ -169,14 +166,13 @@ public sealed class CrawlerSchedulerServiceTests
         // An OperationCanceledException that is NOT from stoppingToken (e.g. an internal
         // per-operation timeout) must be counted as a transient failure, not silently swallowed.
         int callCount = 0;
-        var repo = new FakeScheduleRepository(_ =>
-        {
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => {
             Interlocked.Increment(ref callCount);
             throw new OperationCanceledException("operation timed out");
         });
         CrawlerSchedulerService svc = BuildService(repo);
 
-        using var cts = new CancellationTokenSource();
+        using CancellationTokenSource cts = new CancellationTokenSource();
         await svc.StartAsync(cts.Token);
         await WaitForFinalStateAsync(svc, TimeSpan.FromSeconds(5));
         await svc.StopAsync(CancellationToken.None);
@@ -190,8 +186,7 @@ public sealed class CrawlerSchedulerServiceTests
     {
         // When stoppingToken is canceled while a repository query is in progress,
         // the OperationCanceledException must propagate as expected shutdown (not error).
-        var repo = new FakeScheduleRepositoryAsync(async (_, ct) =>
-        {
+        FakeScheduleRepositoryAsync repo = new FakeScheduleRepositoryAsync(async (_, ct) => {
             await Task.Delay(Timeout.Infinite, ct);
             return [];
         });
@@ -210,8 +205,7 @@ public sealed class CrawlerSchedulerServiceTests
         // The scheduler must run multiple poll cycles without accumulating failure counts
         // or producing unexpected cancellation.
         int callCount = 0;
-        var repo = new FakeScheduleRepository(_ =>
-        {
+        FakeScheduleRepository repo = new FakeScheduleRepository(_ => {
             Interlocked.Increment(ref callCount);
             return [];
         });
@@ -230,14 +224,14 @@ public sealed class CrawlerSchedulerServiceTests
     private static async Task WaitForStateAsync(CrawlerSchedulerService svc, Func<SchedulerState, bool> predicate, TimeSpan timeout)
     {
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
-        while (!predicate(svc.GetStatus().State) && DateTimeOffset.UtcNow < deadline)
+        while(!predicate(svc.GetStatus().State) && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(2);
     }
 
     private static async Task WaitForCallCountAsync(Func<int> getCount, int target, TimeSpan timeout)
     {
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
-        while (getCount() < target && DateTimeOffset.UtcNow < deadline)
+        while(getCount() < target && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(2);
     }
 

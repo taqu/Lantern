@@ -11,8 +11,7 @@ public sealed class SearchCategoryRecord
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
-    public Lantern.Core.Administration.SearchCategory ToDomain() => new()
-    {
+    public Lantern.Core.Administration.SearchCategory ToDomain() => new() {
         Id = Id,
         Key = Key,
         Name = Name,
@@ -23,8 +22,7 @@ public sealed class SearchCategoryRecord
         UpdatedAt = UpdatedAt
     };
 
-    public static SearchCategoryRecord FromDomain(Lantern.Core.Administration.SearchCategory d) => new()
-    {
+    public static SearchCategoryRecord FromDomain(Lantern.Core.Administration.SearchCategory d) => new() {
         Id = d.Id,
         Key = d.Key,
         Name = d.Name,

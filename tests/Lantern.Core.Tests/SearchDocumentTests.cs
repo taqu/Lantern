@@ -7,8 +7,7 @@ public sealed class SearchDocumentTests
     [Fact]
     public void SearchDocument_Properties_AreSetCorrectly()
     {
-        var doc = new SearchDocument
-        {
+        SearchDocument doc = new SearchDocument {
             Id = "doc-1",
             Title = "Test Title",
             Content = "Test content for unit testing.",
@@ -25,8 +24,7 @@ public sealed class SearchDocumentTests
     [Fact]
     public void SearchDocument_SourcePath_IsOptional()
     {
-        var doc = new SearchDocument
-        {
+        SearchDocument doc = new SearchDocument {
             Id = "doc-2",
             Title = "No Path",
             Content = "Content without a source path."
@@ -38,14 +36,13 @@ public sealed class SearchDocumentTests
     [Fact]
     public void SearchResult_Properties_AreSetCorrectly()
     {
-        var hits = new List<SearchDocument>
+        List<SearchDocument> hits = new List<SearchDocument>
         {
             new() { Id = "1", Title = "Hit One", Content = "First result." },
             new() { Id = "2", Title = "Hit Two", Content = "Second result." }
         };
 
-        var result = new SearchResult
-        {
+        SearchResult result = new SearchResult {
             IndexUid = "test-index",
             Hits = hits,
             TotalHits = 2,
@@ -62,8 +59,7 @@ public sealed class SearchDocumentTests
     [Fact]
     public void SearchResult_EmptyHits_IsValid()
     {
-        var result = new SearchResult
-        {
+        SearchResult result = new SearchResult {
             IndexUid = "empty-index",
             Hits = Array.Empty<SearchDocument>(),
             TotalHits = 0,

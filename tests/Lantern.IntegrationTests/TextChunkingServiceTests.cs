@@ -1,3 +1,4 @@
+using System.Text;
 using Lantern.Core.Search;
 using Lantern.Infrastructure.Search;
 using Microsoft.Extensions.Options;
@@ -8,8 +9,7 @@ public sealed class TextChunkingServiceTests
 {
     private static TextChunkingService CreateService(int targetTokens = 512, int maxTokens = 768)
     {
-        IOptions<ChunkingOptions> options = Options.Create(new ChunkingOptions
-        {
+        IOptions<ChunkingOptions> options = Options.Create(new ChunkingOptions {
             TargetTokens = targetTokens,
             MaxTokens = maxTokens,
             OverlapTokens = 64
@@ -40,8 +40,8 @@ public sealed class TextChunkingServiceTests
     {
         TextChunkingService svc = CreateService(targetTokens: 10, maxTokens: 20);
         // Build text that exceeds target token limit
-        var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < 50; i++)
+        StringBuilder sb = new System.Text.StringBuilder();
+        for(int i = 0; i < 50; i++)
             sb.Append($"Sentence number {i}. ");
         IReadOnlyList<TextChunk> chunks = svc.Chunk(sb.ToString());
         Assert.True(chunks.Count > 1);
@@ -51,11 +51,11 @@ public sealed class TextChunkingServiceTests
     public void Chunk_ChunkIndexIsSequential()
     {
         TextChunkingService svc = CreateService(targetTokens: 5, maxTokens: 10);
-        var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < 30; i++)
+        StringBuilder sb = new System.Text.StringBuilder();
+        for(int i = 0; i < 30; i++)
             sb.AppendLine($"Paragraph {i}. Some content here.\n");
         IReadOnlyList<TextChunk> chunks = svc.Chunk(sb.ToString());
-        for (int i = 0; i < chunks.Count; i++)
+        for(int i = 0; i < chunks.Count; i++)
             Assert.Equal(i, chunks[i].ChunkIndex);
     }
 
@@ -102,8 +102,7 @@ public sealed class TextChunkingServiceTests
     {
         TextChunkingService svc = CreateService();
         IReadOnlyList<TextChunk> chunks = svc.Chunk("Some text content here.");
-        foreach (TextChunk chunk in chunks)
-        {
+        foreach(TextChunk chunk in chunks) {
             Assert.True(chunk.StartOffset >= 0);
             Assert.True(chunk.EndOffset >= chunk.StartOffset);
         }

@@ -34,8 +34,7 @@ public sealed class EmbeddingServer : BackgroundService
         string url = $"http://{_options.ListenAddress}:{_options.Port}";
         _logger.LogInformation("Starting embedding server on {Url}", url);
 
-        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
-        {
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions {
             Args = new[] { "--urls", url }
         });
         builder.Logging.ClearProviders(); // Avoid log duplication
@@ -46,12 +45,9 @@ public sealed class EmbeddingServer : BackgroundService
         app.MapGet("/health", (Delegate)HandleHealth);
         app.MapGet("/ready", (Delegate)HandleReady);
 
-        try
-        {
+        try {
             await app.RunAsync(stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
+        } catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
             _logger.LogInformation("Embedding server stopped");
         }
     }
@@ -61,47 +57,39 @@ public sealed class EmbeddingServer : BackgroundService
         context.Request.Body = new LimitedStream(context.Request.Body, MaxRequestBodyBytes);
 
         EmbedRequest? request;
-        try
-        {
+        try {
             request = await JsonSerializer.DeserializeAsync<EmbedRequest>(
                 context.Request.Body,
                 EmbedJsonContext.Default.EmbedRequest);
-        }
-        catch
-        {
+        } catch {
             return Results.BadRequest(new { error = "Invalid JSON" });
         }
 
-        if (request == null || string.IsNullOrWhiteSpace(request.Text))
+        if(request == null || string.IsNullOrWhiteSpace(request.Text))
             return Results.BadRequest(new { error = "Missing or empty 'text' field" });
 
-        if (request.Text.Length > MaxTextLength)
+        if(request.Text.Length > MaxTextLength)
             return Results.BadRequest(new { error = $"Text too long (max {MaxTextLength} characters)" });
 
-        if (!_status.IsReady)
+        if(!_status.IsReady)
             return Results.StatusCode(503);
 
-        var tcs = new TaskCompletionSource<float[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        TaskCompletionSource<float[]> tcs = new TaskCompletionSource<float[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         cts.CancelAfter(TimeSpan.FromSeconds(_options.RequestTimeoutSeconds));
 
-        var item = new EmbeddingRequestItem(request.Text, tcs, cts.Token);
+        EmbeddingRequestItem item = new EmbeddingRequestItem(request.Text, tcs, cts.Token);
         bool enqueued = await _queue.TryEnqueueAsync(item, TimeSpan.FromSeconds(5), cts.Token);
 
-        if (!enqueued)
+        if(!enqueued)
             return Results.StatusCode(503); // Queue full
 
-        try
-        {
+        try {
             float[] vector = await tcs.Task.WaitAsync(cts.Token);
             return Results.Ok(new EmbedResponse(vector));
-        }
-        catch (OperationCanceledException)
-        {
+        } catch(OperationCanceledException) {
             return Results.StatusCode(503);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             _logger.LogWarning(ex, "Embedding request failed");
             return Results.StatusCode(500);
         }
@@ -138,7 +126,7 @@ internal sealed class LimitedStream : Stream
     public override int Read(byte[] buffer, int offset, int count)
     {
         long remaining = _limit - _read;
-        if (remaining <= 0) throw new InvalidOperationException("Request body too large");
+        if(remaining <= 0) throw new InvalidOperationException("Request body too large");
         int toRead = (int)Math.Min(count, remaining);
         int n = _inner.Read(buffer, offset, toRead);
         _read += n;
@@ -148,7 +136,7 @@ internal sealed class LimitedStream : Stream
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct)
     {
         long remaining = _limit - _read;
-        if (remaining <= 0) throw new InvalidOperationException("Request body too large");
+        if(remaining <= 0) throw new InvalidOperationException("Request body too large");
         int toRead = (int)Math.Min(count, remaining);
         int n = await _inner.ReadAsync(buffer, offset, toRead, ct);
         _read += n;

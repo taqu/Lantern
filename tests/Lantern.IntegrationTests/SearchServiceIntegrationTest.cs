@@ -29,45 +29,39 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
 
     public Task InitializeAsync()
     {
-        if (_masterKey != null)
+        if(_masterKey != null)
             _rawClient = new MeilisearchClient(_host, _masterKey);
         return Task.CompletedTask;
     }
 
     public async Task DisposeAsync()
     {
-        if (_rawClient == null) return;
-        try
-        {
+        if(_rawClient == null) return;
+        try {
             TaskInfo task = await _rawClient.DeleteIndexAsync(IndexName);
             await _rawClient.WaitForTaskAsync(task.TaskUid, timeoutMs: TimeoutMs);
-        }
-        catch
-        {
+        } catch {
             // Best-effort cleanup.
         }
     }
 
     private MeilisearchSearchService CreateService()
     {
-        var options = new MeilisearchOptions { Url = _host, IndexName = IndexName };
-        var client = new MeilisearchClient(_host, _masterKey ?? "");
+        MeilisearchOptions options = new MeilisearchOptions { Url = _host, IndexName = IndexName };
+        MeilisearchClient client = new MeilisearchClient(_host, _masterKey ?? "");
         return new MeilisearchSearchService(client, options, NullLogger<MeilisearchSearchService>.Instance);
     }
 
     private async Task EnsureIndexReadyAsync(IEnumerable<object> documents)
     {
         // Drop any leftover index
-        try
-        {
+        try {
             ResourceResults<IEnumerable<Meilisearch.Index>> indexes = await _rawClient!.GetAllIndexesAsync();
-            if (indexes.Results.Any(i => i.Uid == IndexName))
-            {
+            if(indexes.Results.Any(i => i.Uid == IndexName)) {
                 TaskInfo del = await _rawClient.DeleteIndexAsync(IndexName);
                 await _rawClient.WaitForTaskAsync(del.TaskUid, timeoutMs: TimeoutMs);
             }
-        }
-        catch { }
+        } catch { }
 
         // Create fresh
         TaskInfo create = await _rawClient!.CreateIndexAsync(IndexName, "id");
@@ -132,8 +126,7 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
         Skip.If(_masterKey == null, "MEILI_MASTER_KEY not set — skipping integration test.");
 
         // Insert 15 documents all containing "platform"
-        var docs = Enumerable.Range(1, 15).Select(i => new
-        {
+        var docs = Enumerable.Range(1, 15).Select(i => new {
             id = $"p-{i:D3}",
             title = $"Document {i}",
             content = $"This is document number {i} about the platform.",
@@ -154,7 +147,7 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
         Assert.NotEmpty(page2.Items);
 
         // Ensure page 1 and page 2 have different items
-        var page1Ids = page1.Items.Select(i => i.Id).ToHashSet();
+        HashSet<string> page1Ids = page1.Items.Select(i => i.Id).ToHashSet();
         Assert.True(page2.Items.Any(i => !page1Ids.Contains(i.Id)),
             "Page 2 should contain items not present on page 1.");
     }

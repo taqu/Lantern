@@ -4,7 +4,6 @@ using Lantern.Core.Search;
 using Lantern.Infrastructure.Extraction;
 using Lantern.Infrastructure.Search;
 using Microsoft.Extensions.Options;
-using Xunit;
 
 namespace Lantern.IntegrationTests.Extraction;
 
@@ -75,7 +74,7 @@ public sealed class GeneralTextExtractionTests
     public void Detect_ShiftJis_JapaneseText_DoesNotThrow()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        var shiftJis = Encoding.GetEncoding(932);
+        Encoding shiftJis = Encoding.GetEncoding(932);
         byte[] bytes = shiftJis.GetBytes("日本語テスト"); // invalid UTF-8
         EncodingDetector.DetectionResult result = _detector.Detect(bytes);
         // Must not throw; result has an encoding name
@@ -138,8 +137,8 @@ public sealed class GeneralTextExtractionTests
     public void Classify_HighNonPrintable_IsBinary()
     {
         byte[] bytes = new byte[100];
-        for (int i = 0; i < 40; i++) bytes[i] = 0x01; // SOH control char
-        for (int i = 40; i < 100; i++) bytes[i] = 0x41; // 'A'
+        for(int i = 0; i < 40; i++) bytes[i] = 0x01; // SOH control char
+        for(int i = 40; i < 100; i++) bytes[i] = 0x41; // 'A'
         Assert.Equal(TextBinaryClassifier.Classification.Binary, TextBinaryClassifier.ClassifyBytes(bytes));
     }
 
@@ -234,8 +233,7 @@ public sealed class GeneralTextExtractionTests
         const string code = "line1\nline2\nline3\n\n\nline6\nline7\n";
         ExtractedDocument result = await _extractor.ExtractAsync(StreamInput(code, ".cs"));
 
-        Assert.All(result.Blocks, b =>
-        {
+        Assert.All(result.Blocks, b => {
             Assert.True(b.StartLine.HasValue, "StartLine should be set");
             Assert.True(b.EndLine.HasValue, "EndLine should be set");
             Assert.True(b.StartLine >= 1, "StartLine should be 1-based");
@@ -249,11 +247,11 @@ public sealed class GeneralTextExtractionTests
         const string code = "line1\nline2\n\n\nline5\nline6\n";
         ExtractedDocument extracted = await _extractor.ExtractAsync(StreamInput(code, ".py"));
 
-        if (!extracted.Blocks.Any(b => b.StartLine.HasValue)) return; // skip if no line info
+        if(!extracted.Blocks.Any(b => b.StartLine.HasValue)) return; // skip if no line info
 
         IOptions<ChunkingOptions> opts = Options.Create(new ChunkingOptions());
-        var textChunker = new TextChunkingService(opts);
-        var chunker = new StructureAwareChunker(textChunker, opts);
+        TextChunkingService textChunker = new TextChunkingService(opts);
+        StructureAwareChunker chunker = new StructureAwareChunker(textChunker, opts);
         IReadOnlyList<SearchChunk> chunks = chunker.Chunk("doc-id", "Test", "file:///test.py", ".py", "src", "file", extracted.Blocks);
 
         Assert.True(chunks.Any(c => c.StartLine.HasValue), "At least one chunk should have StartLine");
@@ -276,7 +274,7 @@ public sealed class GeneralTextExtractionTests
         byte[] bom = [0xEF, 0xBB, 0xBF];
         byte[] content = Encoding.UTF8.GetBytes("hello world\nline 2\n");
         byte[] bytes = [.. bom, .. content];
-        using var ms = new MemoryStream(bytes);
+        using MemoryStream ms = new MemoryStream(bytes);
         ExtractedDocument result = await _extractor.ExtractAsync(DocumentInput.FromStream(ms, ".txt", "test.txt"));
 
         Assert.Equal("utf-8-bom", result.Metadata.DetectedEncoding);
@@ -288,7 +286,7 @@ public sealed class GeneralTextExtractionTests
     public async Task Extract_Utf16Le_DecodesCorrectly()
     {
         byte[] bytes = [0xFF, 0xFE, .. Encoding.Unicode.GetBytes("hello world\nline 2\n")];
-        using var ms = new MemoryStream(bytes);
+        using MemoryStream ms = new MemoryStream(bytes);
         ExtractedDocument result = await _extractor.ExtractAsync(DocumentInput.FromStream(ms, ".txt", "test.txt"));
 
         Assert.Equal("utf-16-le", result.Metadata.DetectedEncoding);
@@ -300,7 +298,7 @@ public sealed class GeneralTextExtractionTests
     public async Task Extract_Utf16Be_DecodesCorrectly()
     {
         byte[] bytes = [0xFE, 0xFF, .. Encoding.BigEndianUnicode.GetBytes("hello world\nline 2\n")];
-        using var ms = new MemoryStream(bytes);
+        using MemoryStream ms = new MemoryStream(bytes);
         ExtractedDocument result = await _extractor.ExtractAsync(DocumentInput.FromStream(ms, ".txt", "test.txt"));
 
         Assert.Equal("utf-16-be", result.Metadata.DetectedEncoding);
@@ -312,7 +310,7 @@ public sealed class GeneralTextExtractionTests
     public async Task Extract_BinaryInput_ThrowsInvalidOperation()
     {
         byte[] bytes = [0x89, 0x50, 0x4E, 0x47, 0x00, 0x00, 0x00, 0x0D]; // PNG header (null bytes)
-        using var ms = new MemoryStream(bytes);
+        using MemoryStream ms = new MemoryStream(bytes);
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => _extractor.ExtractAsync(DocumentInput.FromStream(ms, ".bin")));
     }
@@ -336,7 +334,7 @@ public sealed class GeneralTextExtractionTests
     {
         byte[] original = Encoding.UTF8.GetBytes("hello\nworld\n");
         byte[] copy = (byte[])original.Clone();
-        using var ms = new MemoryStream(original);
+        using MemoryStream ms = new MemoryStream(original);
         await _extractor.ExtractAsync(DocumentInput.FromStream(ms, ".txt"));
         Assert.Equal(copy, original);
     }
@@ -375,8 +373,8 @@ public sealed class GeneralTextExtractionTests
     [InlineData(".log")]
     public void Detector_SourceExtensions_MappedToGeneralText(string ext)
     {
-        var detector = new DocumentFormatDetector();
-        var input = DocumentInput.FromFile($"file{ext}");
+        DocumentFormatDetector detector = new DocumentFormatDetector();
+        DocumentInput input = DocumentInput.FromFile($"file{ext}");
         Assert.Equal(DocFormat.GeneralText, detector.Detect(input));
     }
 
@@ -388,9 +386,9 @@ public sealed class GeneralTextExtractionTests
     [InlineData(".editorconfig")]
     public void Detector_KnownExtensionlessFilenames_MappedToGeneralText(string filename)
     {
-        var detector = new DocumentFormatDetector();
+        DocumentFormatDetector detector = new DocumentFormatDetector();
         // FromFile with just the filename — no directory, gets FileName set
-        var input = DocumentInput.FromFile(filename);
+        DocumentInput input = DocumentInput.FromFile(filename);
         Assert.Equal(DocFormat.GeneralText, detector.Detect(input));
     }
 

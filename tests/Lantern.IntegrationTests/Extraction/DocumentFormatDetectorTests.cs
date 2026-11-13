@@ -24,7 +24,7 @@ public sealed class DocumentFormatDetectorTests
     [InlineData(".xyz", DocFormat.Unknown)]
     public void Detect_ByExtension(string ext, DocFormat expected)
     {
-        var input = DocumentInput.FromFile($"file{ext}");
+        DocumentInput input = DocumentInput.FromFile($"file{ext}");
         Assert.Equal(expected, _detector.Detect(input));
     }
 
@@ -34,7 +34,7 @@ public sealed class DocumentFormatDetectorTests
     [InlineData(".DOCX", DocFormat.Docx)]
     public void Detect_CaseInsensitive(string ext, DocFormat expected)
     {
-        var input = DocumentInput.FromFile($"file{ext}");
+        DocumentInput input = DocumentInput.FromFile($"file{ext}");
         Assert.Equal(expected, _detector.Detect(input));
     }
 

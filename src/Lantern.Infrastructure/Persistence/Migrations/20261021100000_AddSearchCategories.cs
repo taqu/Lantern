@@ -1,4 +1,3 @@
-using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -13,8 +12,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "SearchCategories",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     Key = table.Column<string>(type: "TEXT", maxLength: 60, nullable: false),
@@ -25,8 +23,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_SearchCategories", x => x.Id);
                     table.CheckConstraint("CK_Category_Key", "length(trim(Key)) BETWEEN 1 AND 60");
                     table.CheckConstraint("CK_Category_Name", "length(trim(Name)) BETWEEN 1 AND 80");
@@ -34,15 +31,13 @@ namespace Lantern.Infrastructure.Persistence.Migrations
 
             migrationBuilder.CreateTable(
                 name: "CrawlerCategories",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CategoryId = table.Column<int>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawlerCategories", x => x.Id);
                 });
 

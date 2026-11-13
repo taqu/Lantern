@@ -1,3 +1,4 @@
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -41,7 +42,7 @@ public static class LanternSetup
         // Generate Meilisearch master key if absent.
         string masterKeyFile = Path.Combine(secretsDir, "meili-master-key.txt");
         string masterKey = await EnsureMasterKeyAsync(masterKeyFile, ct);
-        if (showMasterKey)
+        if(showMasterKey)
             Console.WriteLine($"Master key: {masterKey}");
 
         // Apply OS-level permissions to the secrets directory.
@@ -76,18 +77,13 @@ public static class LanternSetup
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         bool hasAdmin = await db.AdministratorAccounts.AnyAsync(ct);
 
-        if (!hasAdmin)
-        {
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-            {
-                if (Console.IsInputRedirected)
-                {
+        if(!hasAdmin) {
+            if(string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) {
+                if(Console.IsInputRedirected) {
                     Console.WriteLine("No administrator account exists. Set LANTERN_ADMIN_USERNAME and");
                     Console.WriteLine("LANTERN_ADMIN_PASSWORD environment variables and re-run setup, or");
                     Console.WriteLine("start Lantern with those variables set to provision on first run.");
-                }
-                else
-                {
+                } else {
                     Console.WriteLine();
                     Console.WriteLine("Administrator Setup");
                     Console.WriteLine("-------------------");
@@ -95,15 +91,12 @@ public static class LanternSetup
                 }
             }
 
-            if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
-            {
+            if(!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password)) {
                 var auth = app.Services.GetRequiredService<AdministratorAuthentication>();
                 await auth.ProvisionAsync(username, password, ct);
                 Console.WriteLine("Administrator account created.");
             }
-        }
-        else
-        {
+        } else {
             Console.WriteLine("Administrator account already exists — skipped.");
         }
     }
@@ -120,37 +113,30 @@ public static class LanternSetup
         Console.WriteLine($"Config file   : {(configExists ? "present" : "missing")}  ({PlatformDirectories.ProductionConfigFile})");
 
         string meiliUrl = "http://127.0.0.1:7700";
-        if (configExists)
-        {
-            try
-            {
+        if(configExists) {
+            try {
                 await using var fs = File.OpenRead(PlatformDirectories.ProductionConfigFile);
                 var doc = await JsonDocument.ParseAsync(fs, cancellationToken: ct);
-                if (doc.RootElement.TryGetProperty("Meilisearch", out var meili) &&
+                if(doc.RootElement.TryGetProperty("Meilisearch", out var meili) &&
                     meili.TryGetProperty("Url", out var urlProp))
                     meiliUrl = urlProp.GetString() ?? meiliUrl;
-            }
-            catch { }
+            } catch { }
         }
 
         bool meiliHealthy = false;
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        try {
+            using HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             HttpResponseMessage response = await http.GetAsync($"{meiliUrl}/health", ct);
             meiliHealthy = response.IsSuccessStatusCode;
-        }
-        catch { }
+        } catch { }
 
         Console.WriteLine($"Meilisearch   : {(meiliHealthy ? "healthy" : "unavailable")}  ({meiliUrl}/health)");
 
-        if (!configExists)
-        {
+        if(!configExists) {
             Console.WriteLine("Status: NOT CONFIGURED  (run 'Lantern.Web setup' to initialize)");
             return 2;
         }
-        if (!meiliHealthy)
-        {
+        if(!meiliHealthy) {
             Console.WriteLine("Status: DEGRADED  (Meilisearch not responding)");
             return 1;
         }
@@ -165,8 +151,7 @@ public static class LanternSetup
     /// </summary>
     public static async Task<int> RunAdminResetPasswordAsync(WebApplication app, CancellationToken ct = default)
     {
-        if (Console.IsInputRedirected)
-        {
+        if(Console.IsInputRedirected) {
             await Console.Error.WriteLineAsync("Error: 'admin reset-password' requires interactive input.");
             await Console.Error.WriteLineAsync("       For non-interactive use, set LANTERN_ADMIN_RESET_PASSWORD and pass --admin-reset.");
             return 1;
@@ -180,26 +165,20 @@ public static class LanternSetup
         string password = PromptPassword("New password (14–128 characters): ");
         string confirm = PromptPassword("Confirm password: ");
 
-        if (password != confirm)
-        {
+        if(password != confirm) {
             await Console.Error.WriteLineAsync("Error: passwords do not match.");
             return 1;
         }
 
-        try
-        {
+        try {
             var auth = app.Services.GetRequiredService<AdministratorAuthentication>();
             await auth.ResetPasswordAsync(password, ct);
             Console.WriteLine("Administrator password reset. Existing sessions have been invalidated.");
             return 0;
-        }
-        catch (InvalidOperationException ex)
-        {
+        } catch(InvalidOperationException ex) {
             await Console.Error.WriteLineAsync($"Error: {ex.Message}");
             return 1;
-        }
-        finally
-        {
+        } finally {
             password = string.Empty;
             confirm = string.Empty;
         }
@@ -231,10 +210,8 @@ public static class LanternSetup
                 Path.Combine(dataRoot, "backups"),
             ];
 
-        foreach (string dir in dirs)
-        {
-            if (!Directory.Exists(dir))
-            {
+        foreach(string dir in dirs) {
+            if(!Directory.Exists(dir)) {
                 Directory.CreateDirectory(dir);
                 Console.WriteLine($"  Created : {dir}");
             }
@@ -245,8 +222,7 @@ public static class LanternSetup
 
     private static async Task<string> EnsureMasterKeyAsync(string masterKeyFile, CancellationToken ct)
     {
-        if (File.Exists(masterKeyFile))
-        {
+        if(File.Exists(masterKeyFile)) {
             Console.WriteLine("  Master key: preserved (already exists)");
             return (await File.ReadAllTextAsync(masterKeyFile, ct)).Trim();
         }
@@ -261,27 +237,21 @@ public static class LanternSetup
 
     private static void ApplySecretPermissions(string secretsDir)
     {
-        try
-        {
-            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-            {
+        try {
+            if(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) {
                 // Restrict secrets directory to owner only.
                 File.SetUnixFileMode(secretsDir,
                     UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
                 // Restrict any secret files already present.
-                foreach (string file in Directory.GetFiles(secretsDir))
+                foreach(string file in Directory.GetFiles(secretsDir))
                     File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
                 Console.WriteLine("  Secrets directory permissions: 700");
-            }
-            else if (OperatingSystem.IsWindows())
-            {
+            } else if(OperatingSystem.IsWindows()) {
                 ApplyWindowsAcl(secretsDir);
             }
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Console.Error.WriteLine($"  Warning: could not restrict secrets directory permissions: {ex.Message}");
         }
     }
@@ -290,11 +260,11 @@ public static class LanternSetup
     private static void ApplyWindowsAcl(string directory)
     {
         // Restrict the secrets directory to the current user only (remove inheritance).
-        var di = new System.IO.DirectoryInfo(directory);
+        DirectoryInfo di = new System.IO.DirectoryInfo(directory);
         var acl = di.GetAccessControl();
         acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         string user = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
-        var rule = new System.Security.AccessControl.FileSystemAccessRule(
+        FileSystemAccessRule rule = new System.Security.AccessControl.FileSystemAccessRule(
             user,
             System.Security.AccessControl.FileSystemRights.FullControl,
             System.Security.AccessControl.InheritanceFlags.ContainerInherit |
@@ -310,8 +280,7 @@ public static class LanternSetup
         string configFile, string dataRoot, string secretsDir,
         string masterKeyFile, CancellationToken ct)
     {
-        if (File.Exists(configFile))
-        {
+        if(File.Exists(configFile)) {
             Console.WriteLine($"  Config: preserved ({configFile})");
             return;
         }
@@ -328,20 +297,16 @@ public static class LanternSetup
         string modelPath = Path.Combine(installRoot, "models",
             "granite-embedding-97M-multilingual-r2.gguf");
 
-        var config = new JsonObject
-        {
-            ["Meilisearch"] = new JsonObject
-            {
+        JsonObject config = new JsonObject {
+            ["Meilisearch"] = new JsonObject {
                 ["Url"] = "http://127.0.0.1:7700",
                 ["IndexName"] = "lantern-documents",
                 ["MaxDocumentsPerBatch"] = 100,
             },
-            ["SecretStore"] = new JsonObject
-            {
+            ["SecretStore"] = new JsonObject {
                 ["Directory"] = secretsDir,
             },
-            ["MeilisearchProcess"] = new JsonObject
-            {
+            ["MeilisearchProcess"] = new JsonObject {
                 ["Managed"] = true,
                 ["ExecutablePath"] = meiliExe,
                 ["DataDirectory"] = Path.Combine(dataRoot, "meilisearch"),
@@ -352,20 +317,18 @@ public static class LanternSetup
                 ["MaxRestartAttempts"] = 3,
                 ["RestartDelaySeconds"] = 5,
             },
-            ["Storage"] = new JsonObject
-            {
+            ["Storage"] = new JsonObject {
                 ["DatabasePath"] = Path.Combine(dataRoot, "database", "lantern.db"),
                 ["DataProtectionKeysPath"] = Path.Combine(dataRoot, "keys"),
             },
-            ["Embedding"] = new JsonObject
-            {
+            ["Embedding"] = new JsonObject {
                 ["Enabled"] = false,
                 ["ModelPath"] = modelPath,
             },
         };
 
         string? dir = Path.GetDirectoryName(configFile);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if(!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
         await using var stream = File.Create(configFile);
         await JsonSerializer.SerializeAsync(stream, config,
@@ -377,26 +340,23 @@ public static class LanternSetup
     private static (string username, string password) PromptAdminCredentials()
     {
         string username;
-        do
-        {
+        do {
             Console.Write("  Username (1–80 characters): ");
             username = Console.ReadLine()?.Trim() ?? "";
-        } while (string.IsNullOrEmpty(username) || username.Length > 80);
+        } while(string.IsNullOrEmpty(username) || username.Length > 80);
 
         string password;
         string confirm;
-        do
-        {
+        do {
             password = PromptPassword("  Password (14–128 characters): ");
             confirm = PromptPassword("  Confirm password: ");
-            if (password != confirm)
+            if(password != confirm)
                 Console.Error.WriteLine("  Passwords do not match — try again.");
-            else if (password.Length < 14 || password.Length > 128)
-            {
+            else if(password.Length < 14 || password.Length > 128) {
                 Console.Error.WriteLine("  Password must be 14–128 characters — try again.");
                 password = "";
             }
-        } while (password != confirm || password.Length < 14);
+        } while(password != confirm || password.Length < 14);
 
         return (username, password);
     }
@@ -404,18 +364,14 @@ public static class LanternSetup
     private static string PromptPassword(string prompt)
     {
         Console.Write(prompt);
-        var sb = new StringBuilder();
-        while (true)
-        {
+        StringBuilder sb = new StringBuilder();
+        while(true) {
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
-            if (key.Key == ConsoleKey.Enter) { Console.WriteLine(); break; }
-            if (key.Key == ConsoleKey.Backspace && sb.Length > 0)
-            {
+            if(key.Key == ConsoleKey.Enter) { Console.WriteLine(); break; }
+            if(key.Key == ConsoleKey.Backspace && sb.Length > 0) {
                 sb.Remove(sb.Length - 1, 1);
                 Console.Write("\b \b");
-            }
-            else if (key.Key != ConsoleKey.Backspace)
-            {
+            } else if(key.Key != ConsoleKey.Backspace) {
                 sb.Append(key.KeyChar);
                 Console.Write('*');
             }
@@ -425,8 +381,8 @@ public static class LanternSetup
 
     private static string? GetArg(string[] args, string name)
     {
-        for (int i = 0; i < args.Length - 1; i++)
-            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+        for(int i = 0; i < args.Length - 1; i++)
+            if(string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
                 return args[i + 1];
         return null;
     }

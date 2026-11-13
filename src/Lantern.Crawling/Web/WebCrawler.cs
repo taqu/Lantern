@@ -30,38 +30,34 @@ public sealed class WebCrawler(
         config.Validate();
 
         Guid scanId = Guid.NewGuid();
-        var validator = new CrawlBoundaryValidator();
-        var limiter = new HostRateLimiter(config.RequestDelayMilliseconds, config.MaximumConcurrentRequests);
-        var synchronizer = new WebContentSynchronizer(processingService, documentIndexing, chunkIndexing, urlStates, categoryResolver, loggerFactory.CreateLogger<WebContentSynchronizer>());
-        var reconciler = new WebDeletionReconciler(urlStates, documentIndexing, chunkIndexing, loggerFactory.CreateLogger<WebDeletionReconciler>());
-        var counters = new CrawlCounters();
+        CrawlBoundaryValidator validator = new CrawlBoundaryValidator();
+        HostRateLimiter limiter = new HostRateLimiter(config.RequestDelayMilliseconds, config.MaximumConcurrentRequests);
+        WebContentSynchronizer synchronizer = new WebContentSynchronizer(processingService, documentIndexing, chunkIndexing, urlStates, categoryResolver, loggerFactory.CreateLogger<WebContentSynchronizer>());
+        WebDeletionReconciler reconciler = new WebDeletionReconciler(urlStates, documentIndexing, chunkIndexing, loggerFactory.CreateLogger<WebDeletionReconciler>());
+        CrawlCounters counters = new CrawlCounters();
 
-        using var fetcher = new HttpFetcher(config, _options, validator, _logger);
+        using HttpFetcher fetcher = new HttpFetcher(config, _options, validator, _logger);
         RobotsPolicy? robots = config.RespectRobotsTxt
             ? new RobotsPolicy(_options.UserAgent, _logger)
             : null;
 
         // BFS frontier and deduplication
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var frontier = new Queue<DiscoveredUrl>();
+        HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Queue<DiscoveredUrl> frontier = new Queue<DiscoveredUrl>();
         bool pageLimitReached = false;
         bool canceled = false;
 
         // Seed the frontier
-        foreach (string startUrl in config.StartUrls)
-        {
+        foreach(string startUrl in config.StartUrls) {
             string? norm = UrlNormalizer.TryNormalize(startUrl);
-            if (norm != null && validator.IsUrlInScope(norm, config) && seen.Add(norm))
-            {
+            if(norm != null && validator.IsUrlInScope(norm, config) && seen.Add(norm)) {
                 frontier.Enqueue(new DiscoveredUrl(norm, 0));
                 counters.Discovered++;
             }
         }
 
-        while (frontier.Count > 0 && !ct.IsCancellationRequested)
-        {
-            if (counters.Fetched >= config.MaximumPages)
-            {
+        while(frontier.Count > 0 && !ct.IsCancellationRequested) {
+            if(counters.Fetched >= config.MaximumPages) {
                 pageLimitReached = true;
                 _logger.LogInformation("Page limit of {Limit} reached", config.MaximumPages);
                 break;
@@ -70,34 +66,25 @@ public sealed class WebCrawler(
             DiscoveredUrl current = frontier.Dequeue();
             counters.Fetched++;
 
-            try
-            {
+            try {
                 await ProcessUrlAsync(current, config, fetcher, robots, validator, limiter,
                     synchronizer, reconciler, frontier, seen, scanId, counters, ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
+            } catch(OperationCanceledException) when(ct.IsCancellationRequested) {
                 canceled = true;
                 break;
-            }
-            catch (Exception ex)
-            {
+            } catch(Exception ex) {
                 _logger.LogError(ex, "Unhandled error processing {Url}", current.CanonicalUrl);
                 counters.Failed++;
                 counters.Errors.Add($"{current.CanonicalUrl}: {ex.Message}");
             }
         }
 
-        if (ct.IsCancellationRequested) canceled = true;
+        if(ct.IsCancellationRequested) canceled = true;
 
         // Deletion reconciliation — only when scan completed without limits or cancellation
-        if (!canceled && !pageLimitReached)
-        {
-            try { counters.Deleted = await reconciler.ReconcileAsync(config.CrawlerId, scanId, ct); }
-            catch (Exception ex) { _logger.LogError(ex, "Deletion reconciliation failed"); }
-        }
-        else
-        {
+        if(!canceled && !pageLimitReached) {
+            try { counters.Deleted = await reconciler.ReconcileAsync(config.CrawlerId, scanId, ct); } catch(Exception ex) { _logger.LogError(ex, "Deletion reconciliation failed"); }
+        } else {
             _logger.LogInformation("Skipping deletion reconciliation: canceled={C}, limitReached={P}", canceled, pageLimitReached);
         }
 
@@ -107,8 +94,7 @@ public sealed class WebCrawler(
             : counters.Failed > 0 ? CrawlStatus.CompletedWithErrors
             : CrawlStatus.Completed;
 
-        return new FileCrawlResult
-        {
+        return new FileCrawlResult {
             DiscoveredFiles = (int)counters.Discovered,
             ProcessedFiles = (int)counters.Fetched,
             IndexedFiles = (int)counters.Indexed,
@@ -141,8 +127,7 @@ public sealed class WebCrawler(
         _logger.LogDebug("Processing {Url} (depth={Depth})", url, current.Depth);
 
         // robots.txt check
-        if (robots != null && !await robots.IsAllowedAsync(url, fetcher.HttpClient, ct))
-        {
+        if(robots != null && !await robots.IsAllowedAsync(url, fetcher.HttpClient, ct)) {
             _logger.LogDebug("robots.txt disallowed {Url}", url);
             counters.Skipped++;
             return;
@@ -161,25 +146,22 @@ public sealed class WebCrawler(
         int redirectCount = 0;
         FetchResult result;
 
-        while (true)
-        {
+        while(true) {
             result = await fetcher.FetchAsync(fetchUrl, etag, lastModified, ct);
 
-            if (result.Status != FetchStatus.Redirect || !config.FollowRedirects) break;
-            if (redirectCount >= _options.MaximumRedirects)
-            {
+            if(result.Status != FetchStatus.Redirect || !config.FollowRedirects) break;
+            if(redirectCount >= _options.MaximumRedirects) {
                 _logger.LogWarning("Redirect limit exceeded for {Url}", url);
                 counters.Skipped++;
                 return;
             }
 
             string? redirectTarget = result.RedirectUrl;
-            if (string.IsNullOrEmpty(redirectTarget)) { counters.Skipped++; return; }
+            if(string.IsNullOrEmpty(redirectTarget)) { counters.Skipped++; return; }
 
             // Normalize and validate redirect target
             string? normRedirect = UrlNormalizer.TryNormalize(redirectTarget, fetchUrl);
-            if (normRedirect == null || !validator.IsUrlInScope(normRedirect, config))
-            {
+            if(normRedirect == null || !validator.IsUrlInScope(normRedirect, config)) {
                 _logger.LogDebug("Redirect to out-of-scope URL from {Url}: {Target}", url, redirectTarget);
                 counters.Skipped++;
                 return;
@@ -189,66 +171,62 @@ public sealed class WebCrawler(
             redirectCount++;
         }
 
-        switch (result.Status)
-        {
-            case FetchStatus.NotModified:
-                await synchronizer.MarkNotModifiedAsync(url, config.CrawlerId, scanId, ct);
-                counters.Unchanged++;
-                return;
+        switch(result.Status) {
+        case FetchStatus.NotModified:
+            await synchronizer.MarkNotModifiedAsync(url, config.CrawlerId, scanId, ct);
+            counters.Unchanged++;
+            return;
 
-            case FetchStatus.NotFound:
-            case FetchStatus.Gone:
-                reconciler.MarkGone(url);
-                if (existing != null)
-                {
-                    existing.LastSeenScanId = scanId;
-                    existing.LastHttpStatus = result.HttpStatusCode;
-                    existing.SyncStatus = UrlSyncStatus.NotFound;
-                    existing.LastFetchedAt = DateTimeOffset.UtcNow;
-                    await urlStates.SaveAsync(existing, ct);
-                }
-                return;
+        case FetchStatus.NotFound:
+        case FetchStatus.Gone:
+            reconciler.MarkGone(url);
+            if(existing != null) {
+                existing.LastSeenScanId = scanId;
+                existing.LastHttpStatus = result.HttpStatusCode;
+                existing.SyncStatus = UrlSyncStatus.NotFound;
+                existing.LastFetchedAt = DateTimeOffset.UtcNow;
+                await urlStates.SaveAsync(existing, ct);
+            }
+            return;
 
-            case FetchStatus.SsrfBlocked:
-                _logger.LogWarning("SSRF blocked {Url}: {Reason}", url, result.ErrorMessage);
-                counters.Skipped++;
-                return;
+        case FetchStatus.SsrfBlocked:
+            _logger.LogWarning("SSRF blocked {Url}: {Reason}", url, result.ErrorMessage);
+            counters.Skipped++;
+            return;
 
-            case FetchStatus.TooLarge:
-                _logger.LogWarning("Response too large for {Url}", url);
-                counters.Skipped++;
-                return;
+        case FetchStatus.TooLarge:
+            _logger.LogWarning("Response too large for {Url}", url);
+            counters.Skipped++;
+            return;
 
-            case FetchStatus.TooManyRequests:
-                _logger.LogWarning("HTTP 429 for {Url}", url);
-                counters.Skipped++;
-                return;
+        case FetchStatus.TooManyRequests:
+            _logger.LogWarning("HTTP 429 for {Url}", url);
+            counters.Skipped++;
+            return;
 
-            case FetchStatus.NetworkError:
-                _logger.LogWarning("Network error for {Url}: {Msg}", url, result.ErrorMessage);
-                counters.Failed++;
-                counters.Errors.Add($"{url}: {result.ErrorMessage}");
-                return;
+        case FetchStatus.NetworkError:
+            _logger.LogWarning("Network error for {Url}: {Msg}", url, result.ErrorMessage);
+            counters.Failed++;
+            counters.Errors.Add($"{url}: {result.ErrorMessage}");
+            return;
 
-            case FetchStatus.Ok when result.Body != null:
-                break;
+        case FetchStatus.Ok when result.Body != null:
+            break;
 
-            default:
-                counters.Skipped++;
-                return;
+        default:
+            counters.Skipped++;
+            return;
         }
 
         string contentType = result.ContentType ?? "";
         bool isHtml = IsHtml(contentType);
 
         // Discover and enqueue links from HTML
-        if (isHtml && current.Depth < config.MaximumDepth)
-        {
+        if(isHtml && current.Depth < config.MaximumDepth) {
             IReadOnlyList<string> links = LinkExtractor.ExtractLinks(result.Body!, url);
-            foreach (string link in links)
-            {
-                if (!validator.IsUrlInScope(link, config)) continue;
-                if (!seen.Add(link)) continue;
+            foreach(string link in links) {
+                if(!validator.IsUrlInScope(link, config)) continue;
+                if(!seen.Add(link)) continue;
                 frontier.Enqueue(new DiscoveredUrl(link, current.Depth + 1, url));
                 counters.Discovered++;
             }
@@ -256,22 +234,21 @@ public sealed class WebCrawler(
 
         // Decide whether to index
         bool shouldIndex = isHtml || (config.IndexLinkedDocuments && IsSupportedDocument(contentType));
-        if (!shouldIndex) { counters.Skipped++; return; }
+        if(!shouldIndex) { counters.Skipped++; return; }
 
         (WebSyncOutcome outcome, string? error) = await synchronizer.SyncAsync(
             url, result.Body!, contentType, result.ETag, result.LastModified,
             config.CrawlerId, scanId, ct);
 
-        switch (outcome)
-        {
-            case WebSyncOutcome.Indexed: counters.Indexed++; break;
-            case WebSyncOutcome.Updated: counters.Indexed++; break;
-            case WebSyncOutcome.Unchanged: counters.Unchanged++; break;
-            case WebSyncOutcome.Failed:
-                counters.Failed++;
-                if (error != null) counters.Errors.Add($"{url}: {error}");
-                break;
-            default: counters.Skipped++; break;
+        switch(outcome) {
+        case WebSyncOutcome.Indexed: counters.Indexed++; break;
+        case WebSyncOutcome.Updated: counters.Indexed++; break;
+        case WebSyncOutcome.Unchanged: counters.Unchanged++; break;
+        case WebSyncOutcome.Failed:
+            counters.Failed++;
+            if(error != null) counters.Errors.Add($"{url}: {error}");
+            break;
+        default: counters.Skipped++; break;
         }
     }
 

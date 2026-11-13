@@ -31,6 +31,24 @@ public sealed class MeilisearchClientFactory : IMeilisearchClientFactory
         _credentialManager = credentialManager;
     }
 
+    public async Task EnsureClientsAsync(CancellationToken cancellationToken)
+    {
+        lock(_gate) {
+            foreach(MeilisearchCredentialRole role in Enum.GetValues<MeilisearchCredentialRole>()) {
+                if(_clients.TryGetValue(role, out MeilisearchClient? existing)) {
+                    continue;
+                }
+
+                HttpClient http = new HttpClient(new CredentialHandler(_credentialManager, role, new HttpClientHandler())) {
+                    BaseAddress = new Uri(_options.Url),
+                };
+                MeilisearchCredential credential = _credentialManager.GetCredential(role);
+                MeilisearchClient client = new MeilisearchClient(http, credential.KeyValue);
+                _clients[role] = client;
+            }
+        }
+    }
+
     public MeilisearchClient GetSearchClient() => Get(MeilisearchCredentialRole.Search);
 
     public MeilisearchClient GetIndexingClient() => Get(MeilisearchCredentialRole.Indexing);
@@ -39,16 +57,14 @@ public sealed class MeilisearchClientFactory : IMeilisearchClientFactory
 
     private MeilisearchClient Get(MeilisearchCredentialRole role)
     {
-        lock (_gate)
-        {
-            if (_clients.TryGetValue(role, out MeilisearchClient? existing))
+        lock(_gate) {
+            if(_clients.TryGetValue(role, out MeilisearchClient? existing))
                 return existing;
 
-            var http = new HttpClient(new CredentialHandler(_credentialManager, role, new HttpClientHandler()))
-            {
+            HttpClient http = new HttpClient(new CredentialHandler(_credentialManager, role, new HttpClientHandler())) {
                 BaseAddress = new Uri(_options.Url),
             };
-            var client = new MeilisearchClient(http, "");
+            MeilisearchClient client = new MeilisearchClient(http, "");
             _clients[role] = client;
             return client;
         }

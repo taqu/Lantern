@@ -40,18 +40,15 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
     public async Task EnsureCredentialsAsync(CancellationToken cancellationToken)
     {
         await _ensureLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (_ready) return;
+        try {
+            if(_ready) return;
 
             string? masterKey = await _masterKeyAccessor.TryReadAsync(cancellationToken);
-            if (string.IsNullOrEmpty(masterKey))
-            {
+            if(string.IsNullOrEmpty(masterKey)) {
                 // No master key — try to recover role keys from the local secret store.
                 // This supports external Meilisearch instances where the operator
                 // provisioned the role keys out-of-band.
-                if (await TryLoadFromSecretStoreAsync(cancellationToken))
-                {
+                if(await TryLoadFromSecretStoreAsync(cancellationToken)) {
                     _ready = true;
                     _logger.LogInformation(
                         "Meilisearch credentials loaded from local secret store (no master key available).");
@@ -62,11 +59,10 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
                     "Run 'Lantern.Web setup' or configure MeilisearchProcess:MasterKeyFile.");
             }
 
-            var adminClient = new MeilisearchClient(_meiliOptions.Url, masterKey);
+            MeilisearchClient adminClient = new MeilisearchClient(_meiliOptions.Url, masterKey);
             IReadOnlyList<Key> existing = await ListAllKeysAsync(adminClient, cancellationToken);
 
-            foreach (RolePolicy policy in RolePolicy.All)
-            {
+            foreach(RolePolicy policy in RolePolicy.All) {
                 MeilisearchCredential credential =
                     await ReconcileRoleAsync(adminClient, existing, policy, cancellationToken);
                 _credentials[policy.Role] = credential;
@@ -77,19 +73,17 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
             _logger.LogInformation("Meilisearch credentials provisioned for all roles.");
 
             await AdviseLegacyCleanupAsync(cancellationToken);
-        }
-        finally
-        {
+        } finally {
             _ensureLock.Release();
         }
     }
 
     public MeilisearchCredential GetCredential(MeilisearchCredentialRole role)
     {
-        if (!_ready)
+        if(!_ready)
             throw new InvalidOperationException(
                 "EnsureCredentialsAsync must complete before credentials can be resolved.");
-        if (!_credentials.TryGetValue(role, out MeilisearchCredential? credential))
+        if(!_credentials.TryGetValue(role, out MeilisearchCredential? credential))
             throw new InvalidOperationException($"No credential provisioned for role {role}.");
         return credential;
     }
@@ -104,8 +98,7 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
         // either — the mission requires explicit operator intervention — but we
         // emit a one-time advisory so the file stops lingering unnoticed.
         string? legacy = await _secretStore.TryReadAsync("meili-api-key", ct);
-        if (!string.IsNullOrEmpty(legacy))
-        {
+        if(!string.IsNullOrEmpty(legacy)) {
             _logger.LogWarning(
                 "Legacy Meilisearch credential 'meili-api-key' found in the secret store. " +
                 "It is no longer used by Lantern. Remove the file manually once you have " +
@@ -115,10 +108,9 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
 
     private async Task<bool> TryLoadFromSecretStoreAsync(CancellationToken ct)
     {
-        foreach (RolePolicy policy in RolePolicy.All)
-        {
+        foreach(RolePolicy policy in RolePolicy.All) {
             string? value = await _secretStore.TryReadAsync(policy.SecretName, ct);
-            if (string.IsNullOrEmpty(value)) return false;
+            if(string.IsNullOrEmpty(value)) return false;
             _credentials[policy.Role] = new MeilisearchCredential(policy.Role, value, null, null);
         }
         return true;
@@ -127,17 +119,16 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
     private static async Task<IReadOnlyList<Key>> ListAllKeysAsync(
         MeilisearchClient client, CancellationToken ct)
     {
-        var results = new List<Key>();
+        List<Key> results = new List<Key>();
         int offset = 0;
         const int pageSize = 100;
-        while (true)
-        {
+        while(true) {
             var page = await client.GetKeysAsync(
                 new KeysQuery { Limit = pageSize, Offset = offset }, ct);
-            if (page.Results is null) break;
+            if(page.Results is null) break;
             results.AddRange(page.Results);
             int fetched = results.Count;
-            if (fetched >= page.Total || page.Results.Count() < pageSize) break;
+            if(fetched >= page.Total || page.Results.Count() < pageSize) break;
             offset += pageSize;
         }
         return results;
@@ -150,10 +141,8 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
         CancellationToken ct)
     {
         Key? existing = existingKeys.FirstOrDefault(k => k.Name == policy.Name);
-        if (existing is not null)
-        {
-            if (KeyMatchesPolicy(existing, policy))
-            {
+        if(existing is not null) {
+            if(KeyMatchesPolicy(existing, policy)) {
                 _logger.LogDebug("Reusing existing Meilisearch key for {Role}.", policy.Role);
                 return new MeilisearchCredential(
                     policy.Role,
@@ -165,12 +154,11 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
             _logger.LogWarning(
                 "Meilisearch key '{Name}' exists but permissions drifted from policy; recreating.",
                 policy.Name);
-            if (!string.IsNullOrEmpty(existing.Uid))
+            if(!string.IsNullOrEmpty(existing.Uid))
                 await adminClient.DeleteKeyAsync(existing.Uid, ct);
         }
 
-        var keyBody = new Key
-        {
+        Key keyBody = new Key {
             Name = policy.Name,
             Description = policy.Description,
             Actions = policy.Actions,
@@ -189,7 +177,7 @@ public sealed class MeilisearchCredentialManager : IMeilisearchCredentialManager
     {
         HashSet<KeyAction> expectedActions = policy.Actions.ToHashSet();
         HashSet<KeyAction> actualActions = (existing.Actions ?? []).ToHashSet();
-        if (!expectedActions.SetEquals(actualActions)) return false;
+        if(!expectedActions.SetEquals(actualActions)) return false;
 
         HashSet<string> expectedIndexes = policy.Indexes.ToHashSet(StringComparer.Ordinal);
         HashSet<string> actualIndexes = (existing.Indexes ?? []).ToHashSet(StringComparer.Ordinal);

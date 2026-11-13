@@ -18,8 +18,7 @@ public sealed class CrawlerScheduleRepositoryTests : IAsyncLifetime
         Directory.CreateDirectory(_directory);
         _services = new ServiceCollection()
             .AddDbContextFactory<LanternDbContext>(options =>
-                options.UseSqlite(new SqliteConnectionStringBuilder
-                {
+                options.UseSqlite(new SqliteConnectionStringBuilder {
                     DataSource = Path.Combine(_directory, "test.db"),
                     Pooling = false
                 }.ToString()))
@@ -38,8 +37,7 @@ public sealed class CrawlerScheduleRepositoryTests : IAsyncLifetime
 
     private static CrawlerSchedule MakeSchedule(Guid crawlerId, DateTime? nextRunUtc = null, bool enabled = true, ScheduleType type = ScheduleType.Hourly)
     {
-        return new CrawlerSchedule
-        {
+        return new CrawlerSchedule {
             CrawlerId = crawlerId,
             Enabled = enabled,
             Type = type,

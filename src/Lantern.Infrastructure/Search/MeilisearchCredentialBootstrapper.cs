@@ -12,16 +12,15 @@ namespace Lantern.Infrastructure.Search;
 /// </summary>
 public sealed class MeilisearchCredentialBootstrapper(
     IMeilisearchCredentialManager credentialManager,
+    IMeilisearchClientFactory meilisearchClientFactory,
     ILogger<MeilisearchCredentialBootstrapper> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        try
-        {
+        try {
             await credentialManager.EnsureCredentialsAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
+            await meilisearchClientFactory.EnsureClientsAsync(cancellationToken);
+        } catch(Exception ex) {
             logger.LogError(ex, "Failed to ensure Meilisearch credentials during startup.");
             throw;
         }

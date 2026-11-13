@@ -46,8 +46,7 @@ public sealed class InferenceWorker : BackgroundService
     {
         _logger.LogInformation("Inference worker starting. Model path: {ModelPath}", _modelPath);
 
-        if (!File.Exists(_modelPath))
-        {
+        if(!File.Exists(_modelPath)) {
             _logger.LogWarning("Embedding model not found at '{ModelPath}'. Embedding disabled.", _modelPath);
             _status.SetFailed($"Model file not found: {_modelPath}");
             DrainQueueWithError("Embedding model not available", stoppingToken);
@@ -55,44 +54,35 @@ public sealed class InferenceWorker : BackgroundService
         }
 
         LlamaPureClient? client = null;
-        try
-        {
+        try {
             _status.SetLoading();
             client = new LlamaPureClient(_modelPath, _options.ContextSize, _options.Threads);
             _status.SetReady();
             _logger.LogInformation("Embedding model loaded successfully. Dimensions: {Dims}", ExpectedDimensions);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             _logger.LogError(ex, "Failed to load embedding model from '{ModelPath}'", _modelPath);
             _status.SetFailed($"Model load failed: {ex.Message}");
             DrainQueueWithError("Model initialization failed", stoppingToken);
             return;
         }
 
-        try
-        {
-            await foreach (EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken))
-            {
-                if (request.CancellationToken.IsCancellationRequested)
-                {
+        try {
+            await foreach(EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken)) {
+                if(request.CancellationToken.IsCancellationRequested) {
                     request.Result.TrySetCanceled(request.CancellationToken);
                     continue;
                 }
 
-                try
-                {
+                try {
                     List<float[]> embeddings = client.GetEmbedding(request.Text, overlap: 0);
-                    if (embeddings.Count == 0)
-                    {
+                    if(embeddings.Count == 0) {
                         request.Result.TrySetException(new InvalidOperationException("Empty embedding result"));
                         continue;
                     }
 
                     float[] vector = embeddings[0]; // Use first chunk's embedding
 
-                    if (vector.Length != ExpectedDimensions)
-                    {
+                    if(vector.Length != ExpectedDimensions) {
                         request.Result.TrySetException(new InvalidOperationException(
                             $"Expected {ExpectedDimensions} dimensions, got {vector.Length}"));
                         continue;
@@ -100,36 +90,26 @@ public sealed class InferenceWorker : BackgroundService
 
                     // Validate finite values
                     bool hasNonFinite = false;
-                    foreach (float f in vector)
-                    {
-                        if (!float.IsFinite(f)) { hasNonFinite = true; break; }
+                    foreach(float f in vector) {
+                        if(!float.IsFinite(f)) { hasNonFinite = true; break; }
                     }
-                    if (hasNonFinite)
-                    {
+                    if(hasNonFinite) {
                         request.Result.TrySetException(new InvalidOperationException("Embedding contains non-finite values"));
                         continue;
                     }
 
                     request.Result.TrySetResult(vector);
-                }
-                catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
-                {
+                } catch(OperationCanceledException) when(request.CancellationToken.IsCancellationRequested) {
                     request.Result.TrySetCanceled(request.CancellationToken);
-                }
-                catch (Exception ex)
-                {
+                } catch(Exception ex) {
                     _logger.LogError(ex, "Inference failed for request");
                     request.Result.TrySetException(ex);
                     // Continue processing - don't terminate the worker on a single failure
                 }
             }
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
+        } catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
             _logger.LogInformation("Inference worker stopping");
-        }
-        finally
-        {
+        } finally {
             _status.SetStopping();
             client?.Dispose();
         }
@@ -137,16 +117,12 @@ public sealed class InferenceWorker : BackgroundService
 
     private void DrainQueueWithError(string message, CancellationToken stoppingToken)
     {
-        Task.Run(async () =>
-        {
-            try
-            {
-                await foreach (EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken))
-                {
+        Task.Run(async () => {
+            try {
+                await foreach(EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken)) {
                     request.Result.TrySetException(new InvalidOperationException(message));
                 }
-            }
-            catch (OperationCanceledException) { }
+            } catch(OperationCanceledException) { }
         }, CancellationToken.None);
     }
 }

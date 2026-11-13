@@ -17,7 +17,7 @@ public sealed class ApplicationSettingsService(IDbContextFactory<LanternDbContex
         settings.Validate();
         await using LanternDbContext db = await factory.CreateDbContextAsync(cancellationToken);
         ApplicationSetting? current = await db.ApplicationSettings.SingleOrDefaultAsync(cancellationToken);
-        if (current == null) db.ApplicationSettings.Add(new ApplicationSetting { DisplayName = settings.DisplayName });
+        if(current == null) db.ApplicationSettings.Add(new ApplicationSetting { DisplayName = settings.DisplayName });
         else current.DisplayName = settings.DisplayName;
         await db.SaveChangesAsync(cancellationToken);
     }

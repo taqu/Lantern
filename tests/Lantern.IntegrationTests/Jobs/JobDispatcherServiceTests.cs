@@ -39,14 +39,14 @@ public sealed class JobDispatcherServiceTests
     public async Task Dispatcher_MultiplePollCycles_DoNotThrow()
     {
         int queryCount = 0;
-        var repo = new FakeJobRepository(onGetPending: () => Interlocked.Increment(ref queryCount));
+        FakeJobRepository repo = new FakeJobRepository(onGetPending: () => Interlocked.Increment(ref queryCount));
         using JobDispatcherService dispatcher = BuildDispatcher(repo);
 
         await dispatcher.StartAsync(CancellationToken.None);
 
         // Wait for several poll cycles to complete.
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(5);
-        while (queryCount < 3 && DateTimeOffset.UtcNow < deadline)
+        while(queryCount < 3 && DateTimeOffset.UtcNow < deadline)
             await Task.Delay(5);
 
         await dispatcher.StopAsync(CancellationToken.None);
@@ -64,7 +64,7 @@ public sealed class JobDispatcherServiceTests
         await dispatcher.StartAsync(CancellationToken.None);
 
         // Sending many signals must not throw and must not overflow internal state.
-        for (int i = 0; i < 20; i++)
+        for(int i = 0; i < 20; i++)
             dispatcher.SignalNewJob();
 
         await dispatcher.StopAsync(CancellationToken.None);

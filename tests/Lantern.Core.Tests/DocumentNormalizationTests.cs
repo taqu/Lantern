@@ -31,8 +31,7 @@ public sealed class DocumentNormalizationTests
     [Fact]
     public void NormalizePreservesTextAndDisplayPathAndConvertsMetadata()
     {
-        SearchDocument doc = DocumentNormalizer.Normalize(new SearchDocument
-        {
+        SearchDocument doc = DocumentNormalizer.Normalize(new SearchDocument {
             SourceId = "files",
             SourceType = "file",
             Path = @"C:\Docs\日本語.TXT",
@@ -68,9 +67,7 @@ public sealed class DocumentNormalizationTests
     public void RejectsInvalidMetadataAndWrongId()
     {
         Assert.Throws<ArgumentException>(() => DocumentNormalizer.Normalize(new SearchDocument { Title = " ", Content = "" }));
-        Assert.Throws<ArgumentException>(() => DocumentNormalizer.Normalize(new SearchDocument
-        { SourceId = "web", SourceType = "web", Uri = "https://example.com", Title = "title", Content = "", Id = "wrong" }));
-        Assert.Throws<ArgumentException>(() => DocumentNormalizer.Normalize(new SearchDocument
-        { SourceId = "web", SourceType = "web", Uri = "https://example.com", Title = "title", Content = "", Size = -1 }));
+        Assert.Throws<ArgumentException>(() => DocumentNormalizer.Normalize(new SearchDocument { SourceId = "web", SourceType = "web", Uri = "https://example.com", Title = "title", Content = "", Id = "wrong" }));
+        Assert.Throws<ArgumentException>(() => DocumentNormalizer.Normalize(new SearchDocument { SourceId = "web", SourceType = "web", Uri = "https://example.com", Title = "title", Content = "", Size = -1 }));
     }
 }

@@ -24,11 +24,11 @@ public sealed class DocumentExtractionDispatcher
     public async Task<ExtractedDocument> ExtractAsync(DocumentInput input, CancellationToken cancellationToken = default)
     {
         DocFormat format = _detector.Detect(input);
-        if (format == DocFormat.Unknown || !DocumentFormatDetector.IsSupported(format))
+        if(format == DocFormat.Unknown || !DocumentFormatDetector.IsSupported(format))
             throw new NotSupportedException($"Unsupported format: {input.Extension}");
 
         IDocumentExtractor? extractor = _extractors.FirstOrDefault(e => e.CanExtract(format));
-        if (extractor == null)
+        if(extractor == null)
             throw new NotSupportedException($"No extractor registered for format: {format}");
 
         _logger.LogDebug("Extracting {Format} from {FileName}", format, input.FileName ?? input.FilePath);

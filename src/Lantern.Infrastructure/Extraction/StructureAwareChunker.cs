@@ -27,16 +27,15 @@ public sealed class StructureAwareChunker
         ChunkingOptions? options = null)
     {
         ChunkingOptions opts = options ?? _defaultOptions;
-        if (blocks.Count == 0) return [];
+        if(blocks.Count == 0) return [];
 
-        var chunks = new List<SearchChunk>();
+        List<SearchChunk> chunks = new List<SearchChunk>();
         int chunkIndex = 0;
 
         // Group blocks so page/slide/sheet boundaries prevent merging
         List<List<ExtractedBlock>> groups = GroupBlocks(blocks);
 
-        foreach (List<ExtractedBlock> group in groups)
-        {
+        foreach(List<ExtractedBlock> group in groups) {
             List<SearchChunk> groupChunks = ChunkGroup(
                 documentId, title, uri, extension, sourceId, sourceType,
                 group, opts, ref chunkIndex);
@@ -49,29 +48,26 @@ public sealed class StructureAwareChunker
     // Group blocks so that page/slide/sheet boundaries prevent merging
     private static List<List<ExtractedBlock>> GroupBlocks(IReadOnlyList<ExtractedBlock> blocks)
     {
-        var groups = new List<List<ExtractedBlock>>();
-        var current = new List<ExtractedBlock>();
+        List<List<ExtractedBlock>> groups = new List<List<ExtractedBlock>>();
+        List<ExtractedBlock> current = new List<ExtractedBlock>();
 
-        for (int i = 0; i < blocks.Count; i++)
-        {
+        for(int i = 0; i < blocks.Count; i++) {
             ExtractedBlock block = blocks[i];
-            if (current.Count > 0)
-            {
+            if(current.Count > 0) {
                 ExtractedBlock prev = current[^1];
                 // Start new group on page/slide/sheet boundary change
                 bool newPage = block.PageNumber.HasValue && prev.PageNumber.HasValue && block.PageNumber != prev.PageNumber;
                 bool newSlide = block.SlideNumber.HasValue && prev.SlideNumber.HasValue && block.SlideNumber != prev.SlideNumber;
                 bool newSheet = block.SheetName != null && prev.SheetName != null && block.SheetName != prev.SheetName;
 
-                if (newPage || newSlide || newSheet)
-                {
+                if(newPage || newSlide || newSheet) {
                     groups.Add(current);
                     current = [];
                 }
             }
             current.Add(block);
         }
-        if (current.Count > 0) groups.Add(current);
+        if(current.Count > 0) groups.Add(current);
         return groups;
     }
 
@@ -80,7 +76,7 @@ public sealed class StructureAwareChunker
         string? sourceId, string? sourceType,
         List<ExtractedBlock> group, ChunkingOptions opts, ref int chunkIndex)
     {
-        var chunks = new List<SearchChunk>();
+        List<SearchChunk> chunks = new List<SearchChunk>();
 
         // Extract group metadata from first block
         int? pageNumber = group.FirstOrDefault()?.PageNumber;
@@ -88,7 +84,7 @@ public sealed class StructureAwareChunker
         string? sheetName = group.FirstOrDefault()?.SheetName;
         string? currentSection = null;
 
-        var buffer = new StringBuilder();
+        StringBuilder buffer = new StringBuilder();
         string? bufferSection = null;
         int bufferStart = 0;
         int? bufferStartLine = null;
@@ -100,11 +96,10 @@ public sealed class StructureAwareChunker
         void FlushBuffer()
         {
             string content = buffer.ToString().Trim();
-            if (string.IsNullOrEmpty(content)) return;
+            if(string.IsNullOrEmpty(content)) return;
 
             string chunkId = ChunkIdentity.Generate(documentId, localChunkIndex);
-            chunks.Add(new SearchChunk
-            {
+            chunks.Add(new SearchChunk {
                 Id = chunkId,
                 DocumentId = documentId,
                 SourceId = sourceId ?? "",
@@ -127,20 +122,15 @@ public sealed class StructureAwareChunker
             bufferEndLine = null;
         }
 
-        foreach (ExtractedBlock block in group)
-        {
-            if (block.Type == BlockType.Heading)
-            {
+        foreach(ExtractedBlock block in group) {
+            if(block.Type == BlockType.Heading) {
                 currentSection = block.Text;
                 // Headings are short - include inline rather than separate chunks
-                if (buffer.Length == 0)
-                {
+                if(buffer.Length == 0) {
                     buffer.Append(block.Text);
                     bufferSection = currentSection;
                     bufferStart = block.StartOffset ?? 0;
-                }
-                else
-                {
+                } else {
                     buffer.AppendLine();
                     buffer.AppendLine(block.Text);
                 }
@@ -148,31 +138,28 @@ public sealed class StructureAwareChunker
             }
 
             string blockText = block.Text;
-            if (string.IsNullOrWhiteSpace(blockText)) continue;
+            if(string.IsNullOrWhiteSpace(blockText)) continue;
 
             // Update section from block if it has one
-            if (block.SectionTitle != null) currentSection = block.SectionTitle;
+            if(block.SectionTitle != null) currentSection = block.SectionTitle;
             // Update location metadata from block
-            if (block.PageNumber.HasValue) pageNumber = block.PageNumber;
-            if (block.SlideNumber.HasValue) slideNumber = block.SlideNumber;
-            if (block.SheetName != null) sheetName = block.SheetName;
+            if(block.PageNumber.HasValue) pageNumber = block.PageNumber;
+            if(block.SlideNumber.HasValue) slideNumber = block.SlideNumber;
+            if(block.SheetName != null) sheetName = block.SheetName;
             // Track line range across buffer
-            if (block.StartLine.HasValue && bufferStartLine == null) bufferStartLine = block.StartLine;
-            if (block.EndLine.HasValue) bufferEndLine = block.EndLine;
+            if(block.StartLine.HasValue && bufferStartLine == null) bufferStartLine = block.StartLine;
+            if(block.EndLine.HasValue) bufferEndLine = block.EndLine;
 
             int blockTokens = _textChunker.CountTokens(blockText);
 
-            if (blockTokens > opts.MaxTokens)
-            {
+            if(blockTokens > opts.MaxTokens) {
                 // Flush current buffer first
                 FlushBuffer();
                 // Split oversized block using text chunker
                 IReadOnlyList<TextChunk> subChunks = _textChunker.Chunk(blockText, opts);
-                foreach (TextChunk sc in subChunks)
-                {
+                foreach(TextChunk sc in subChunks) {
                     string subId = ChunkIdentity.Generate(documentId, localChunkIndex);
-                    chunks.Add(new SearchChunk
-                    {
+                    chunks.Add(new SearchChunk {
                         Id = subId,
                         DocumentId = documentId,
                         SourceId = sourceId ?? "",
@@ -194,8 +181,7 @@ public sealed class StructureAwareChunker
             }
 
             int currentTokens = buffer.Length > 0 ? _textChunker.CountTokens(buffer.ToString()) : 0;
-            if (currentTokens + blockTokens > opts.MaxTokens && buffer.Length > 0)
-            {
+            if(currentTokens + blockTokens > opts.MaxTokens && buffer.Length > 0) {
                 FlushBuffer();
                 bufferSection = currentSection;
                 bufferStart = block.StartOffset ?? 0;
@@ -203,22 +189,19 @@ public sealed class StructureAwareChunker
                 bufferEndLine = block.EndLine;
             }
 
-            if (buffer.Length == 0)
-            {
+            if(buffer.Length == 0) {
                 bufferSection = currentSection;
                 bufferStart = block.StartOffset ?? 0;
                 bufferStartLine = block.StartLine;
                 bufferEndLine = block.EndLine;
-            }
-            else
-            {
+            } else {
                 buffer.AppendLine();
                 buffer.AppendLine();
             }
             buffer.Append(blockText);
 
             int totalTokens = _textChunker.CountTokens(buffer.ToString());
-            if (totalTokens >= opts.TargetTokens)
+            if(totalTokens >= opts.TargetTokens)
                 FlushBuffer();
         }
 

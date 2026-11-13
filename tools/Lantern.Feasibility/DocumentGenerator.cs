@@ -2,6 +2,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Presentation;
 using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Wordprocessing;
 using A = DocumentFormat.OpenXml.Drawing;
 using IOPath = System.IO.Path;
 using P = DocumentFormat.OpenXml.Presentation;
@@ -34,9 +35,8 @@ internal static class DocumentGenerator
     private static void GenerateDocx(string path)
     {
         Console.Write($"  DOCX: {IOPath.GetFileName(path)} ... ");
-        try
-        {
-            using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
+        try {
+            using WordprocessingDocument doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
             MainDocumentPart mainPart = doc.AddMainDocumentPart();
             mainPart.Document = new DocumentFormat.OpenXml.Wordprocessing.Document(
                 new DocumentFormat.OpenXml.Wordprocessing.Body(
@@ -59,9 +59,7 @@ internal static class DocumentGenerator
                 )
             );
             Console.WriteLine("PASS");
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Console.WriteLine($"FAIL — {ex.Message}");
         }
     }
@@ -69,14 +67,13 @@ internal static class DocumentGenerator
     private static void GenerateXlsx(string path)
     {
         Console.Write($"  XLSX: {IOPath.GetFileName(path)} ... ");
-        try
-        {
-            using var doc = SpreadsheetDocument.Create(path, SpreadsheetDocumentType.Workbook);
+        try {
+            using SpreadsheetDocument doc = SpreadsheetDocument.Create(path, SpreadsheetDocumentType.Workbook);
             WorkbookPart workbookPart = doc.AddWorkbookPart();
             workbookPart.Workbook = new Workbook();
 
             WorksheetPart worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
-            var sheetData = new SheetData();
+            SheetData sheetData = new SheetData();
 
             // Header row
             sheetData.Append(MakeRow(1, "ID", "Title", "Description", "Language"));
@@ -89,8 +86,7 @@ internal static class DocumentGenerator
             worksheetPart.Worksheet = new Worksheet(sheetData);
 
             Sheets sheets = workbookPart.Workbook.AppendChild(new Sheets());
-            sheets.Append(new Sheet
-            {
+            sheets.Append(new Sheet {
                 Id = workbookPart.GetIdOfPart(worksheetPart),
                 SheetId = 1,
                 Name = "TestData"
@@ -98,9 +94,7 @@ internal static class DocumentGenerator
 
             workbookPart.Workbook.Save();
             Console.WriteLine("PASS");
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Console.WriteLine($"FAIL — {ex.Message}");
         }
     }
@@ -108,9 +102,8 @@ internal static class DocumentGenerator
     private static void GeneratePptx(string path)
     {
         Console.Write($"  PPTX: {IOPath.GetFileName(path)} ... ");
-        try
-        {
-            using var prs = PresentationDocument.Create(path, PresentationDocumentType.Presentation);
+        try {
+            using PresentationDocument prs = PresentationDocument.Create(path, PresentationDocumentType.Presentation);
 
             PresentationPart presentationPart = prs.AddPresentationPart();
             presentationPart.Presentation = new P.Presentation();
@@ -125,11 +118,10 @@ internal static class DocumentGenerator
                 ("Summary", "DOCX, XLSX, and PPTX support is provided by Toxy via DocumentFormat.OpenXml."),
             };
 
-            var slideIds = new SlideIdList();
+            SlideIdList slideIds = new SlideIdList();
             uint slideIdBase = 256;
 
-            foreach ((string title, string body) in slideContents)
-            {
+            foreach((string title, string body) in slideContents) {
                 SlidePart slidePart = presentationPart.AddNewPart<SlidePart>();
                 slidePart.Slide = BuildSlide(title, body);
                 slidePart.AddPart(slideLayoutPart);
@@ -146,9 +138,7 @@ internal static class DocumentGenerator
 
             presentationPart.Presentation.Save();
             Console.WriteLine("PASS");
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Console.WriteLine($"FAIL — {ex.Message}");
         }
     }
@@ -161,12 +151,10 @@ internal static class DocumentGenerator
 
     private static DocumentFormat.OpenXml.Wordprocessing.Table MakeTable(string[][] rows)
     {
-        var table = new DocumentFormat.OpenXml.Wordprocessing.Table();
-        foreach (string[] rowData in rows)
-        {
-            var row = new DocumentFormat.OpenXml.Wordprocessing.TableRow();
-            foreach (string cellText in rowData)
-            {
+        DocumentFormat.OpenXml.Wordprocessing.Table table = new DocumentFormat.OpenXml.Wordprocessing.Table();
+        foreach(string[] rowData in rows) {
+            TableRow row = new DocumentFormat.OpenXml.Wordprocessing.TableRow();
+            foreach(string cellText in rowData) {
                 row.Append(new DocumentFormat.OpenXml.Wordprocessing.TableCell(
                     new DocumentFormat.OpenXml.Wordprocessing.Paragraph(
                         new DocumentFormat.OpenXml.Wordprocessing.Run(
@@ -181,12 +169,10 @@ internal static class DocumentGenerator
 
     private static Row MakeRow(uint rowIndex, params string[] values)
     {
-        var row = new Row { RowIndex = rowIndex };
+        Row row = new Row { RowIndex = rowIndex };
         char col = 'A';
-        foreach (string value in values)
-        {
-            row.Append(new Cell
-            {
+        foreach(string value in values) {
+            row.Append(new Cell {
                 CellReference = $"{col}{rowIndex}",
                 DataType = CellValues.InlineString,
                 InlineString = new InlineString(new DocumentFormat.OpenXml.Spreadsheet.Text(value))
@@ -211,8 +197,7 @@ internal static class DocumentGenerator
                         new ApplicationNonVisualDrawingProperties()),
                     new P.GroupShapeProperties(new A.TransformGroup()))));
         slideMasterPart.SlideMaster.AppendChild(
-            new P.ColorMap
-            {
+            new P.ColorMap {
                 Background1 = A.ColorSchemeIndexValues.Light1,
                 Text1 = A.ColorSchemeIndexValues.Dark1,
                 Background2 = A.ColorSchemeIndexValues.Light2,
@@ -255,7 +240,7 @@ internal static class DocumentGenerator
         Shape bodyShape = MakeTextShape(3U, "Content Placeholder", body,
             x: 457200, y: 1600200, cx: 8229600, cy: 3400200);
 
-        var slide = new P.Slide();
+        Slide slide = new P.Slide();
         slide.AppendChild(
             new P.CommonSlideData(
                 new P.ShapeTree(
@@ -275,12 +260,11 @@ internal static class DocumentGenerator
     {
         string[] lines = text.Split('\n');
 
-        var textBody = new P.TextBody(
+        TextBody textBody = new P.TextBody(
             new A.BodyProperties(),
             new A.ListStyle());
 
-        foreach (string line in lines)
-        {
+        foreach(string line in lines) {
             textBody.AppendChild(
                 new A.Paragraph(
                     new A.Run(
@@ -288,7 +272,7 @@ internal static class DocumentGenerator
                         new A.Text(line))));
         }
 
-        var shape = new P.Shape();
+        Shape shape = new P.Shape();
         shape.AppendChild(
             new P.NonVisualShapeProperties(
                 new P.NonVisualDrawingProperties { Id = id, Name = name },

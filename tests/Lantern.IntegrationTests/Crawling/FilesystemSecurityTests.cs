@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Lantern.Core.Crawling;
 using Lantern.Crawling.Files;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,8 +34,7 @@ public sealed class FilesystemSecurityTests : IDisposable
     private DirectoryEnumerator CreateEnumerator() => new(NullLogger<DirectoryEnumerator>.Instance);
 
     private FileFilter CreateFilter(bool recursive = true) =>
-        new(new FileCrawlerConfiguration
-        {
+        new(new FileCrawlerConfiguration {
             CrawlerId = Guid.NewGuid(),
             RootPath = _root,
             Recursive = recursive,
@@ -52,7 +52,7 @@ public sealed class FilesystemSecurityTests : IDisposable
     {
         File.WriteAllText(Path.Combine(_root, "inside.txt"), "content");
 
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         Assert.Single(files);
@@ -62,7 +62,7 @@ public sealed class FilesystemSecurityTests : IDisposable
     [Fact]
     public async Task BoundaryCheck_EmptyRootYieldsNoFiles()
     {
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         Assert.Empty(files);
@@ -75,7 +75,7 @@ public sealed class FilesystemSecurityTests : IDisposable
         string sub = Directory.CreateDirectory(Path.Combine(_root, "a", "b")).FullName;
         File.WriteAllText(Path.Combine(sub, "deep.txt"), "deep");
 
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         Assert.Single(files);
@@ -95,15 +95,14 @@ public sealed class FilesystemSecurityTests : IDisposable
 
         string junctionPath = Path.Combine(_root, "junction");
         bool created = TryCreateDirectoryJunction(junctionPath, _outside);
-        if (!created)
-        {
+        if(!created) {
             // Junction creation requires elevated privileges or Developer Mode.
             return;
         }
 
         File.WriteAllText(Path.Combine(_root, "normal.txt"), "normal");
 
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         // Only the normal file should be found; the junction target must not be traversed.
@@ -121,14 +120,13 @@ public sealed class FilesystemSecurityTests : IDisposable
 
         string linkPath = Path.Combine(_root, "link.txt");
         bool created = TryCreateFileSymlink(linkPath, realFile);
-        if (!created)
-        {
+        if(!created) {
             return;
         }
 
         File.WriteAllText(Path.Combine(_root, "normal.txt"), "normal");
 
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         // The symlink must not be yielded; only the normal file should appear.
@@ -144,16 +142,15 @@ public sealed class FilesystemSecurityTests : IDisposable
     [Fact]
     public async Task Cancellation_ThrowsAndDoesNotSetCompleted()
     {
-        for (int i = 0; i < 10; i++)
+        for(int i = 0; i < 10; i++)
             File.WriteAllText(Path.Combine(_root, $"file{i}.txt"), "x");
 
-        var cts = new CancellationTokenSource();
+        CancellationTokenSource cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var state = new EnumerationState();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-        {
-            await foreach (DiscoveredFile _ in CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state, cts.Token))
+        EnumerationState state = new EnumerationState();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => {
+            await foreach(DiscoveredFile _ in CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state, cts.Token))
                 break;
         });
 
@@ -163,19 +160,17 @@ public sealed class FilesystemSecurityTests : IDisposable
     [Fact]
     public async Task Cancellation_MidEnumeration_StopsProcessing()
     {
-        for (int i = 0; i < 20; i++)
+        for(int i = 0; i < 20; i++)
             File.WriteAllText(Path.Combine(_root, $"f{i}.txt"), "x");
 
-        var cts = new CancellationTokenSource();
-        var state = new EnumerationState();
+        CancellationTokenSource cts = new CancellationTokenSource();
+        EnumerationState state = new EnumerationState();
         int count = 0;
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-        {
-            await foreach (DiscoveredFile _ in CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state, cts.Token))
-            {
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => {
+            await foreach(DiscoveredFile _ in CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state, cts.Token)) {
                 count++;
-                if (count == 1) cts.Cancel();
+                if(count == 1) cts.Cancel();
             }
         });
 
@@ -194,7 +189,7 @@ public sealed class FilesystemSecurityTests : IDisposable
         // Verify that the state collects errors rather than throwing.
         // (We can't easily make a real directory inaccessible in a test
         //  without admin privileges, so this validates the state structure.)
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await CreateEnumerator().EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         Assert.True(state.Completed);
@@ -207,29 +202,22 @@ public sealed class FilesystemSecurityTests : IDisposable
 
     private static bool TryCreateDirectoryJunction(string link, string target)
     {
-        try
-        {
+        try {
             Directory.CreateSymbolicLink(link, target);
             return Directory.Exists(link);
-        }
-        catch
-        {
+        } catch {
             // Fall back to mklink /J which works without Developer Mode for directories.
-            try
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo("cmd", $"/c mklink /J \"{link}\" \"{target}\"")
-                {
+            try {
+                ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo("cmd", $"/c mklink /J \"{link}\" \"{target}\"") {
                     CreateNoWindow = true,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
-                using var p = System.Diagnostics.Process.Start(psi);
+                using Process? p = System.Diagnostics.Process.Start(psi);
                 p?.WaitForExit(3000);
                 return Directory.Exists(link);
-            }
-            catch
-            {
+            } catch {
                 return false;
             }
         }
@@ -237,13 +225,10 @@ public sealed class FilesystemSecurityTests : IDisposable
 
     private static bool TryCreateFileSymlink(string link, string target)
     {
-        try
-        {
+        try {
             File.CreateSymbolicLink(link, target);
             return File.Exists(link);
-        }
-        catch
-        {
+        } catch {
             return false;
         }
     }

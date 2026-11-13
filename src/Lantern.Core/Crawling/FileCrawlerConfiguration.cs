@@ -16,13 +16,13 @@ public sealed class FileCrawlerConfiguration
 
     public void Validate()
     {
-        if (CrawlerId == Guid.Empty)
+        if(CrawlerId == Guid.Empty)
             throw new ValidationException("Crawler ID is required.");
-        if (string.IsNullOrWhiteSpace(RootPath))
+        if(string.IsNullOrWhiteSpace(RootPath))
             throw new ValidationException("Root path is required.");
-        if (MaxFileSizeMB <= 0)
+        if(MaxFileSizeMB <= 0)
             throw new ValidationException("MaxFileSizeMB must be positive.");
-        if (MaxConcurrentFiles <= 0 || MaxConcurrentFiles > 32)
+        if(MaxConcurrentFiles <= 0 || MaxConcurrentFiles > 32)
             throw new ValidationException("MaxConcurrentFiles must be between 1 and 32.");
     }
 }

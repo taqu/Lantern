@@ -18,12 +18,9 @@ public sealed class CrawlerScheduleRepository(IDbContextFactory<LanternDbContext
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         CrawlerScheduleRecord? existing = await db.CrawlerSchedules
             .FirstOrDefaultAsync(s => s.CrawlerId == schedule.CrawlerId, ct);
-        if (existing == null)
-        {
+        if(existing == null) {
             db.CrawlerSchedules.Add(CrawlerScheduleRecord.FromDomain(schedule));
-        }
-        else
-        {
+        } else {
             CrawlerScheduleRecord updated = CrawlerScheduleRecord.FromDomain(schedule);
             db.Entry(existing).CurrentValues.SetValues(updated);
         }

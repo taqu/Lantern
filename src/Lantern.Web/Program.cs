@@ -5,7 +5,6 @@ using Lantern.Web;
 using Lantern.Web.Administration;
 using Lantern.Web.Components;
 using Lantern.Web.Setup;
-using Microsoft.AspNetCore.HttpOverrides;
 
 // ── Subcommand detection ──────────────────────────────────────────────────────
 // First positional arg that doesn't start with '--' is treated as a subcommand.
@@ -24,31 +23,27 @@ bool isDevReset = string.Equals(Environment.GetEnvironmentVariable("LANTERN_DEV_
 bool isAdminReset = args.Contains("--admin-reset");
 
 // ── Stateless commands (no DI needed) ────────────────────────────────────────
-if (subcommand == "status")
-{
+if(subcommand == "status") {
     int code = await LanternSetup.RunStatusAsync();
     return code;
 }
 
-if (args.Contains("--help") || args.Contains("-h"))
-{
+if(args.Contains("--help") || args.Contains("-h")) {
     PrintHelp();
     return 0;
 }
 
 // ── Setup Phase 1 (pre-host): directories, secrets, config file ──────────────
 string? setupDataRoot = null;
-if (subcommand == "setup")
-{
+if(subcommand == "setup") {
     setupDataRoot = await LanternSetup.RunPhase1Async(webArgs);
     // Fall through — web host is needed for Phase 2 (DB migrations, admin).
     // Don't forward setup-specific flags (--data-dir, --show-master-key) to the web builder.
     webArgs = webArgs.Where(a => a != "--show-master-key" && a != "--data-dir" && !a.StartsWith("--data-dir=")).ToArray();
     // Strip the value after --data-dir
-    var filtered = new List<string>();
-    for (int i = 0; i < webArgs.Length; i++)
-    {
-        if (webArgs[i] == "--data-dir") { i++; continue; }
+    List<string> filtered = new List<string>();
+    for(int i = 0; i < webArgs.Length; i++) {
+        if(webArgs[i] == "--data-dir") { i++; continue; }
         filtered.Add(webArgs[i]);
     }
     webArgs = [.. filtered];
@@ -59,29 +54,26 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(isDevReset || isAdm
     ? webArgs
     : args);
 
-if (isDevReset || isAdminReset || subcommand is "setup" or "admin" or "meilisearch")
+if(isDevReset || isAdminReset || subcommand is "setup" or "admin" or "meilisearch")
     builder.Logging.ClearProviders();
 
 // Windows Service support — has no effect on non-Windows or interactive runs.
-if (OperatingSystem.IsWindows())
+if(OperatingSystem.IsWindows())
     builder.Host.UseWindowsService(options => options.ServiceName = "Lantern");
 
 // systemd support on Linux — signals readiness and handles SIGTERM cleanly.
-if (OperatingSystem.IsLinux())
+if(OperatingSystem.IsLinux())
     builder.Host.UseSystemd();
 
 // Configuration loading.
-if (builder.Environment.IsDevelopment())
-{
+if(builder.Environment.IsDevelopment()) {
     // Machine-local development overrides (absolute paths written by setup-dev scripts).
     // This file is gitignored (matches appsettings.*.Local.json).
     string devLocalConfig = Path.Combine(builder.Environment.ContentRootPath, "appsettings.Development.Local.json");
     builder.Configuration.AddJsonFile(devLocalConfig, optional: true, reloadOnChange: false);
-}
-else
-{
+} else {
     // Persistent production configuration. Created by 'Lantern.Web setup' and survives upgrades.
-    if (File.Exists(PlatformDirectories.ProductionConfigFile))
+    if(File.Exists(PlatformDirectories.ProductionConfigFile))
         builder.Configuration.AddJsonFile(PlatformDirectories.ProductionConfigFile, optional: true, reloadOnChange: false);
 }
 
@@ -98,13 +90,11 @@ builder.Services.AddSingleton<Lantern.Infrastructure.Search.IMasterKeyAccessor, 
 
 // Managed Meilisearch process and embedding are not needed in one-shot command modes.
 bool isCommandMode = isDevReset || isAdminReset || subcommand != null;
-if (!isCommandMode)
-{
+if(!isCommandMode) {
     MeilisearchProcessOptions meiliProcessOpts =
         builder.Configuration.GetSection(MeilisearchProcessOptions.SectionName)
         .Get<MeilisearchProcessOptions>() ?? new();
-    if (meiliProcessOpts.Managed)
-    {
+    if(meiliProcessOpts.Managed) {
         builder.Services.AddSingleton<MeilisearchProcessManager>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MeilisearchProcessManager>());
     }
@@ -115,17 +105,15 @@ if (!isCommandMode)
 
     EmbeddingOptions embeddingOptions =
         builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>() ?? new();
-    if (embeddingOptions.Enabled)
+    if(embeddingOptions.Enabled)
         builder.Services.AddLanternEmbedding(builder.Configuration);
 }
 
 WebApplication app = builder.Build();
 
 // ── Legacy dev reset mode ─────────────────────────────────────────────────────
-if (isDevReset)
-{
-    if (!app.Environment.IsDevelopment())
-    {
+if(isDevReset) {
+    if(!app.Environment.IsDevelopment()) {
         await Console.Error.WriteLineAsync("Error: LANTERN_DEV_RESET_ADMIN is only permitted in the Development environment.");
         Environment.Exit(1);
         return 1;
@@ -140,25 +128,20 @@ if (isDevReset)
 }
 
 // ── Legacy --admin-reset mode ─────────────────────────────────────────────────
-if (isAdminReset)
-{
+if(isAdminReset) {
     string? resetPassword = Environment.GetEnvironmentVariable("LANTERN_ADMIN_RESET_PASSWORD");
     Environment.SetEnvironmentVariable("LANTERN_ADMIN_RESET_PASSWORD", null);
-    if (string.IsNullOrEmpty(resetPassword))
-    {
+    if(string.IsNullOrEmpty(resetPassword)) {
         await Console.Error.WriteLineAsync("Error: --admin-reset requires LANTERN_ADMIN_RESET_PASSWORD environment variable.");
         await Console.Error.WriteLineAsync("       Use reset-admin.ps1 / reset-admin.sh or 'Lantern.Web admin reset-password'.");
         Environment.Exit(1);
         return 1;
     }
     await app.InitializeAdministrationAsync();
-    try
-    {
+    try {
         await app.Services.GetRequiredService<AdministratorAuthentication>().ResetPasswordAsync(resetPassword);
         Console.WriteLine("Administrator password reset successfully. Existing sessions have been invalidated.");
-    }
-    catch (InvalidOperationException ex)
-    {
+    } catch(InvalidOperationException ex) {
         await Console.Error.WriteLineAsync($"Error: {ex.Message}");
         Environment.Exit(1);
         return 1;
@@ -167,8 +150,7 @@ if (isAdminReset)
 }
 
 // ── Setup Phase 2 (post-host): migrations and admin provisioning ──────────────
-if (subcommand == "setup")
-{
+if(subcommand == "setup") {
     await app.InitializeAdministrationAsync();
     await LanternSetup.RunPhase2Async(app, webArgs);
     Console.WriteLine();
@@ -181,11 +163,9 @@ if (subcommand == "setup")
 }
 
 // ── Interactive admin password reset ─────────────────────────────────────────
-if (subcommand == "admin")
-{
+if(subcommand == "admin") {
     string adminVerb = webArgs.Length > 0 ? webArgs[0].ToLowerInvariant() : "";
-    if (adminVerb != "reset-password")
-    {
+    if(adminVerb != "reset-password") {
         await Console.Error.WriteLineAsync($"Unknown admin command: {adminVerb}");
         await Console.Error.WriteLineAsync("Available: admin reset-password");
         return 1;
@@ -195,11 +175,9 @@ if (subcommand == "admin")
 }
 
 // ── Meilisearch subcommands ───────────────────────────────────────────────────
-if (subcommand == "meilisearch")
-{
+if(subcommand == "meilisearch") {
     string meiliVerb = webArgs.Length > 0 ? webArgs[0].ToLowerInvariant() : "";
-    if (meiliVerb != "rotate-key")
-    {
+    if(meiliVerb != "rotate-key") {
         await Console.Error.WriteLineAsync($"Unknown meilisearch command: {meiliVerb}");
         await Console.Error.WriteLineAsync("Available: meilisearch rotate-key");
         return 1;
@@ -213,15 +191,13 @@ if (subcommand == "meilisearch")
 // ── Normal web application startup ───────────────────────────────────────────
 await app.InitializeAdministrationAsync();
 
-if (!app.Environment.IsDevelopment())
-{
+if(!app.Environment.IsDevelopment()) {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.Use(async (context, next) =>
-{
+app.Use(async (context, next) => {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";

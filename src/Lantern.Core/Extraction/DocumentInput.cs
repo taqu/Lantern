@@ -11,8 +11,7 @@ public sealed class DocumentInput
     public static DocumentInput FromFile(string filePath)
     {
         ArgumentNullException.ThrowIfNull(filePath);
-        return new DocumentInput
-        {
+        return new DocumentInput {
             FilePath = filePath,
             Extension = Path.GetExtension(filePath).ToLowerInvariant(),
             FileName = Path.GetFileName(filePath)
@@ -22,8 +21,7 @@ public sealed class DocumentInput
     public static DocumentInput FromStream(Stream stream, string extension, string? fileName = null, string? mimeType = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        return new DocumentInput
-        {
+        return new DocumentInput {
             Stream = stream,
             Extension = extension.ToLowerInvariant(),
             FileName = fileName,

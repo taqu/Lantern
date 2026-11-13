@@ -2,7 +2,6 @@ using Lantern.Core.Administration;
 using Lantern.Core.Crawling;
 using Lantern.Core.Search;
 using Lantern.Crawling;
-using Lantern.Crawling.Files;
 using Lantern.Infrastructure;
 using Lantern.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -27,8 +26,7 @@ public sealed class FileCrawlerIntegrationTests : IAsyncLifetime
         Directory.CreateDirectory(_filesDir);
 
         IConfigurationRoot config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
+            .AddInMemoryCollection(new Dictionary<string, string?> {
                 ["Meilisearch:Url"] = "http://127.0.0.1:7700",
                 ["Meilisearch:IndexName"] = "lantern-crawler-test-" + Guid.NewGuid().ToString("N")[..8],
                 ["HybridSearch:ChunkIndexName"] = "lantern-chunks-test-" + Guid.NewGuid().ToString("N")[..8],
@@ -39,8 +37,7 @@ public sealed class FileCrawlerIntegrationTests : IAsyncLifetime
         _services = new ServiceCollection()
             .AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning))
             .AddDbContextFactory<LanternDbContext>(o =>
-                o.UseSqlite(new SqliteConnectionStringBuilder
-                {
+                o.UseSqlite(new SqliteConnectionStringBuilder {
                     DataSource = Path.Combine(_dbDir, "test.db"),
                     Pooling = false
                 }.ToString()))
@@ -51,12 +48,10 @@ public sealed class FileCrawlerIntegrationTests : IAsyncLifetime
         await using LanternDbContext db = await _services.GetRequiredService<IDbContextFactory<LanternDbContext>>().CreateDbContextAsync();
         await db.Database.MigrateAsync();
 
-        try
-        {
+        try {
             await _services.GetRequiredService<IDocumentIndexingService>().EnsureIndexAsync();
             await _services.GetRequiredService<IChunkIndexingService>().EnsureIndexAsync();
-        }
-        catch { /* Meilisearch unavailable; Meilisearch-dependent tests will be skipped */ }
+        } catch { /* Meilisearch unavailable; Meilisearch-dependent tests will be skipped */ }
     }
 
     public async Task DisposeAsync()
@@ -70,8 +65,7 @@ public sealed class FileCrawlerIntegrationTests : IAsyncLifetime
         IReadOnlyList<string>? extensions = null,
         IReadOnlyList<string>? excluded = null,
         bool recursive = true) =>
-        new()
-        {
+        new() {
             CrawlerId = Guid.NewGuid(),
             Name = "Test Crawler",
             RootPath = _filesDir,
@@ -180,8 +174,7 @@ public sealed class FileCrawlerIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task InvalidRootPathReturnsFailed()
     {
-        var config = new FileCrawlerConfiguration
-        {
+        FileCrawlerConfiguration config = new FileCrawlerConfiguration {
             CrawlerId = Guid.NewGuid(),
             RootPath = @"Z:\NonExistentPath\That\Does\Not\Exist",
             IncludedExtensions = [".txt"],
@@ -195,11 +188,11 @@ public sealed class FileCrawlerIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task CancellationReturnsCanceledStatus()
     {
-        for (int i = 0; i < 5; i++)
+        for(int i = 0; i < 5; i++)
             File.WriteAllText(Path.Combine(_filesDir, $"file{i}.txt"), "content " + i);
 
         FileCrawlerConfiguration config = MakeConfig();
-        var cts = new CancellationTokenSource();
+        CancellationTokenSource cts = new CancellationTokenSource();
         cts.Cancel();
 
         FileCrawlResult result = await Crawler.CrawlAsync(config, cts.Token);

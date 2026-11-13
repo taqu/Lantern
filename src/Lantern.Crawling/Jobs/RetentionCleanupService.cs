@@ -17,19 +17,14 @@ public sealed class RetentionCleanupService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Delay initial run by 10 minutes to avoid startup contention
-        try { await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken); }
-        catch (OperationCanceledException) { }
+        try { await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken); } catch(OperationCanceledException) { }
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try { await RunCleanupAsync(stoppingToken); }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-            {
+        while(!stoppingToken.IsCancellationRequested) {
+            try { await RunCleanupAsync(stoppingToken); } catch(Exception ex) when(!stoppingToken.IsCancellationRequested) {
                 logger.LogError(ex, "Retention cleanup failed");
             }
 
-            try { await Task.Delay(TimeSpan.FromHours(6), stoppingToken); }
-            catch (OperationCanceledException) { }
+            try { await Task.Delay(TimeSpan.FromHours(6), stoppingToken); } catch(OperationCanceledException) { }
         }
     }
 
@@ -42,7 +37,7 @@ public sealed class RetentionCleanupService(
         int deletedJobs = await jobs.DeleteOldJobsAsync(jobCutoff, ct);
         int deletedEvents = await jobs.DeleteOldEventsAsync(eventCutoff, ct);
 
-        if (deletedJobs > 0 || deletedEvents > 0)
+        if(deletedJobs > 0 || deletedEvents > 0)
             logger.LogInformation("Retention cleanup: removed {Jobs} job(s), {Events} event(s)", deletedJobs, deletedEvents);
     }
 }

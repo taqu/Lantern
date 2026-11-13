@@ -78,7 +78,7 @@ csharp_style_conditional_delegate_call = true
 
 # var preferences
 csharp_style_var_for_built_in_types = false
-csharp_style_var_when_type_is_apparent = true
+csharp_style_var_when_type_is_apparent = false
 csharp_style_var_elsewhere = false
 
 # Naming conventions

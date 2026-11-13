@@ -14,7 +14,7 @@ public sealed class AdministrationService(
     private async Task DemandAsync()
     {
         System.Security.Claims.ClaimsPrincipal? user = accessor.HttpContext?.User;
-        if (user == null || !(await authorization.AuthorizeAsync(user, null, AdministratorAuthentication.Policy)).Succeeded)
+        if(user == null || !(await authorization.AuthorizeAsync(user, null, AdministratorAuthentication.Policy)).Succeeded)
             throw new UnauthorizedAccessException("Administrator authorization is required.");
     }
 

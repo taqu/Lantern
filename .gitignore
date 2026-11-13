@@ -86,3 +86,5 @@ appsettings.*.Local.json
 
 # Temporary extraction output
 *.extracted.txt
+
+/meiliadmin

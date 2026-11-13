@@ -25,8 +25,7 @@ public sealed class CrawlerFormModel
     [Range(1, 32, ErrorMessage = "Maximum concurrent files must be between 1 and 32.")]
     public int MaxConcurrentFiles { get; set; } = 2;
 
-    public FileCrawlerProfile ToProfile(Guid crawlerId = default) => new()
-    {
+    public FileCrawlerProfile ToProfile(Guid crawlerId = default) => new() {
         CrawlerId = crawlerId,
         RootPath = RootPath.Trim(),
         Recursive = Recursive,
@@ -48,8 +47,7 @@ public sealed class CrawlerFormModel
            .Where(s => s.Length > 0)
            .ToList();
 
-    public static CrawlerFormModel From(CrawlerDefinition definition, FileCrawlerProfile profile) => new()
-    {
+    public static CrawlerFormModel From(CrawlerDefinition definition, FileCrawlerProfile profile) => new() {
         Name = definition.Name,
         Enabled = definition.Enabled,
         RootPath = profile.RootPath,

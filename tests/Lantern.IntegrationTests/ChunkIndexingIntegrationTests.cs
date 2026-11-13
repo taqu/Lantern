@@ -30,14 +30,12 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (_key == null) return;
-        try
-        {
+        if(_key == null) return;
+        try {
             await _client.GetIndexAsync(_chunkIndex);
             TaskInfo task = await _client.DeleteIndexAsync(_chunkIndex);
             await _client.WaitForTaskAsync(task.TaskUid);
-        }
-        catch (MeilisearchApiError ex) when (ex.Code == "index_not_found") { }
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") { }
     }
 
     [SkippableFact]

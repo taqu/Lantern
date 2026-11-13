@@ -9,6 +9,12 @@ namespace Lantern.Infrastructure.Search;
 /// </summary>
 public interface IMeilisearchClientFactory
 {
+    /// <summary>
+    /// Create clients
+    /// </summary>
+    /// <returns></returns>
+    Task EnsureClientsAsync(CancellationToken cancellationToken);
+
     /// <summary>Search-only client (<c>search</c> action; <c>lantern-*</c> indexes).</summary>
     MeilisearchClient GetSearchClient();
 

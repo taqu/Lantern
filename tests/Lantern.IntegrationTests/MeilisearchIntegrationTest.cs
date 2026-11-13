@@ -26,21 +26,18 @@ public sealed class MeilisearchIntegrationTest : IAsyncLifetime
 
     public Task InitializeAsync()
     {
-        if (_masterKey != null)
+        if(_masterKey != null)
             _client = new MeilisearchClient(_host, _masterKey);
         return Task.CompletedTask;
     }
 
     public async Task DisposeAsync()
     {
-        if (_client == null) return;
-        try
-        {
+        if(_client == null) return;
+        try {
             TaskInfo task = await _client.DeleteIndexAsync(IndexUid);
             await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TimeoutMs);
-        }
-        catch
-        {
+        } catch {
             // Best-effort cleanup.
         }
     }
@@ -130,18 +127,14 @@ public sealed class MeilisearchIntegrationTest : IAsyncLifetime
 
     private async Task EnsureIndexDeletedAsync()
     {
-        if (_client == null) return;
-        try
-        {
+        if(_client == null) return;
+        try {
             ResourceResults<IEnumerable<Meilisearch.Index>> indexes = await _client.GetAllIndexesAsync();
-            if (indexes.Results.Any(i => i.Uid == IndexUid))
-            {
+            if(indexes.Results.Any(i => i.Uid == IndexUid)) {
                 TaskInfo task = await _client.DeleteIndexAsync(IndexUid);
                 await _client.WaitForTaskAsync(task.TaskUid, timeoutMs: TimeoutMs);
             }
-        }
-        catch
-        {
+        } catch {
             // Ignore — index may not exist.
         }
     }

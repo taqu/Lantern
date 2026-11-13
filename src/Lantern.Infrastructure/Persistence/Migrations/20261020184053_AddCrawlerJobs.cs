@@ -1,4 +1,3 @@
-using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -13,8 +12,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "CrawlerJobEvents",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     JobId = table.Column<Guid>(type: "TEXT", nullable: false),
@@ -22,15 +20,13 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     OccurredAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     Details = table.Column<string>(type: "TEXT", nullable: true)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawlerJobEvents", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "CrawlerJobs",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
                     CrawlerName = table.Column<string>(type: "TEXT", maxLength: 120, nullable: false),
@@ -53,8 +49,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     FailedFiles = table.Column<long>(type: "INTEGER", nullable: false),
                     DeletedFiles = table.Column<long>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawlerJobs", x => x.Id);
                     table.CheckConstraint("CK_Job_AttemptNumber", "AttemptNumber >= 1");
                     table.CheckConstraint("CK_Job_Status", "Status IN ('Pending','Running','Completed','Failed','Canceled')");
@@ -63,8 +58,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
 
             migrationBuilder.CreateTable(
                 name: "CrawlerSchedules",
-                columns: table => new
-                {
+                columns: table => new {
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
                     Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
                     Type = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
@@ -74,8 +68,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     NextRunAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
                     LastTriggeredAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawlerSchedules", x => x.CrawlerId);
                     table.CheckConstraint("CK_Schedule_Type", "Type IN ('Disabled','Hourly','Daily','Weekly')");
                 });

@@ -7,7 +7,7 @@ public class RobotsPolicyTests
 {
     private static HttpClient MakeClient(string url, string content, System.Net.HttpStatusCode statusCode = System.Net.HttpStatusCode.OK)
     {
-        var handler = new FakeHttpMessageHandler();
+        FakeHttpMessageHandler handler = new FakeHttpMessageHandler();
         handler.Register(url, statusCode, content);
         return new HttpClient(handler);
     }
@@ -22,7 +22,7 @@ public class RobotsPolicyTests
             User-agent: *
             Disallow: /private/
             """;
-        var policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
+        RobotsPolicy policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
         using var client = MakeClientWithRobots("https://example.com", robots);
 
         bool blocked = await policy.IsAllowedAsync("https://example.com/private/page.html", client, CancellationToken.None);
@@ -40,7 +40,7 @@ public class RobotsPolicyTests
             Disallow: /docs/
             Allow: /docs/public/
             """;
-        var policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
+        RobotsPolicy policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
         using var client = MakeClientWithRobots("https://example.com", robots);
 
         bool secretBlocked = await policy.IsAllowedAsync("https://example.com/docs/secret.html", client, CancellationToken.None);
@@ -57,7 +57,7 @@ public class RobotsPolicyTests
             User-agent: LanternCrawler
             Disallow: /internal/
             """;
-        var policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
+        RobotsPolicy policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
         using var client = MakeClientWithRobots("https://example.com", robots);
 
         bool blocked = await policy.IsAllowedAsync("https://example.com/internal/page.html", client, CancellationToken.None);
@@ -68,7 +68,7 @@ public class RobotsPolicyTests
     [Fact]
     public async Task IsAllowedAsync_RobotsReturns404_AllPathsAllowed()
     {
-        var policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
+        RobotsPolicy policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
         using var client = MakeClientWithRobots("https://example.com", "", System.Net.HttpStatusCode.NotFound);
 
         bool allowed = await policy.IsAllowedAsync("https://example.com/anything/page.html", client, CancellationToken.None);
@@ -79,9 +79,9 @@ public class RobotsPolicyTests
     [Fact]
     public async Task IsAllowedAsync_RobotsFetchThrows_AllPathsAllowed()
     {
-        var handler = new ThrowingHttpMessageHandler();
-        using var client = new HttpClient(handler);
-        var policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
+        ThrowingHttpMessageHandler handler = new ThrowingHttpMessageHandler();
+        using HttpClient client = new HttpClient(handler);
+        RobotsPolicy policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
 
         bool allowed = await policy.IsAllowedAsync("https://example.com/page.html", client, CancellationToken.None);
 
@@ -91,7 +91,7 @@ public class RobotsPolicyTests
     [Fact]
     public async Task IsAllowedAsync_EmptyRobotsTxt_AllPathsAllowed()
     {
-        var policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
+        RobotsPolicy policy = new RobotsPolicy("LanternCrawler", NullLogger.Instance);
         using var client = MakeClientWithRobots("https://example.com", "");
 
         bool allowed = await policy.IsAllowedAsync("https://example.com/any/path.html", client, CancellationToken.None);
@@ -112,17 +112,14 @@ public class RobotsPolicyTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             string url = request.RequestUri?.AbsoluteUri ?? "";
-            if (_responses.TryGetValue(url, out var entry))
-            {
-                var response = new HttpResponseMessage(entry.Status)
-                {
+            if(_responses.TryGetValue(url, out var entry)) {
+                HttpResponseMessage response = new HttpResponseMessage(entry.Status) {
                     Content = new StringContent(entry.Content)
                 };
                 return Task.FromResult(response);
             }
 
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
-            {
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound) {
                 Content = new StringContent("")
             });
         }

@@ -39,14 +39,12 @@ public sealed class CrawlerJobService(
     private async Task<JobSubmissionResult> SubmitJobAsync(
         Guid crawlerId, string crawlerName, JobTrigger trigger, string snapshot, CancellationToken ct)
     {
-        if (await jobs.HasActiveJobForCrawlerAsync(crawlerId, ct))
-        {
+        if(await jobs.HasActiveJobForCrawlerAsync(crawlerId, ct)) {
             logger.LogInformation("Manual submission rejected: crawler {CrawlerId} already has an active job", crawlerId);
             return new JobSubmissionResult(JobSubmissionStatus.AlreadyActive, null);
         }
 
-        var job = new CrawlerJob
-        {
+        CrawlerJob job = new CrawlerJob {
             CrawlerId = crawlerId,
             CrawlerName = crawlerName,
             Trigger = trigger,
@@ -67,15 +65,13 @@ public sealed class CrawlerJobService(
     public async Task<bool> SubmitScheduledJobAsync(
         Guid crawlerId, string crawlerName, FileCrawlerConfiguration config, DateTimeOffset scheduledAt, CancellationToken ct = default)
     {
-        if (await jobs.HasActiveJobForCrawlerAsync(crawlerId, ct))
-        {
+        if(await jobs.HasActiveJobForCrawlerAsync(crawlerId, ct)) {
             logger.LogDebug("Scheduled job coalesced: crawler {CrawlerId} already has an active job", crawlerId);
             return false;
         }
 
         string snapshot = JsonSerializer.Serialize(config, _json);
-        var job = new CrawlerJob
-        {
+        CrawlerJob job = new CrawlerJob {
             CrawlerId = crawlerId,
             CrawlerName = crawlerName,
             Trigger = JobTrigger.Scheduled,
@@ -94,8 +90,7 @@ public sealed class CrawlerJobService(
     public async Task<bool> RequestCancellationAsync(Guid jobId, CancellationToken ct = default)
     {
         bool updated = await jobs.RequestCancellationAsync(jobId, ct);
-        if (updated)
-        {
+        if(updated) {
             await jobs.AddEventAsync(new CrawlerJobEvent { JobId = jobId, EventType = JobEventType.CancellationRequested, OccurredAt = DateTimeOffset.UtcNow }, ct);
             logger.LogInformation("Cancellation requested for job {JobId}", jobId);
         }
@@ -109,18 +104,17 @@ public sealed class CrawlerJobService(
         Guid originalJobId, string crawlerName, FileCrawlerConfiguration? newConfig, CancellationToken ct = default)
     {
         CrawlerJob? original = await jobs.GetJobAsync(originalJobId, ct);
-        if (original == null) return new JobSubmissionResult(JobSubmissionStatus.NotFound, null);
-        if (original.Status is not (JobStatus.Failed or JobStatus.Canceled))
+        if(original == null) return new JobSubmissionResult(JobSubmissionStatus.NotFound, null);
+        if(original.Status is not (JobStatus.Failed or JobStatus.Canceled))
             return new JobSubmissionResult(JobSubmissionStatus.NotRetryable, null);
-        if (await jobs.HasActiveJobForCrawlerAsync(original.CrawlerId, ct))
+        if(await jobs.HasActiveJobForCrawlerAsync(original.CrawlerId, ct))
             return new JobSubmissionResult(JobSubmissionStatus.AlreadyActive, null);
 
         string snapshot = newConfig != null
             ? JsonSerializer.Serialize(newConfig, _json)
             : original.ConfigurationSnapshot ?? JsonSerializer.Serialize(new FileCrawlerConfiguration(), _json);
 
-        var retry = new CrawlerJob
-        {
+        CrawlerJob retry = new CrawlerJob {
             CrawlerId = original.CrawlerId,
             CrawlerName = original.CrawlerName,
             Trigger = JobTrigger.Retry,
@@ -166,28 +160,24 @@ public sealed class CrawlerJobService(
 
     public static FileCrawlerConfiguration? ParseSnapshot(string? snapshot)
     {
-        if (string.IsNullOrWhiteSpace(snapshot)) return null;
-        try { return JsonSerializer.Deserialize<FileCrawlerConfiguration>(snapshot, _json); }
-        catch { return null; }
+        if(string.IsNullOrWhiteSpace(snapshot)) return null;
+        try { return JsonSerializer.Deserialize<FileCrawlerConfiguration>(snapshot, _json); } catch { return null; }
     }
 
     public static WebCrawlerConfiguration? ParseWebSnapshot(string? snapshot)
     {
-        if (string.IsNullOrWhiteSpace(snapshot)) return null;
-        try { return JsonSerializer.Deserialize<WebCrawlerConfiguration>(snapshot, _json); }
-        catch { return null; }
+        if(string.IsNullOrWhiteSpace(snapshot)) return null;
+        try { return JsonSerializer.Deserialize<WebCrawlerConfiguration>(snapshot, _json); } catch { return null; }
     }
 
     public static string DetectCrawlerType(string? snapshot)
     {
-        if (string.IsNullOrWhiteSpace(snapshot)) return "file";
-        try
-        {
-            using var doc = JsonDocument.Parse(snapshot);
-            if (doc.RootElement.TryGetProperty("crawlerType", out var ct))
+        if(string.IsNullOrWhiteSpace(snapshot)) return "file";
+        try {
+            using JsonDocument doc = JsonDocument.Parse(snapshot);
+            if(doc.RootElement.TryGetProperty("crawlerType", out var ct))
                 return ct.GetString() ?? "file";
-        }
-        catch { }
+        } catch { }
         return "file";
     }
 
@@ -197,15 +187,13 @@ public sealed class CrawlerJobService(
     public async Task<bool> SubmitScheduledWebJobAsync(
         Guid crawlerId, string crawlerName, WebCrawlerConfiguration config, DateTimeOffset scheduledAt, CancellationToken ct = default)
     {
-        if (await jobs.HasActiveJobForCrawlerAsync(crawlerId, ct))
-        {
+        if(await jobs.HasActiveJobForCrawlerAsync(crawlerId, ct)) {
             logger.LogDebug("Scheduled job coalesced: crawler {CrawlerId} already has an active job", crawlerId);
             return false;
         }
 
         string snapshot = JsonSerializer.Serialize(config, _json);
-        var job = new CrawlerJob
-        {
+        CrawlerJob job = new CrawlerJob {
             CrawlerId = crawlerId,
             CrawlerName = crawlerName,
             Trigger = JobTrigger.Scheduled,

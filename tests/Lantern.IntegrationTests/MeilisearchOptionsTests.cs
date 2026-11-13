@@ -16,13 +16,13 @@ public sealed class MeilisearchOptionsTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_dir)) Directory.Delete(_dir, true);
+        if(Directory.Exists(_dir)) Directory.Delete(_dir, true);
     }
 
     [Fact]
     public void ResolveApiKey_NoFileConfigured_ReturnsEmpty()
     {
-        var opts = new MeilisearchOptions { ApiKeyFile = "" };
+        MeilisearchOptions opts = new MeilisearchOptions { ApiKeyFile = "" };
         Assert.Equal("", opts.ResolveApiKey());
     }
 
@@ -31,23 +31,20 @@ public sealed class MeilisearchOptionsTests : IDisposable
     {
         string file = Path.Combine(_dir, "meili-api-key.txt");
         File.WriteAllText(file, "  my-scoped-api-key  \n");
-        var opts = new MeilisearchOptions { ApiKeyFile = file };
+        MeilisearchOptions opts = new MeilisearchOptions { ApiKeyFile = file };
         Assert.Equal("my-scoped-api-key", opts.ResolveApiKey());
     }
 
     [Fact]
     public void ResolveApiKey_FileMissing_ReturnsEmpty()
     {
-        var opts = new MeilisearchOptions { ApiKeyFile = Path.Combine(_dir, "nonexistent.txt") };
+        MeilisearchOptions opts = new MeilisearchOptions { ApiKeyFile = Path.Combine(_dir, "nonexistent.txt") };
         // Env var is not set in this process (guard: clear it)
         string? saved = Environment.GetEnvironmentVariable("MEILI_API_KEY");
-        try
-        {
+        try {
             Environment.SetEnvironmentVariable("MEILI_API_KEY", null);
             Assert.Equal("", opts.ResolveApiKey());
-        }
-        finally
-        {
+        } finally {
             Environment.SetEnvironmentVariable("MEILI_API_KEY", saved);
         }
     }
@@ -57,15 +54,12 @@ public sealed class MeilisearchOptionsTests : IDisposable
     {
         string file = Path.Combine(_dir, "api-key.txt");
         File.WriteAllText(file, "file-key");
-        var opts = new MeilisearchOptions { ApiKeyFile = file };
+        MeilisearchOptions opts = new MeilisearchOptions { ApiKeyFile = file };
         string? saved = Environment.GetEnvironmentVariable("MEILI_API_KEY");
-        try
-        {
+        try {
             Environment.SetEnvironmentVariable("MEILI_API_KEY", "env-key");
             Assert.Equal("file-key", opts.ResolveApiKey());
-        }
-        finally
-        {
+        } finally {
             Environment.SetEnvironmentVariable("MEILI_API_KEY", saved);
         }
     }
@@ -96,7 +90,7 @@ public sealed class MeilisearchOptionsTests : IDisposable
         string xmlFile = Path.Combine(_dir, "key-b7cad4c6.xml");
         File.WriteAllText(xmlFile, keyRingXml);
 
-        var opts = new MeilisearchOptions { ApiKeyFile = xmlFile };
+        MeilisearchOptions opts = new MeilisearchOptions { ApiKeyFile = xmlFile };
         string result = opts.ResolveApiKey();
 
         // The result is XML, not a valid Meilisearch scoped API key

@@ -20,8 +20,7 @@ public sealed class FileFingerprintTests : IAsyncLifetime
         Directory.CreateDirectory(_dir);
         _services = new ServiceCollection()
             .AddDbContextFactory<LanternDbContext>(o =>
-                o.UseSqlite(new SqliteConnectionStringBuilder
-                {
+                o.UseSqlite(new SqliteConnectionStringBuilder {
                     DataSource = Path.Combine(_dir, "test.db"),
                     Pooling = false
                 }.ToString()))
@@ -39,8 +38,8 @@ public sealed class FileFingerprintTests : IAsyncLifetime
     [Fact]
     public async Task NewFileIsDetectedAsNew()
     {
-        var crawlerId = Guid.NewGuid();
-        var repo = new CrawlStateRepository(Factory);
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = new CrawlStateRepository(Factory);
         string path = @"C:\docs\new.txt";
 
         FileState? existing = await repo.FindAsync(crawlerId, path);
@@ -50,14 +49,13 @@ public sealed class FileFingerprintTests : IAsyncLifetime
     [Fact]
     public async Task UnchangedFileIsDetectedByFingerprint()
     {
-        var crawlerId = Guid.NewGuid();
-        var repo = new CrawlStateRepository(Factory);
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = new CrawlStateRepository(Factory);
         string path = @"C:\docs\unchanged.txt";
         DateTimeOffset lastWrite = DateTimeOffset.UtcNow.AddHours(-1);
         const long size = 2048;
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc",
             CanonicalPath = path,
@@ -67,7 +65,7 @@ public sealed class FileFingerprintTests : IAsyncLifetime
             SyncStatus = CrawlSyncStatus.Indexed
         });
 
-        var discovered = new DiscoveredFile(path, size, lastWrite);
+        DiscoveredFile discovered = new DiscoveredFile(path, size, lastWrite);
         FileState? existing = await repo.FindAsync(crawlerId, discovered.CanonicalPath);
         Assert.NotNull(existing);
 
@@ -80,13 +78,12 @@ public sealed class FileFingerprintTests : IAsyncLifetime
     [Fact]
     public async Task ChangedFileSizeIsDetectedAsChanged()
     {
-        var crawlerId = Guid.NewGuid();
-        var repo = new CrawlStateRepository(Factory);
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = new CrawlStateRepository(Factory);
         string path = @"C:\docs\changed.txt";
         DateTimeOffset lastWrite = DateTimeOffset.UtcNow.AddHours(-1);
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc",
             CanonicalPath = path,
@@ -96,7 +93,7 @@ public sealed class FileFingerprintTests : IAsyncLifetime
             SyncStatus = CrawlSyncStatus.Indexed
         });
 
-        var discovered = new DiscoveredFile(path, 2000, lastWrite); // different size
+        DiscoveredFile discovered = new DiscoveredFile(path, 2000, lastWrite); // different size
         FileState? existing = await repo.FindAsync(crawlerId, discovered.CanonicalPath);
         Assert.NotNull(existing);
 
@@ -109,13 +106,12 @@ public sealed class FileFingerprintTests : IAsyncLifetime
     [Fact]
     public async Task ChangedTimestampIsDetectedAsChanged()
     {
-        var crawlerId = Guid.NewGuid();
-        var repo = new CrawlStateRepository(Factory);
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = new CrawlStateRepository(Factory);
         string path = @"C:\docs\modified.txt";
         const long size = 1000;
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc",
             CanonicalPath = path,
@@ -125,7 +121,7 @@ public sealed class FileFingerprintTests : IAsyncLifetime
             SyncStatus = CrawlSyncStatus.Indexed
         });
 
-        var discovered = new DiscoveredFile(path, size, DateTimeOffset.UtcNow.AddHours(-1));
+        DiscoveredFile discovered = new DiscoveredFile(path, size, DateTimeOffset.UtcNow.AddHours(-1));
         FileState? existing = await repo.FindAsync(crawlerId, discovered.CanonicalPath);
         Assert.NotNull(existing);
 
@@ -138,14 +134,13 @@ public sealed class FileFingerprintTests : IAsyncLifetime
     [Fact]
     public async Task FailedFileIsRetriedNextScan()
     {
-        var crawlerId = Guid.NewGuid();
-        var repo = new CrawlStateRepository(Factory);
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = new CrawlStateRepository(Factory);
         string path = @"C:\docs\failed.txt";
         const long size = 1000;
         DateTimeOffset lastWrite = DateTimeOffset.UtcNow.AddHours(-1);
 
-        await repo.SaveAsync(new FileState
-        {
+        await repo.SaveAsync(new FileState {
             CrawlerId = crawlerId,
             DocumentId = "doc",
             CanonicalPath = path,
@@ -156,7 +151,7 @@ public sealed class FileFingerprintTests : IAsyncLifetime
             LastError = "Previous failure"
         });
 
-        var discovered = new DiscoveredFile(path, size, lastWrite);
+        DiscoveredFile discovered = new DiscoveredFile(path, size, lastWrite);
         FileState? existing = await repo.FindAsync(crawlerId, discovered.CanonicalPath);
         Assert.NotNull(existing);
 

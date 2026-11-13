@@ -44,13 +44,12 @@ public sealed class CrawlerExecutionCoordinator : IDisposable
     // Returns false if the crawler is already running.
     public bool TryStart(Guid crawlerId, FileCrawlerConfiguration config)
     {
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.ApplicationStopping);
-        var executionId = Guid.NewGuid();
+        CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.ApplicationStopping);
+        Guid executionId = Guid.NewGuid();
         var startedAt = DateTimeOffset.UtcNow;
-        var entry = new ActiveEntry(executionId, startedAt, cts);
+        ActiveEntry entry = new ActiveEntry(executionId, startedAt, cts);
 
-        if (!_active.TryAdd(crawlerId, entry))
-        {
+        if(!_active.TryAdd(crawlerId, entry)) {
             cts.Dispose();
             return false;
         }
@@ -63,7 +62,7 @@ public sealed class CrawlerExecutionCoordinator : IDisposable
 
     public CrawlerExecutionRecord? GetStatus(Guid crawlerId)
     {
-        if (_active.TryGetValue(crawlerId, out ActiveEntry entry))
+        if(_active.TryGetValue(crawlerId, out ActiveEntry entry))
             return new CrawlerExecutionRecord(entry.ExecutionId, crawlerId, entry.StartedAt, null, null, null, IsRunning: true);
         _lastRun.TryGetValue(crawlerId, out CrawlerExecutionRecord? record);
         return record;
@@ -71,31 +70,24 @@ public sealed class CrawlerExecutionCoordinator : IDisposable
 
     private async Task RunAsync(Guid crawlerId, ActiveEntry entry, FileCrawlerConfiguration config)
     {
-        try
-        {
+        try {
             FileCrawlResult result = await _crawler.CrawlAsync(config, entry.Cts.Token);
             _lastRun[crawlerId] = new CrawlerExecutionRecord(
                 entry.ExecutionId, crawlerId, entry.StartedAt, result.FinishedAt,
                 result.Status, result, IsRunning: false);
             _logger.LogInformation("Crawl {ExecutionId} for {CrawlerId} completed with status {Status}",
                 entry.ExecutionId, crawlerId, result.Status);
-        }
-        catch (OperationCanceledException)
-        {
+        } catch(OperationCanceledException) {
             _lastRun[crawlerId] = new CrawlerExecutionRecord(
                 entry.ExecutionId, crawlerId, entry.StartedAt, DateTimeOffset.UtcNow,
                 CrawlStatus.Canceled, null, IsRunning: false);
             _logger.LogInformation("Crawl {ExecutionId} for {CrawlerId} was canceled", entry.ExecutionId, crawlerId);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             _lastRun[crawlerId] = new CrawlerExecutionRecord(
                 entry.ExecutionId, crawlerId, entry.StartedAt, DateTimeOffset.UtcNow,
                 CrawlStatus.Failed, null, IsRunning: false);
             _logger.LogError(ex, "Crawl {ExecutionId} for {CrawlerId} failed", entry.ExecutionId, crawlerId);
-        }
-        finally
-        {
+        } finally {
             _active.TryRemove(crawlerId, out _);
             entry.Cts.Dispose();
         }
@@ -103,10 +95,8 @@ public sealed class CrawlerExecutionCoordinator : IDisposable
 
     public void Dispose()
     {
-        foreach (ActiveEntry entry in _active.Values)
-        {
-            try { entry.Cts.Cancel(); entry.Cts.Dispose(); }
-            catch { /* best-effort on shutdown */ }
+        foreach(ActiveEntry entry in _active.Values) {
+            try { entry.Cts.Cancel(); entry.Cts.Dispose(); } catch { /* best-effort on shutdown */ }
         }
         _active.Clear();
     }

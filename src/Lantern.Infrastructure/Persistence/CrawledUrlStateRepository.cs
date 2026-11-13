@@ -30,12 +30,9 @@ public sealed class CrawledUrlStateRepository(IDbContextFactory<LanternDbContext
         CrawledUrlState? existing = await db.CrawledUrlStates
             .FirstOrDefaultAsync(s => s.CrawlerId == state.CrawlerId && s.CanonicalUrl == state.CanonicalUrl, ct);
 
-        if (existing == null)
-        {
+        if(existing == null) {
             db.CrawledUrlStates.Add(FromDomain(state));
-        }
-        else
-        {
+        } else {
             existing.DocumentId = state.DocumentId;
             existing.ETag = state.ETag;
             existing.LastModified = state.LastModified;
@@ -63,8 +60,7 @@ public sealed class CrawledUrlStateRepository(IDbContextFactory<LanternDbContext
         await db.CrawledUrlStates.Where(s => s.CrawlerId == crawlerId).ExecuteDeleteAsync(ct);
     }
 
-    private static UrlState ToDomain(CrawledUrlState r) => new()
-    {
+    private static UrlState ToDomain(CrawledUrlState r) => new() {
         Id = r.Id,
         CrawlerId = r.CrawlerId,
         CanonicalUrl = r.CanonicalUrl,
@@ -80,8 +76,7 @@ public sealed class CrawledUrlStateRepository(IDbContextFactory<LanternDbContext
         LastError = r.LastError
     };
 
-    private static CrawledUrlState FromDomain(UrlState s) => new()
-    {
+    private static CrawledUrlState FromDomain(UrlState s) => new() {
         Id = s.Id,
         CrawlerId = s.CrawlerId,
         CanonicalUrl = s.CanonicalUrl,

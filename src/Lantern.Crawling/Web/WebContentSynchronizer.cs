@@ -27,7 +27,7 @@ public sealed class WebContentSynchronizer(
 
     private async Task<string[]> GetCategoryIdsAsync(Guid crawlerId, CancellationToken ct)
     {
-        if (_categoryIds != null && _lastCrawlerIdForCategories == crawlerId)
+        if(_categoryIds != null && _lastCrawlerIdForCategories == crawlerId)
             return _categoryIds;
         _categoryIds = await categoryResolver.GetCategoryKeysAsync(crawlerId, ct);
         _lastCrawlerIdForCategories = crawlerId;
@@ -48,10 +48,9 @@ public sealed class WebContentSynchronizer(
         string contentHash = ComputeHash(body);
 
         // Unchanged check: same ETag or same content hash
-        if (existing is { SyncStatus: UrlSyncStatus.Indexed }
+        if(existing is { SyncStatus: UrlSyncStatus.Indexed }
             && (!string.IsNullOrEmpty(etag) && etag == existing.ETag
-                || (string.IsNullOrEmpty(etag) && contentHash == existing.ContentHash)))
-        {
+                || (string.IsNullOrEmpty(etag) && contentHash == existing.ContentHash))) {
             existing.LastSeenScanId = scanId;
             existing.LastFetchedAt = DateTimeOffset.UtcNow;
             existing.LastHttpStatus = 200;
@@ -64,22 +63,18 @@ public sealed class WebContentSynchronizer(
         string documentId = DocumentIdentity.Generate("web", crawlerId.ToString(), canonicalUrl);
         string fileName = GetFileName(canonicalUrl);
 
-        var input = DocumentInput.FromStream(new MemoryStream(body), extension, fileName, contentType);
+        DocumentInput input = DocumentInput.FromStream(new MemoryStream(body), extension, fileName, contentType);
         DocumentProcessingResult result;
-        try
-        {
+        try {
             result = await processingService.ProcessAsync(
                 input, documentId, fileName, canonicalUrl, crawlerId.ToString(), "web", ct);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             logger.LogError(ex, "Extraction failed for {Url}", canonicalUrl);
             await PersistFailureAsync(existing, canonicalUrl, crawlerId, documentId, scanId, ex.Message, etag, lastModified, contentHash, ct);
             return (WebSyncOutcome.Failed, ex.Message);
         }
 
-        if (!result.Success)
-        {
+        if(!result.Success) {
             await PersistFailureAsync(existing, canonicalUrl, crawlerId, documentId, scanId, result.FailureMessage, etag, lastModified, contentHash, ct);
             return (WebSyncOutcome.Failed, result.FailureMessage);
         }
@@ -90,10 +85,8 @@ public sealed class WebContentSynchronizer(
         string[] categoryIds = await GetCategoryIdsAsync(crawlerId, ct);
 
         SearchDocument doc;
-        try
-        {
-            doc = DocumentNormalizer.Normalize(new SearchDocument
-            {
+        try {
+            doc = DocumentNormalizer.Normalize(new SearchDocument {
                 SourceType = "web",
                 SourceId = crawlerId.ToString(),
                 Uri = canonicalUrl,
@@ -105,17 +98,14 @@ public sealed class WebContentSynchronizer(
                 IndexedAt = DateTimeOffset.UtcNow,
                 CategoryIds = categoryIds
             });
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             logger.LogError(ex, "Document normalization failed for {Url}", canonicalUrl);
             await PersistFailureAsync(existing, canonicalUrl, crawlerId, documentId, scanId, ex.Message, etag, lastModified, contentHash, ct);
             return (WebSyncOutcome.Failed, ex.Message);
         }
 
         IReadOnlyList<SearchChunk> chunks = categoryIds.Length > 0
-            ? (result.Chunks ?? []).Select(c => new SearchChunk
-            {
+            ? (result.Chunks ?? []).Select(c => new SearchChunk {
                 Id = c.Id,
                 DocumentId = c.DocumentId,
                 SourceId = c.SourceId,
@@ -137,13 +127,10 @@ public sealed class WebContentSynchronizer(
             }).ToList()
             : result.Chunks ?? [];
 
-        try
-        {
+        try {
             await documentIndexing.UpsertAsync(doc, ct);
             await chunkIndexing.ReplaceDocumentChunksAsync(documentId, chunks, ct);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             logger.LogError(ex, "Indexing failed for {Url}", canonicalUrl);
             await PersistFailureAsync(existing, canonicalUrl, crawlerId, documentId, scanId, ex.Message, etag, lastModified, contentHash, ct);
             return (WebSyncOutcome.Failed, ex.Message);
@@ -167,7 +154,7 @@ public sealed class WebContentSynchronizer(
     public async Task MarkNotModifiedAsync(string canonicalUrl, Guid crawlerId, Guid scanId, CancellationToken ct)
     {
         UrlState? state = await stateRepository.FindAsync(crawlerId, canonicalUrl, ct);
-        if (state == null) return;
+        if(state == null) return;
         state.LastSeenScanId = scanId;
         state.LastFetchedAt = DateTimeOffset.UtcNow;
         state.LastHttpStatus = 304;
@@ -188,8 +175,7 @@ public sealed class WebContentSynchronizer(
         state.LastHttpStatus = 200;
         state.SyncStatus = UrlSyncStatus.Failed;
         state.LastError = error;
-        try { await stateRepository.SaveAsync(state, ct); }
-        catch (Exception ex) { logger.LogError(ex, "Could not persist failure state for {Url}", canonicalUrl); }
+        try { await stateRepository.SaveAsync(state, ct); } catch(Exception ex) { logger.LogError(ex, "Could not persist failure state for {Url}", canonicalUrl); }
     }
 
     private static string ComputeHash(byte[] data)
@@ -200,12 +186,11 @@ public sealed class WebContentSynchronizer(
 
     private static string BuildContent(Core.Extraction.ExtractedDocument? doc)
     {
-        if (doc == null || doc.Blocks.Count == 0) return "";
-        var sb = new StringBuilder();
-        foreach (var block in doc.Blocks)
-        {
+        if(doc == null || doc.Blocks.Count == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        foreach(var block in doc.Blocks) {
             sb.Append(block.Text);
-            if (sb.Length >= 4096) break;
+            if(sb.Length >= 4096) break;
             sb.Append(' ');
         }
         return sb.ToString().Trim();
@@ -213,11 +198,9 @@ public sealed class WebContentSynchronizer(
 
     private static string GetExtension(string url, string? contentType)
     {
-        if (!string.IsNullOrEmpty(contentType))
-        {
+        if(!string.IsNullOrEmpty(contentType)) {
             string ct = contentType.Split(';')[0].Trim().ToLowerInvariant();
-            return ct switch
-            {
+            return ct switch {
                 "text/html" or "application/xhtml+xml" => ".html",
                 "application/pdf" => ".pdf",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
@@ -234,7 +217,7 @@ public sealed class WebContentSynchronizer(
 
     private static string GetFileName(string url)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? u)) return "page";
+        if(!Uri.TryCreate(url, UriKind.Absolute, out Uri? u)) return "page";
         string path = u.AbsolutePath.TrimEnd('/');
         string name = Path.GetFileName(path);
         return string.IsNullOrEmpty(name) ? u.Host : name;

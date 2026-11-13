@@ -19,8 +19,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         IReadOnlyList<string>? extensions = null,
         bool recursive = true,
         IReadOnlyList<string>? excluded = null) =>
-        new(new FileCrawlerConfiguration
-        {
+        new(new FileCrawlerConfiguration {
             CrawlerId = Guid.NewGuid(),
             RootPath = _root,
             Recursive = recursive,
@@ -36,7 +35,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "b.txt"), "world");
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await enumerator.EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         Assert.Equal(2, files.Count);
@@ -51,7 +50,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         File.WriteAllText(Path.Combine(sub.FullName, "nested.txt"), "nested");
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await enumerator.EnumerateAsync(_root, CreateFilter(recursive: true), state).ToListAsync();
 
         Assert.Equal(2, files.Count);
@@ -66,7 +65,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         File.WriteAllText(Path.Combine(sub.FullName, "nested.txt"), "nested");
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await enumerator.EnumerateAsync(_root, CreateFilter(recursive: false), state).ToListAsync();
 
         Assert.Single(files);
@@ -80,7 +79,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "data.xlsx"), "");
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await enumerator.EnumerateAsync(_root, CreateFilter(extensions: [".pdf"]), state).ToListAsync();
 
         Assert.Single(files);
@@ -95,7 +94,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         File.WriteAllText(Path.Combine(excluded.FullName, "ignored.txt"), "");
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await enumerator.EnumerateAsync(
             _root, CreateFilter(excluded: ["node_modules"]), state).ToListAsync();
 
@@ -106,19 +105,18 @@ public sealed class DirectoryEnumeratorTests : IDisposable
     [Fact]
     public async Task CancellationStopsEnumeration()
     {
-        for (int i = 0; i < 20; i++)
+        for(int i = 0; i < 20; i++)
             File.WriteAllText(Path.Combine(_root, $"file{i}.txt"), "content");
 
-        var cts = new CancellationTokenSource();
+        CancellationTokenSource cts = new CancellationTokenSource();
         cts.Cancel();
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
-        var files = new List<DiscoveredFile>();
+        EnumerationState state = new EnumerationState();
+        List<DiscoveredFile> files = new List<DiscoveredFile>();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-        {
-            await foreach (DiscoveredFile f in enumerator.EnumerateAsync(_root, CreateFilter(), state, cts.Token))
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => {
+            await foreach(DiscoveredFile f in enumerator.EnumerateAsync(_root, CreateFilter(), state, cts.Token))
                 files.Add(f);
         });
     }
@@ -129,7 +127,7 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "file.txt"), "x");
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         await enumerator.EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         Assert.True(state.Completed);
@@ -142,10 +140,10 @@ public sealed class DirectoryEnumeratorTests : IDisposable
         string content = "hello world";
         string path = Path.Combine(_root, "test.txt");
         File.WriteAllText(path, content);
-        var info = new FileInfo(path);
+        FileInfo info = new FileInfo(path);
 
         DirectoryEnumerator enumerator = CreateEnumerator();
-        var state = new EnumerationState();
+        EnumerationState state = new EnumerationState();
         List<DiscoveredFile> files = await enumerator.EnumerateAsync(_root, CreateFilter(), state).ToListAsync();
 
         DiscoveredFile file = Assert.Single(files);
@@ -159,8 +157,8 @@ file static class AsyncEnumerableExtensions
 {
     public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)
     {
-        var list = new List<T>();
-        await foreach (T? item in source) list.Add(item);
+        List<T> list = new List<T>();
+        await foreach(T? item in source) list.Add(item);
         return list;
     }
 }

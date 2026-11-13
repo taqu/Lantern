@@ -17,8 +17,7 @@ internal static class Seeder
         string host = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700";
         string? masterKey = Environment.GetEnvironmentVariable("MEILI_MASTER_KEY");
 
-        if (string.IsNullOrWhiteSpace(masterKey))
-        {
+        if(string.IsNullOrWhiteSpace(masterKey)) {
             Console.Error.WriteLine("ERROR: MEILI_MASTER_KEY environment variable is not set.");
             Console.Error.WriteLine("       Set MEILI_MASTER_KEY before running --seed.");
             return false;
@@ -26,19 +25,17 @@ internal static class Seeder
 
         Console.WriteLine($"Seeder — connecting to {host}");
 
-        var client = new MeilisearchClient(host, masterKey);
+        MeilisearchClient client = new MeilisearchClient(host, masterKey);
 
-        try
-        {
+        try {
             // Verify connectivity
             MeiliSearchHealth health = await client.HealthAsync();
             Console.WriteLine($"  Meilisearch health: {health.Status}");
 
             List<SeedDocument> documents = BuildSeedDocuments();
-            var indexing = new MeilisearchIndexingService(client, new MeilisearchOptions { IndexName = IndexName },
+            MeilisearchIndexingService indexing = new MeilisearchIndexingService(client, new MeilisearchOptions { IndexName = IndexName },
                 NullLogger<MeilisearchIndexingService>.Instance);
-            await indexing.UpsertBatchAsync(documents.Select(d => new SearchDocument
-            {
+            await indexing.UpsertBatchAsync(documents.Select(d => new SearchDocument {
                 SourceId = "development-seed",
                 SourceType = d.SourcePath != null ? "file" : "web",
                 Path = d.SourcePath,
@@ -50,9 +47,7 @@ internal static class Seeder
 
             Console.WriteLine($"  Successfully indexed {documents.Count} documents into '{IndexName}'.");
             return true;
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Console.Error.WriteLine($"ERROR: Seeding failed — {ex.Message}");
             return false;
         }

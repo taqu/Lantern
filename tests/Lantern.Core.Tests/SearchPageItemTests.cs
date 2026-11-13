@@ -7,7 +7,7 @@ public sealed class SearchPageItemTests
     [Fact]
     public void SearchPageItem_RecordProperties_AreSetCorrectly()
     {
-        var item = new SearchPageItem(
+        SearchPageItem item = new SearchPageItem(
             Id: "doc-001",
             Title: "Test Title",
             Url: "https://example.com/page",
@@ -26,7 +26,7 @@ public sealed class SearchPageItemTests
     [Fact]
     public void SearchPageItem_NullableFields_CanBeNull()
     {
-        var item = new SearchPageItem(
+        SearchPageItem item = new SearchPageItem(
             Id: "doc-002",
             Title: "Minimal",
             Url: null,

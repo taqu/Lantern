@@ -1,3 +1,4 @@
+using System.Text;
 using Toxy;
 
 namespace Lantern.Feasibility;
@@ -26,27 +27,24 @@ internal sealed class DocumentExtractionFeasibility
         Console.WriteLine();
         Console.WriteLine("=== Document Extraction Feasibility ===");
 
-        if (filePath != null)
-        {
+        if(filePath != null) {
             await ExtractSingleFileAsync(filePath);
             return;
         }
 
         // Run against all sample files in samples/documents/
         string? samplesDir = FindSamplesDirectory();
-        if (samplesDir == null)
-        {
+        if(samplesDir == null) {
             Console.WriteLine("  samples/documents/ directory not found. Run from repo root or provide --extract <path>.");
             return;
         }
 
-        var files = Directory.GetFiles(samplesDir)
+        List<string> files = Directory.GetFiles(samplesDir)
             .Where(f => !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f)
             .ToList();
 
-        if (files.Count == 0)
-        {
+        if(files.Count == 0) {
             Console.WriteLine($"  No sample files found in: {samplesDir}");
             Console.WriteLine("  Add test files or use --extract <path>.");
             return;
@@ -56,8 +54,7 @@ internal sealed class DocumentExtractionFeasibility
         Console.WriteLine($"  Files found: {files.Count}");
         Console.WriteLine();
 
-        foreach (string file in files)
-        {
+        foreach(string file in files) {
             await ExtractSingleFileAsync(file);
         }
     }
@@ -70,143 +67,114 @@ internal sealed class DocumentExtractionFeasibility
         Console.WriteLine($"  File   : {name}");
         Console.WriteLine($"  Format : {ext}");
 
-        if (!File.Exists(filePath))
-        {
+        if(!File.Exists(filePath)) {
             Console.WriteLine($"  Result : FAIL — file not found: {filePath}");
             Console.WriteLine();
             return;
         }
 
-        try
-        {
-            var context = new ParserContext(filePath);
+        try {
+            ParserContext context = new ParserContext(filePath);
             string? text = null;
             string parserKind = "unknown";
 
-            switch (ext)
-            {
-                case ".TXT":
-                case ".HTML":
-                case ".HTM":
-                    {
-                        ITextParser parser = ParserFactory.CreateText(context);
-                        if (parser != null)
-                        {
-                            text = parser.Parse();
-                            parserKind = "text";
-                        }
-                        break;
+            switch(ext) {
+            case ".TXT":
+            case ".HTML":
+            case ".HTM": {
+                ITextParser parser = ParserFactory.CreateText(context);
+                if(parser != null) {
+                    text = parser.Parse();
+                    parserKind = "text";
+                }
+                break;
+            }
+            case ".DOCX":
+            case ".PDF":
+            case ".RTF":
+            case ".EPUB": {
+                IDocumentParser parser = ParserFactory.CreateDocument(context);
+                if(parser != null) {
+                    ToxyDocument doc = parser.Parse();
+                    if(doc?.Paragraphs != null) {
+                        text = string.Join("\n", doc.Paragraphs.Select(p => p.Text ?? ""));
                     }
-                case ".DOCX":
-                case ".PDF":
-                case ".RTF":
-                case ".EPUB":
-                    {
-                        IDocumentParser parser = ParserFactory.CreateDocument(context);
-                        if (parser != null)
-                        {
-                            ToxyDocument doc = parser.Parse();
-                            if (doc?.Paragraphs != null)
-                            {
-                                text = string.Join("\n", doc.Paragraphs.Select(p => p.Text ?? ""));
-                            }
-                            parserKind = "document";
-                        }
-                        break;
-                    }
-                case ".XLSX":
-                case ".XLS":
-                case ".CSV":
-                    {
-                        ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
-                        if (parser != null)
-                        {
-                            ToxySpreadsheet spreadsheet = parser.Parse();
-                            if (spreadsheet?.Tables != null)
-                            {
-                                var sb = new System.Text.StringBuilder();
-                                foreach (ToxyTable? table in spreadsheet.Tables)
-                                {
-                                    sb.AppendLine($"[Sheet: {table.Name}]");
-                                    if (table.Rows != null)
-                                    {
-                                        foreach (ToxyRow? row in table.Rows)
-                                        {
-                                            if (row?.Cells != null)
-                                                sb.AppendLine(string.Join("\t", row.Cells.Select(c => c?.Value ?? "")));
-                                        }
-                                    }
+                    parserKind = "document";
+                }
+                break;
+            }
+            case ".XLSX":
+            case ".XLS":
+            case ".CSV": {
+                ISpreadsheetParser parser = ParserFactory.CreateSpreadsheet(context);
+                if(parser != null) {
+                    ToxySpreadsheet spreadsheet = parser.Parse();
+                    if(spreadsheet?.Tables != null) {
+                        StringBuilder sb = new System.Text.StringBuilder();
+                        foreach(ToxyTable? table in spreadsheet.Tables) {
+                            sb.AppendLine($"[Sheet: {table.Name}]");
+                            if(table.Rows != null) {
+                                foreach(ToxyRow? row in table.Rows) {
+                                    if(row?.Cells != null)
+                                        sb.AppendLine(string.Join("\t", row.Cells.Select(c => c?.Value ?? "")));
                                 }
-                                text = sb.ToString();
                             }
-                            parserKind = "spreadsheet";
                         }
-                        break;
+                        text = sb.ToString();
                     }
-                case ".PPTX":
-                case ".PPT":
-                    {
-                        ISlideshowParser parser = ParserFactory.CreateSlideshow(context);
-                        if (parser != null)
-                        {
-                            ToxySlideshow slideshow = parser.Parse();
-                            if (slideshow?.Slides != null)
-                            {
-                                var sb = new System.Text.StringBuilder();
-                                int slideNum = 1;
-                                foreach (ToxySlide? slide in slideshow.Slides)
-                                {
-                                    sb.AppendLine($"[Slide {slideNum++}]");
-                                    if (slide?.Texts != null)
-                                    {
-                                        foreach (string t in slide.Texts)
-                                            sb.AppendLine(t);
-                                    }
-                                }
-                                text = sb.ToString();
+                    parserKind = "spreadsheet";
+                }
+                break;
+            }
+            case ".PPTX":
+            case ".PPT": {
+                ISlideshowParser parser = ParserFactory.CreateSlideshow(context);
+                if(parser != null) {
+                    ToxySlideshow slideshow = parser.Parse();
+                    if(slideshow?.Slides != null) {
+                        StringBuilder sb = new System.Text.StringBuilder();
+                        int slideNum = 1;
+                        foreach(ToxySlide? slide in slideshow.Slides) {
+                            sb.AppendLine($"[Slide {slideNum++}]");
+                            if(slide?.Texts != null) {
+                                foreach(string t in slide.Texts)
+                                    sb.AppendLine(t);
                             }
-                            parserKind = "slideshow";
                         }
-                        break;
+                        text = sb.ToString();
                     }
-                default:
-                    {
-                        // Try text parser as fallback
-                        ITextParser parser = ParserFactory.CreateText(context);
-                        if (parser != null)
-                        {
-                            text = parser.Parse();
-                            parserKind = "text (fallback)";
-                        }
-                        break;
-                    }
+                    parserKind = "slideshow";
+                }
+                break;
+            }
+            default: {
+                // Try text parser as fallback
+                ITextParser parser = ParserFactory.CreateText(context);
+                if(parser != null) {
+                    text = parser.Parse();
+                    parserKind = "text (fallback)";
+                }
+                break;
+            }
             }
 
-            if (text == null)
-            {
+            if(text == null) {
                 Console.WriteLine($"  Result : FAIL — no Toxy parser available for {ext}");
-            }
-            else
-            {
+            } else {
                 int chars = text.Length;
                 bool hasContent = chars > 0;
                 Console.WriteLine($"  Parser : {parserKind}");
                 Console.WriteLine($"  Result : {(hasContent ? "PASS" : "FAIL — empty output")}");
                 Console.WriteLine($"  Chars  : {chars}");
 
-                if (hasContent)
-                {
+                if(hasContent) {
                     string preview = text.Length > 300 ? text[..300] + " [...]" : text;
                     Console.WriteLine($"  Preview: {EscapeControlChars(preview)}");
                 }
             }
-        }
-        catch (NotSupportedException ex)
-        {
+        } catch(NotSupportedException ex) {
             Console.WriteLine($"  Result : FAIL — format not supported by Toxy: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Console.WriteLine($"  Result : FAIL — {ex.GetType().Name}: {ex.Message}");
         }
 
@@ -217,11 +185,10 @@ internal sealed class DocumentExtractionFeasibility
     private static string? FindSamplesDirectory()
     {
         string? dir = Directory.GetCurrentDirectory();
-        for (int depth = 0; depth < 6; depth++)
-        {
-            if (dir == null) break;
+        for(int depth = 0; depth < 6; depth++) {
+            if(dir == null) break;
             string candidate = System.IO.Path.Combine(dir, "samples", "documents");
-            if (Directory.Exists(candidate)) return candidate;
+            if(Directory.Exists(candidate)) return candidate;
             dir = System.IO.Path.GetDirectoryName(dir);
         }
         return null;

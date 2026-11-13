@@ -12,49 +12,35 @@ public sealed class PathTestService
 
     public async Task<PathTestResult> TestAsync(string rootPath, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(rootPath))
+        if(string.IsNullOrWhiteSpace(rootPath))
             return new PathTestResult(false, "Root path is required.");
 
         string canonical;
-        try { canonical = DocumentIdentity.FilePath(rootPath); }
-        catch (ArgumentException ex) { return new PathTestResult(false, ex.Message); }
-        catch { return new PathTestResult(false, "Path format is not valid."); }
+        try { canonical = DocumentIdentity.FilePath(rootPath); } catch(ArgumentException ex) { return new PathTestResult(false, ex.Message); } catch { return new PathTestResult(false, "Path format is not valid."); }
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TestTimeout);
 
-        try
-        {
+        try {
             bool exists = await Task.Run(() => Directory.Exists(canonical), timeoutCts.Token);
-            if (!exists)
+            if(!exists)
                 return new PathTestResult(false, "Directory does not exist or cannot be reached.");
 
-            await Task.Run(() =>
-            {
+            await Task.Run(() => {
                 // Bounded non-recursive enumeration to verify read access without full scan.
                 _ = Directory.EnumerateFileSystemEntries(canonical).Take(10).ToList();
             }, timeoutCts.Token);
 
             return new PathTestResult(true, "Directory is accessible.");
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
+        } catch(OperationCanceledException) when(!ct.IsCancellationRequested) {
             return new PathTestResult(false, "Path test timed out.");
-        }
-        catch (UnauthorizedAccessException)
-        {
+        } catch(UnauthorizedAccessException) {
             return new PathTestResult(false, "Access denied. The server process does not have permission to read this directory.");
-        }
-        catch (DirectoryNotFoundException)
-        {
+        } catch(DirectoryNotFoundException) {
             return new PathTestResult(false, "Directory not found.");
-        }
-        catch (IOException)
-        {
+        } catch(IOException) {
             return new PathTestResult(false, "I/O error. The network path may be unavailable.");
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             return new PathTestResult(false, $"Test failed: {ex.Message}");
         }
     }

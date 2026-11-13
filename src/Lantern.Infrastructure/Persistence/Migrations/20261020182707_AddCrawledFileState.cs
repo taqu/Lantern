@@ -1,4 +1,3 @@
-using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -13,8 +12,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "CrawledFileStates",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
@@ -27,15 +25,13 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     SyncStatus = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
                     LastError = table.Column<string>(type: "TEXT", nullable: true)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawledFileStates", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "FileCrawlerProfiles",
-                columns: table => new
-                {
+                columns: table => new {
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
                     RootPath = table.Column<string>(type: "TEXT", nullable: false),
                     Recursive = table.Column<bool>(type: "INTEGER", nullable: false),
@@ -45,8 +41,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     MaxFileSizeMB = table.Column<int>(type: "INTEGER", nullable: false),
                     MaxConcurrentFiles = table.Column<int>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_FileCrawlerProfiles", x => x.CrawlerId);
                     table.CheckConstraint("CK_FileCrawlerProfile_MaxConcurrentFiles", "MaxConcurrentFiles BETWEEN 1 AND 32");
                     table.CheckConstraint("CK_FileCrawlerProfile_MaxFileSizeMB", "MaxFileSizeMB BETWEEN 1 AND 10000");

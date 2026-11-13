@@ -32,10 +32,9 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
 
         // WordDocument stream: 32-byte FIB placeholder, then UTF-16LE text
         // separated by paragraph marks (CR = 0x000D).
-        using var ms = new MemoryStream();
+        using MemoryStream ms = new MemoryStream();
         ms.Write(new byte[32], 0, 32); // FIB header placeholder
-        foreach (string para in paragraphs)
-        {
+        foreach(string para in paragraphs) {
             byte[] encoded = Encoding.Unicode.GetBytes(para);
             ms.Write(encoded);
             // paragraph mark \r in UTF-16LE = 0x0D 0x00
@@ -43,7 +42,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
             ms.WriteByte(0x00);
         }
 
-        using var storage = RootStorage.Create(path);
+        using RootStorage storage = RootStorage.Create(path);
         using CfbStream wordDocStream = storage.CreateStream("WordDocument");
         byte[] data = ms.ToArray();
         wordDocStream.Write(data, 0, data.Length);
@@ -55,13 +54,11 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     private string CreateXlsFile(params (string sheetName, string[] rows)[] sheets)
     {
         string path = Path.Combine(_tempDir, $"test-{Guid.NewGuid():N}.xls");
-        var workbook = new HSSFWorkbook();
+        HSSFWorkbook workbook = new HSSFWorkbook();
 
-        foreach (var (sheetName, rows) in sheets)
-        {
+        foreach(var (sheetName, rows) in sheets) {
             ISheet sheet = workbook.CreateSheet(sheetName);
-            for (int r = 0; r < rows.Length; r++)
-            {
+            for(int r = 0; r < rows.Length; r++) {
                 IRow row = sheet.CreateRow(r);
                 row.CreateCell(0).SetCellValue(rows[r]);
             }
@@ -80,20 +77,16 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     {
         string path = Path.Combine(_tempDir, $"test-{Guid.NewGuid():N}.ppt");
 
-        using var ms = new MemoryStream();
+        using MemoryStream ms = new MemoryStream();
         int slideNumber = 0;
 
-        foreach (var (text, isNotes) in entries)
-        {
-            if (!isNotes)
-            {
+        foreach(var (text, isNotes) in entries) {
+            if(!isNotes) {
                 slideNumber++;
                 // SlideAtom (0x03E8) with 24-byte body
                 WriteRecordHeader(ms, 0x03E8, 24);
                 ms.Write(new byte[24]);
-            }
-            else
-            {
+            } else {
                 // NotesAtom (0x03F0) with 16-byte body
                 WriteRecordHeader(ms, 0x03F0, 16);
                 ms.Write(new byte[16]);
@@ -105,7 +98,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
             ms.Write(textData);
         }
 
-        using var storage = RootStorage.Create(path);
+        using RootStorage storage = RootStorage.Create(path);
         using CfbStream pptStream = storage.CreateStream("PowerPoint Document");
         byte[] data = ms.ToArray();
         pptStream.Write(data, 0, data.Length);
@@ -133,7 +126,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Doc_ExtractsEnglishParagraphs()
     {
         string path = CreateDocFile("Hello World", "Second paragraph", "Third entry");
-        var extractor = new DocExtractor();
+        DocExtractor extractor = new DocExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -147,7 +140,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Doc_ExtractsJapaneseText()
     {
         string path = CreateDocFile("日本語テスト", "二番目の段落");
-        var extractor = new DocExtractor();
+        DocExtractor extractor = new DocExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -160,7 +153,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Doc_TitleIsFilenameWithoutExtension()
     {
         string path = CreateDocFile("Content");
-        var extractor = new DocExtractor();
+        DocExtractor extractor = new DocExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.Equal(Path.GetFileNameWithoutExtension(path), result.Title);
@@ -170,13 +163,12 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Doc_EmptyWordDocumentStream_ReturnsEmpty()
     {
         string path = Path.Combine(_tempDir, "empty.doc");
-        using (var storage = RootStorage.Create(path))
-        {
+        using(RootStorage storage = RootStorage.Create(path)) {
             using CfbStream s = storage.CreateStream("WordDocument");
             s.Write(new byte[16]); // less than the 32-byte minimum
         }
 
-        var extractor = new DocExtractor();
+        DocExtractor extractor = new DocExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.Empty(result.Blocks);
@@ -187,12 +179,11 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Doc_MissingWordDocumentStream_ReturnsEmpty()
     {
         string path = Path.Combine(_tempDir, "no-stream.doc");
-        using (var storage = RootStorage.Create(path))
-        {
+        using(RootStorage storage = RootStorage.Create(path)) {
             // No streams added — extractor should not throw
         }
 
-        var extractor = new DocExtractor();
+        DocExtractor extractor = new DocExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.Empty(result.Blocks);
@@ -201,7 +192,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     [Fact]
     public void Doc_CanExtract_MatchesOnlyDocFormat()
     {
-        var extractor = new DocExtractor();
+        DocExtractor extractor = new DocExtractor();
         Assert.True(extractor.CanExtract(DocFormat.Doc));
         Assert.False(extractor.CanExtract(DocFormat.Docx));
         Assert.False(extractor.CanExtract(DocFormat.Ppt));
@@ -214,7 +205,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Xls_ExtractsEnglishRows()
     {
         string path = CreateXlsFile(("Sheet1", ["Alpha", "Beta", "Gamma"]));
-        var extractor = new XlsxExtractor();
+        XlsxExtractor extractor = new XlsxExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -227,7 +218,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Xls_ExtractsJapaneseContent()
     {
         string path = CreateXlsFile(("シート1", ["日本語データ", "二行目"]));
-        var extractor = new XlsxExtractor();
+        XlsxExtractor extractor = new XlsxExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -242,11 +233,11 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
         string path = CreateXlsFile(
             ("Employees", ["Alice", "Bob"]),
             ("Products", ["Widget", "Gadget"]));
-        var extractor = new XlsxExtractor();
+        XlsxExtractor extractor = new XlsxExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
-        var sheetNames = result.Blocks.Select(b => b.SheetName).Distinct().ToList();
+        List<string?> sheetNames = result.Blocks.Select(b => b.SheetName).Distinct().ToList();
         Assert.Contains("Employees", sheetNames);
         Assert.Contains("Products", sheetNames);
     }
@@ -257,7 +248,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
         string path = CreateXlsFile(
             ("Alpha", ["data"]),
             ("Beta", ["more data"]));
-        var extractor = new XlsxExtractor();
+        XlsxExtractor extractor = new XlsxExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotNull(result.Metadata.WorksheetNames);
@@ -268,7 +259,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     [Fact]
     public void Xls_CanExtract_MatchesXlsAndXlsx()
     {
-        var extractor = new XlsxExtractor();
+        XlsxExtractor extractor = new XlsxExtractor();
         Assert.True(extractor.CanExtract(DocFormat.Xls));
         Assert.True(extractor.CanExtract(DocFormat.Xlsx));
         Assert.True(extractor.CanExtract(DocFormat.Csv));
@@ -284,7 +275,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
         string path = CreatePptFile(
             ("Introduction slide", false),
             ("Second slide content", false));
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -297,7 +288,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Ppt_ExtractsJapaneseText()
     {
         string path = CreatePptFile(("日本語プレゼン", false));
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -313,7 +304,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
             ("Slide one", false),
             ("Slide two", false),
             ("Slide three", false));
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -330,7 +321,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
         string path = CreatePptFile(
             ("Main slide text", false),
             ("Speaker notes here", true));
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.NotEmpty(result.Blocks);
@@ -345,7 +336,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Ppt_TitleIsFilenameWithoutExtension()
     {
         string path = CreatePptFile(("Slide content", false));
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.Equal(Path.GetFileNameWithoutExtension(path), result.Title);
@@ -355,13 +346,12 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Ppt_EmptyStream_ReturnsEmpty()
     {
         string path = Path.Combine(_tempDir, "empty.ppt");
-        using (var storage = RootStorage.Create(path))
-        {
+        using(RootStorage storage = RootStorage.Create(path)) {
             using CfbStream s = storage.CreateStream("PowerPoint Document");
             s.Write(new byte[4]); // less than 8-byte record header minimum
         }
 
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.Empty(result.Blocks);
@@ -372,14 +362,13 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     public async Task Ppt_MissingPowerPointDocumentStream_ReturnsEmpty()
     {
         string path = Path.Combine(_tempDir, "no-ppt-stream.ppt");
-        using (var storage = RootStorage.Create(path))
-        {
+        using(RootStorage storage = RootStorage.Create(path)) {
             // Wrong stream name — extractor should not throw
             using CfbStream s = storage.CreateStream("SomethingElse");
             s.Write(new byte[16]);
         }
 
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         ExtractedDocument result = await extractor.ExtractAsync(DocumentInput.FromFile(path));
 
         Assert.Empty(result.Blocks);
@@ -388,7 +377,7 @@ public sealed class LegacyOfficeExtractionTests : IDisposable
     [Fact]
     public void Ppt_CanExtract_MatchesOnlyPptFormat()
     {
-        var extractor = new PptExtractor();
+        PptExtractor extractor = new PptExtractor();
         Assert.True(extractor.CanExtract(DocFormat.Ppt));
         Assert.False(extractor.CanExtract(DocFormat.Pptx));
         Assert.False(extractor.CanExtract(DocFormat.Doc));

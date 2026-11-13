@@ -27,30 +27,23 @@ internal sealed class MeilisearchFeasibility
         Console.WriteLine();
 
         MeilisearchClient client;
-        try
-        {
+        try {
             client = new MeilisearchClient(_host, _masterKey);
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Failed to create client", ex);
             return false;
         }
 
         // 1. Health check
         Console.Write("  [1] Health check ... ");
-        try
-        {
+        try {
             MeiliSearchHealth health = await client.HealthAsync();
-            if (health.Status != "available")
-            {
+            if(health.Status != "available") {
                 Fail($"Unexpected status: {health.Status}");
                 return false;
             }
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Meilisearch is not reachable", ex);
             Console.WriteLine("      Ensure Meilisearch is running and MEILI_HOST / MEILI_MASTER_KEY are correct.");
             return false;
@@ -58,32 +51,25 @@ internal sealed class MeilisearchFeasibility
 
         // 2. Ensure clean state — delete index if it already exists
         Console.Write("  [2] Ensure clean index ... ");
-        try
-        {
+        try {
             ResourceResults<IEnumerable<Meilisearch.Index>> existingIndexes = await client.GetAllIndexesAsync();
-            if (existingIndexes.Results.Any(i => i.Uid == IndexUid))
-            {
+            if(existingIndexes.Results.Any(i => i.Uid == IndexUid)) {
                 TaskInfo deleteTask = await client.DeleteIndexAsync(IndexUid);
                 await client.WaitForTaskAsync(deleteTask.TaskUid, timeoutMs: TimeoutMs);
             }
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Could not clean up existing index", ex);
             return false;
         }
 
         // 3. Create index
         Console.Write("  [3] Create index ... ");
-        try
-        {
+        try {
             TaskInfo createTask = await client.CreateIndexAsync(IndexUid, "id");
             await client.WaitForTaskAsync(createTask.TaskUid, timeoutMs: TimeoutMs);
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Could not create index", ex);
             return false;
         }
@@ -99,14 +85,11 @@ internal sealed class MeilisearchFeasibility
             new SampleDocument { Id = 3, Title = "Web Crawling",          Content = "Website content can be discovered and searched." },
         };
 
-        try
-        {
+        try {
             TaskInfo addTask = await index.AddDocumentsAsync(documents);
             await client.WaitForTaskAsync(addTask.TaskUid, timeoutMs: TimeoutMs);
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Could not index documents", ex);
             await TryCleanupAsync(client);
             return false;
@@ -114,28 +97,23 @@ internal sealed class MeilisearchFeasibility
 
         // 5. Search
         Console.Write("  [5] Search for \"lightweight\" ... ");
-        try
-        {
+        try {
             ISearchable<SampleDocument> results = await index.SearchAsync<SampleDocument>("lightweight");
-            if (results.Hits.Count == 0)
-            {
+            if(results.Hits.Count == 0) {
                 Fail("No results returned");
                 await TryCleanupAsync(client);
                 return false;
             }
 
             SampleDocument? hit = results.Hits.FirstOrDefault(h => h.Id == 1);
-            if (hit == null)
-            {
+            if(hit == null) {
                 Fail($"Expected document id=1 in results, got ids: {string.Join(", ", results.Hits.Select(h => h.Id))}");
                 await TryCleanupAsync(client);
                 return false;
             }
             Console.Write($"(found {results.Hits.Count} hit(s)) ");
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Search failed", ex);
             await TryCleanupAsync(client);
             return false;
@@ -143,14 +121,11 @@ internal sealed class MeilisearchFeasibility
 
         // 6. Second search (broader term)
         Console.Write("  [6] Search for \"indexed\" ... ");
-        try
-        {
+        try {
             ISearchable<SampleDocument> results = await index.SearchAsync<SampleDocument>("indexed");
             Console.Write($"(found {results.Hits.Count} hit(s)) ");
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Second search failed", ex);
             await TryCleanupAsync(client);
             return false;
@@ -158,13 +133,10 @@ internal sealed class MeilisearchFeasibility
 
         // 7. Delete index
         Console.Write("  [7] Delete test index ... ");
-        try
-        {
+        try {
             await TryCleanupAsync(client);
             Pass();
-        }
-        catch (Exception ex)
-        {
+        } catch(Exception ex) {
             Fail("Could not delete index (manual cleanup may be required)", ex);
             return false;
         }
@@ -176,13 +148,10 @@ internal sealed class MeilisearchFeasibility
 
     private static async Task TryCleanupAsync(MeilisearchClient client)
     {
-        try
-        {
+        try {
             TaskInfo deleteTask = await client.DeleteIndexAsync(IndexUid);
             await client.WaitForTaskAsync(deleteTask.TaskUid, timeoutMs: TimeoutMs);
-        }
-        catch
-        {
+        } catch {
             // Best-effort cleanup; ignore errors here.
         }
     }
@@ -192,8 +161,7 @@ internal sealed class MeilisearchFeasibility
     private static void Fail(string reason, Exception? ex = null)
     {
         Console.WriteLine($"FAIL — {reason}");
-        if (ex != null)
-        {
+        if(ex != null) {
             Console.WriteLine($"      Exception: {ex.GetType().Name}: {ex.Message}");
         }
     }

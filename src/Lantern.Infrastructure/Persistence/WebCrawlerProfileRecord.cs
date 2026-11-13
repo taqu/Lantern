@@ -18,8 +18,7 @@ public sealed class WebCrawlerProfileRecord
     public bool RespectRobotsTxt { get; set; } = true;
     public bool IndexLinkedDocuments { get; set; } = true;
 
-    public WebCrawlerProfile ToDomain() => new()
-    {
+    public WebCrawlerProfile ToDomain() => new() {
         CrawlerId = CrawlerId,
         StartUrls = Split(StartUrls),
         AllowedHosts = Split(AllowedHosts),
@@ -35,8 +34,7 @@ public sealed class WebCrawlerProfileRecord
         IndexLinkedDocuments = IndexLinkedDocuments
     };
 
-    public static WebCrawlerProfileRecord FromDomain(WebCrawlerProfile profile) => new()
-    {
+    public static WebCrawlerProfileRecord FromDomain(WebCrawlerProfile profile) => new() {
         CrawlerId = profile.CrawlerId,
         StartUrls = Join(profile.StartUrls),
         AllowedHosts = Join(profile.AllowedHosts),

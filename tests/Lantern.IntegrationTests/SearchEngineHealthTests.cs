@@ -9,9 +9,9 @@ public sealed class SearchEngineHealthTests
     [Fact]
     public async Task HealthyEmptyIndexIsDistinctFromUnavailableAndResponsesAreCached()
     {
-        using var handler = new HealthHandler();
-        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:7700") };
-        var service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
+        using HealthHandler handler = new HealthHandler();
+        using HttpClient http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:7700") };
+        MeilisearchHealthService service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
         Core.Administration.SearchEngineStatus status = await service.GetAsync();
         Assert.True(status.Available);
         Assert.Equal(0L, status.DocumentCount);
@@ -24,9 +24,9 @@ public sealed class SearchEngineHealthTests
     [Fact]
     public async Task MissingIndexDoesNotCreateOne()
     {
-        using var http = new HttpClient(new HealthHandler { MissingIndex = true }) { BaseAddress = new Uri("http://localhost:7700") };
-        var client = new MeilisearchClient(http, "");
-        var service = new MeilisearchHealthService(client, new MeilisearchOptions());
+        using HttpClient http = new HttpClient(new HealthHandler { MissingIndex = true }) { BaseAddress = new Uri("http://localhost:7700") };
+        MeilisearchClient client = new MeilisearchClient(http, "");
+        MeilisearchHealthService service = new MeilisearchHealthService(client, new MeilisearchOptions());
         Core.Administration.SearchEngineStatus status = await service.GetAsync();
         Assert.True(status.Available);
         Assert.Null(status.DocumentCount);
@@ -36,8 +36,8 @@ public sealed class SearchEngineHealthTests
     [Fact]
     public async Task ConnectionFailureReturnsSafeStatus()
     {
-        using var http = new HttpClient(new HealthHandler { Offline = true }) { BaseAddress = new Uri("http://localhost:7700") };
-        var service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
+        using HttpClient http = new HttpClient(new HealthHandler { Offline = true }) { BaseAddress = new Uri("http://localhost:7700") };
+        MeilisearchHealthService service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
         Core.Administration.SearchEngineStatus status = await service.GetAsync();
         Assert.False(status.Available);
         Assert.Null(status.DocumentCount);
@@ -47,9 +47,9 @@ public sealed class SearchEngineHealthTests
     [Fact]
     public async Task CallerCancellationIsNotConvertedIntoOfflineStatus()
     {
-        using var http = new HttpClient(new HealthHandler()) { BaseAddress = new Uri("http://localhost:7700") };
-        var service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
-        using var cts = new CancellationTokenSource();
+        using HttpClient http = new HttpClient(new HealthHandler()) { BaseAddress = new Uri("http://localhost:7700") };
+        MeilisearchHealthService service = new MeilisearchHealthService(new MeilisearchClient(http, ""), new MeilisearchOptions());
+        using CancellationTokenSource cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetAsync(cancellationToken: cts.Token));
     }
@@ -63,10 +63,9 @@ public sealed class SearchEngineHealthTests
         {
             Requests++;
             Assert.Equal(HttpMethod.Get, request.Method);
-            if (Offline) throw new HttpRequestException("sensitive internal connection detail");
+            if(Offline) throw new HttpRequestException("sensitive internal connection detail");
             bool health = request.RequestUri!.AbsolutePath == "/health";
-            var response = new HttpResponseMessage(!health && MissingIndex ? HttpStatusCode.NotFound : HttpStatusCode.OK)
-            {
+            HttpResponseMessage response = new HttpResponseMessage(!health && MissingIndex ? HttpStatusCode.NotFound : HttpStatusCode.OK) {
                 Content = new StringContent(health ? """{"status":"available"}""" : MissingIndex
                     ? """{"message":"Index missing","code":"index_not_found","type":"invalid_request","link":"https://docs.meilisearch.com/errors#index_not_found"}"""
                     : """{"numberOfDocuments":0,"isIndexing":false,"fieldDistribution":{}}""", System.Text.Encoding.UTF8, "application/json")

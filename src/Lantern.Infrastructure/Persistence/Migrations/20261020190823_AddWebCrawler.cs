@@ -1,4 +1,3 @@
-using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -13,8 +12,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.CreateTable(
                 name: "CrawledUrlStates",
-                columns: table => new
-                {
+                columns: table => new {
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
@@ -30,15 +28,13 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     SyncStatus = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
                     LastError = table.Column<string>(type: "TEXT", nullable: true)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_CrawledUrlStates", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "WebCrawlerProfiles",
-                columns: table => new
-                {
+                columns: table => new {
                     CrawlerId = table.Column<Guid>(type: "TEXT", nullable: false),
                     StartUrls = table.Column<string>(type: "TEXT", nullable: false),
                     AllowedHosts = table.Column<string>(type: "TEXT", nullable: false),
@@ -53,8 +49,7 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     RespectRobotsTxt = table.Column<bool>(type: "INTEGER", nullable: false),
                     IndexLinkedDocuments = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
-                constraints: table =>
-                {
+                constraints: table => {
                     table.PrimaryKey("PK_WebCrawlerProfiles", x => x.CrawlerId);
                     table.CheckConstraint("CK_WebProfile_MaximumConcurrentRequests", "MaximumConcurrentRequests BETWEEN 1 AND 16");
                     table.CheckConstraint("CK_WebProfile_MaximumDepth", "MaximumDepth BETWEEN 1 AND 100");

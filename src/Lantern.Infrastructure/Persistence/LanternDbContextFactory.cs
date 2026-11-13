@@ -11,7 +11,7 @@ public sealed class LanternDbContextFactory : IDesignTimeDbContextFactory<Lanter
     {
         string path = Environment.GetEnvironmentVariable("LANTERN_MIGRATION_DATABASE")
             ?? Path.Combine(Path.GetTempPath(), "lantern-design.sqlite");
-        var connection = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(path) };
+        SqliteConnectionStringBuilder connection = new SqliteConnectionStringBuilder { DataSource = Path.GetFullPath(path) };
         return new(new DbContextOptionsBuilder<LanternDbContext>().UseSqlite(connection.ToString()).Options);
     }
 }

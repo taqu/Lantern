@@ -8,25 +8,19 @@ public static class TextNormalizer
     // Normalize line endings, remove invalid control chars, clean whitespace
     public static string Normalize(string text)
     {
-        if (string.IsNullOrEmpty(text)) return text;
+        if(string.IsNullOrEmpty(text)) return text;
 
         // Normalize line endings to LF
-        var sb = new StringBuilder(text.Length);
-        for (int i = 0; i < text.Length; i++)
-        {
+        StringBuilder sb = new StringBuilder(text.Length);
+        for(int i = 0; i < text.Length; i++) {
             char c = text[i];
-            if (c == '\r')
-            {
+            if(c == '\r') {
                 sb.Append('\n');
-                if (i + 1 < text.Length && text[i + 1] == '\n')
+                if(i + 1 < text.Length && text[i + 1] == '\n')
                     i++; // Skip \n in \r\n
-            }
-            else if (IsInvalidControlChar(c))
-            {
+            } else if(IsInvalidControlChar(c)) {
                 // Skip invalid control chars (but keep \n, \t)
-            }
-            else
-            {
+            } else {
                 sb.Append(c);
             }
         }
@@ -44,7 +38,7 @@ public static class TextNormalizer
     public static string TrimLineEnds(string text)
     {
         string[] lines = text.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        for(int i = 0; i < lines.Length; i++)
             lines[i] = lines[i].TrimEnd();
         return string.Join('\n', lines);
     }
@@ -52,9 +46,9 @@ public static class TextNormalizer
     private static bool IsInvalidControlChar(char c)
     {
         // Keep printable chars, \n, \t, and all Unicode above ASCII control range
-        if (c == '\n' || c == '\t') return false;
-        if (c < 0x20) return true;   // ASCII control chars (except \n, \t)
-        if (c == 0x7F) return true;  // DEL
+        if(c == '\n' || c == '\t') return false;
+        if(c < 0x20) return true;   // ASCII control chars (except \n, \t)
+        if(c == 0x7F) return true;  // DEL
         return false;
     }
 

@@ -10,8 +10,7 @@ public sealed class CrawlerJobEventRecord
     public DateTime OccurredAt { get; set; }
     public string? Details { get; set; }
 
-    public CrawlerJobEvent ToDomain() => new()
-    {
+    public CrawlerJobEvent ToDomain() => new() {
         Id = Id,
         JobId = JobId,
         EventType = Enum.Parse<JobEventType>(EventType),
@@ -19,8 +18,7 @@ public sealed class CrawlerJobEventRecord
         Details = Details
     };
 
-    public static CrawlerJobEventRecord FromDomain(CrawlerJobEvent e) => new()
-    {
+    public static CrawlerJobEventRecord FromDomain(CrawlerJobEvent e) => new() {
         Id = e.Id,
         JobId = e.JobId,
         EventType = e.EventType.ToString(),

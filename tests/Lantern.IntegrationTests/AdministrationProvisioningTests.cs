@@ -188,7 +188,7 @@ public sealed class AdministrationProvisioningTests : IAsyncLifetime
     {
         await Auth.ProvisionAsync("admin", "original-long-password");
         // Trigger lockout with 5 wrong attempts
-        for (int i = 0; i < 5; i++)
+        for(int i = 0; i < 5; i++)
             await Auth.ValidateAsync("admin", "wrong-attempt-password");
         // Account is now locked
         Assert.Null(await Auth.ValidateAsync("admin", "original-long-password"));
@@ -203,7 +203,7 @@ public sealed class AdministrationProvisioningTests : IAsyncLifetime
     public async Task ResetPasswordAsync_PreviousPasswordRejectedAfterReset()
     {
         const string original = "original-password-before";
-        const string reset    = "reset-password-value-new";
+        const string reset = "reset-password-value-new";
         await Auth.ProvisionAsync("admin", original);
         await Auth.ResetPasswordAsync(reset);
         Assert.Null(await Auth.ValidateAsync("admin", original));
@@ -229,8 +229,7 @@ public sealed class AdministrationProvisioningTests : IAsyncLifetime
             builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole().SetMinimumLevel(LogLevel.Warning));
             builder.UseSetting("Storage:DatabasePath", Path.Combine(directory, "database", "lantern.db"));
             builder.UseSetting("Storage:DataProtectionKeysPath", Path.Combine(directory, "keys"));
-            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?> {
                 ["Meilisearch:Url"] = "http://127.0.0.1:1",
                 ["Meilisearch:IndexName"] = "prov-test-index",
                 ["MeilisearchProcess:Managed"] = "false",
