@@ -15,4 +15,8 @@ public enum DocumentFormat
     Doc,
     Xls,
     Ppt,
+    // OpenDocument Format (ISO/IEC 26300)
+    Odt,
+    Ods,
+    Odp,
 }

@@ -58,6 +58,14 @@ public sealed class DocumentProcessingService : IDocumentProcessingService
                 ex.Message.StartsWith("PDF_ENCRYPTED") ||
                 ex.Message.StartsWith("DOC_ENCRYPTED")) {
                 return Failure(ExtractionFailureCategory.EncryptedDocument, "Document is encrypted or password-protected");
+            } catch(OdfEncryptedPackageException) {
+                return Failure(ExtractionFailureCategory.EncryptedDocument, "Document is encrypted or password-protected");
+            } catch(OdfUnsupportedKindException ex) {
+                return Failure(ExtractionFailureCategory.UnsupportedFormat, ex.Message);
+            } catch(OdfResourceLimitException ex) {
+                return Failure(ExtractionFailureCategory.ResourceLimitExceeded, ex.Message);
+            } catch(OdfMalformedPackageException ex) {
+                return Failure(ExtractionFailureCategory.InvalidDocument, ex.Message);
             } catch(OperationCanceledException) {
                 return Failure(ExtractionFailureCategory.ExtractionTimeout, "Extraction was cancelled");
             } catch(Exception ex) {

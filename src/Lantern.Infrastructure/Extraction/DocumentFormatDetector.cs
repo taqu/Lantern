@@ -21,6 +21,13 @@ public sealed class DocumentFormatDetector
         [".xlsx"] = DocFormat.Xlsx,
         [".pptx"] = DocFormat.Pptx,
         [".csv"] = DocFormat.Csv,
+        // OpenDocument Format
+        [".odt"] = DocFormat.Odt,
+        [".ott"] = DocFormat.Odt, // OpenDocument Text Template
+        [".ods"] = DocFormat.Ods,
+        [".ots"] = DocFormat.Ods, // OpenDocument Spreadsheet Template
+        [".odp"] = DocFormat.Odp,
+        [".otp"] = DocFormat.Odp, // OpenDocument Presentation Template
         // C / C++
         [".c"] = DocFormat.GeneralText,
         [".h"] = DocFormat.GeneralText,
@@ -181,7 +188,8 @@ public sealed class DocumentFormatDetector
         DocFormat.PlainText or DocFormat.Markdown or DocFormat.Html
             or DocFormat.Pdf or DocFormat.Docx or DocFormat.Xlsx
             or DocFormat.Pptx or DocFormat.Csv or DocFormat.GeneralText
-            or DocFormat.Doc or DocFormat.Xls or DocFormat.Ppt => true,
+            or DocFormat.Doc or DocFormat.Xls or DocFormat.Ppt
+            or DocFormat.Odt or DocFormat.Ods or DocFormat.Odp => true,
         _ => false
     };
 }

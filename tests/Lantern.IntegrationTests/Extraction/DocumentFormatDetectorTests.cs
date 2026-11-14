@@ -21,6 +21,12 @@ public sealed class DocumentFormatDetectorTests
     [InlineData(".doc", DocFormat.Doc)]
     [InlineData(".xls", DocFormat.Xls)]
     [InlineData(".ppt", DocFormat.Ppt)]
+    [InlineData(".odt", DocFormat.Odt)]
+    [InlineData(".ott", DocFormat.Odt)]
+    [InlineData(".ods", DocFormat.Ods)]
+    [InlineData(".ots", DocFormat.Ods)]
+    [InlineData(".odp", DocFormat.Odp)]
+    [InlineData(".otp", DocFormat.Odp)]
     [InlineData(".xyz", DocFormat.Unknown)]
     public void Detect_ByExtension(string ext, DocFormat expected)
     {
@@ -50,6 +56,9 @@ public sealed class DocumentFormatDetectorTests
     [InlineData(DocFormat.Doc, true)]
     [InlineData(DocFormat.Xls, true)]
     [InlineData(DocFormat.Ppt, true)]
+    [InlineData(DocFormat.Odt, true)]
+    [InlineData(DocFormat.Ods, true)]
+    [InlineData(DocFormat.Odp, true)]
     [InlineData(DocFormat.Unknown, false)]
     public void IsSupported_ReturnsCorrectValue(DocFormat format, bool expected)
     {

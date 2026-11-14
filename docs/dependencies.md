@@ -154,6 +154,29 @@ MPL. Lantern does not modify OpenMcdf.
 
 ---
 
+## OpenDocument Format (built-in .NET only)
+
+OpenDocument extraction (`.odt` / `.ods` / `.odp`, plus `.ott` / `.ots` / `.otp`
+templates) requires **no additional NuGet dependencies**. The extractors read the
+ODF container and XML parts using the .NET runtime libraries only:
+
+| Capability | Runtime API |
+|---|---|
+| ZIP container parsing | `System.IO.Compression.ZipArchive` |
+| XML parsing (secure) | `System.Xml.XmlReader` + `System.Xml.Linq.XDocument` |
+
+The XML reader is configured with `DtdProcessing.Prohibit` and `XmlResolver = null`
+to block DTD/XXE attacks. The package reader enforces per-entry and per-package
+size caps and a decompression-ratio cap to mitigate ZIP bombs, rejects entries
+with absolute paths or `..` traversal segments, and detects encrypted packages by
+inspecting `META-INF/manifest.xml` (Lantern does not decrypt — encrypted ODF files
+are surfaced as the `EncryptedDocument` failure category).
+
+Because ODF support is implemented directly against the ISO/IEC 26300 container
+format, there are no third-party component licenses to track for this file type.
+
+---
+
 ## LlamaPure (NuGet)
 
 | Property | Value |

@@ -206,6 +206,9 @@ public sealed class WebContentSynchronizer(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => ".xlsx",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation" => ".pptx",
+                "application/vnd.oasis.opendocument.text" => ".odt",
+                "application/vnd.oasis.opendocument.spreadsheet" => ".ods",
+                "application/vnd.oasis.opendocument.presentation" => ".odp",
                 "text/plain" => ".txt",
                 "text/markdown" => ".md",
                 _ => ""
