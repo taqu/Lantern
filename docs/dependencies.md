@@ -72,6 +72,7 @@ Key redistribution obligations under SSPL v1:
 | License | Apache 2.0 |
 | Redistribution | Permitted |
 | .NET 10 compatibility | Compatible (targets netstandard2.0 / netstandard2.1) |
+| Lantern usage | Modern Office (XLSX via `XlsxExtractor`); legacy formats (.doc / .xls / .ppt) are no longer routed through Toxy |
 
 Toxy bundles PdfPig and DocumentFormat.OpenXml as dependencies.
 
@@ -82,10 +83,10 @@ Toxy bundles PdfPig and DocumentFormat.OpenXml as dependencies.
 | DocumentFormat.OpenXml | 3.4.1 | MIT | DOCX/XLSX/PPTX parsing |
 | PdfPig | 0.1.13 | Apache 2.0 | PDF text extraction |
 | HtmlAgilityPack | 1.12.4 | MIT | HTML parsing |
-| NPOI | 2.7.5 | Apache 2.0 | Legacy XLS/DOC support |
+| NPOI | 2.7.5 | Apache 2.0 | Legacy XLS support (now referenced directly, see NPOI section) |
 | CsvHelper | 33.1.0 | MS-PL / Apache 2.0 | CSV parsing |
 | SixLabors.ImageSharp | 2.1.11 | Apache 2.0 / Six Labors Split | Image handling |
-| OpenMcdf | 3.1.0 | MPL 2.0 | OLE2 container reading |
+| OpenMcdf | 3.4.0 | MPL 2.0 | OLE2 container reading (now referenced directly, see OpenMcdf section) |
 
 ### Known Vulnerability Assessment (October 2026)
 
@@ -97,7 +98,7 @@ providing updated dependencies.
 |---------|---------|----------|------|------------|
 | `SixLabors.ImageSharp` | 2.1.11 | HIGH | GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w | Image loading vulnerabilities (OOB read, heap buffer overflow). Lantern does not process user-supplied images through ImageSharp; Toxy uses it for internal document rendering only with trusted intranet files. Exploitability in this context is assessed as low. **Monitor for Toxy upgrade.** |
 | `SixLabors.ImageSharp` | 2.1.11 | MEDIUM | GHSA-gwg2-r3hj-4w44, GHSA-wmxv-xphr-5c9g | Same library, additional CVEs. Same assessment as above. |
-| `OpenMcdf` | 3.1.0 | MEDIUM | GHSA-5qwm-7pvp-w988, GHSA-jxpf-xq2m-q525 | OLE2 compound file parsing. Used for legacy DOC/XLS support via NPOI. Only triggered on files from trusted intranet sources. Assessed as acceptable until Toxy updates. |
+| `OpenMcdf` | 3.4.0 | — | None known at this version | OLE2 compound file parsing. Now referenced directly at 3.4.0 (newer than the 3.1.0 that shipped transitively via Toxy), which resolves the earlier GHSA-5qwm-7pvp-w988 / GHSA-jxpf-xq2m-q525 advisories. |
 | `System.Security.Cryptography.Xml` | 8.0.2 | HIGH | Multiple (GHSA-23rf-6693-g89p, et al.) | XML cryptography library; not called directly by Lantern code. Indirect dep via NPOI → System.Security.Cryptography.Xml path. No Lantern component signs or verifies XML digital signatures. Assessed as not exploitable in this usage. **Resolve before general release by upgrading NPOI or replacing Toxy.** |
 | `System.Security.Cryptography.Pkcs` | 9.0.2 | HIGH | GHSA-846f-f764-76mx | PKCS cryptography; same indirect path. Same assessment. |
 | `System.Security.Cryptography.Pkcs` | 9.0.2 | MEDIUM | GHSA-2fmv-rv2c-59x7 | Same library, additional CVE. |
@@ -107,6 +108,49 @@ before Phase 12 packaging. Acceptable resolutions include: upgrading Toxy to a v
 removes the vulnerable dependencies, replacing Toxy with an alternative extraction library,
 or receiving documented approval from the project owner that the risk is accepted for the
 specific deployment scenario.
+
+---
+
+## NPOI (direct, for legacy .xls)
+
+| Property | Value |
+|----------|-------|
+| NuGet ID | `NPOI` |
+| Version used | 2.7.5 |
+| NuGet URL | https://www.nuget.org/packages/NPOI |
+| Source | https://github.com/nissl-lab/npoi |
+| License | Apache 2.0 |
+| Redistribution | Permitted — see license notice requirement below |
+| Lantern usage | `XlsExtractor` uses `HSSFWorkbook` to parse BIFF8 (.xls) workbooks with resource bounds (max 256 sheets, 50 000 rows/sheet, 1 024 cells/row) |
+
+NPOI is a pure-managed .NET port of Apache POI. HSSF (Excel binary) is used; HWPF
+(legacy Word) and HSLF (legacy PowerPoint) are **not shipped in the current NPOI
+package** — that is why Lantern implements .doc and .ppt parsing directly against
+the MS-DOC and MS-PPT specifications instead of relying on NPOI.
+
+**Redistribution note:** The NPOI NuGet package is Apache 2.0, consistent with the
+Apache POI upstream. The license requires preserving the Apache 2.0 NOTICE file
+when redistributing the library. Lantern's release packaging includes the NPOI
+license text alongside other third-party notices.
+
+---
+
+## OpenMcdf (direct, for CFBF/OLE2 access)
+
+| Property | Value |
+|----------|-------|
+| NuGet ID | `OpenMcdf` |
+| Version used | 3.4.0 |
+| NuGet URL | https://www.nuget.org/packages/OpenMcdf |
+| Source | https://github.com/ironfede/openmcdf |
+| License | MPL 2.0 |
+| Redistribution | Permitted |
+| Lantern usage | `DocExtractor` and `PptExtractor` open the compound (OLE2) container to read the `WordDocument`/`1Table` and `PowerPoint Document` streams |
+
+OpenMcdf is MPL 2.0: the library sources themselves fall under MPL, but linking to
+and distributing the unmodified binary alongside Lantern's MIT-licensed code is
+permitted. If you modify OpenMcdf, the modified files must be published under the
+MPL. Lantern does not modify OpenMcdf.
 
 ---
 

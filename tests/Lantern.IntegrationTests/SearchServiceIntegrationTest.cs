@@ -49,7 +49,7 @@ public sealed class SearchServiceIntegrationTest : IAsyncLifetime
     {
         MeilisearchOptions options = new MeilisearchOptions { Url = _host, IndexName = IndexName };
         MeilisearchClient client = new MeilisearchClient(_host, _masterKey ?? "");
-        return new MeilisearchSearchService(client, options, NullLogger<MeilisearchSearchService>.Instance);
+        return new MeilisearchSearchService(new TestMeilisearchClientFactory(client), options, NullLogger<MeilisearchSearchService>.Instance);
     }
 
     private async Task EnsureIndexReadyAsync(IEnumerable<object> documents)

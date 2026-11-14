@@ -32,4 +32,10 @@
     <ProjectReference Include="..\..\src\Lantern.Web\Lantern.Web.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="data\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

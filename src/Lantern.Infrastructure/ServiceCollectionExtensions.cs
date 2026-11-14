@@ -76,6 +76,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDocumentExtractor, DocxExtractor>();
         services.AddSingleton<IDocumentExtractor, DocExtractor>();
         services.AddSingleton<IDocumentExtractor, XlsxExtractor>();
+        services.AddSingleton<IDocumentExtractor, XlsExtractor>();
         services.AddSingleton<IDocumentExtractor, PptxExtractor>();
         services.AddSingleton<IDocumentExtractor, PptExtractor>();
         services.AddSingleton<IDocumentExtractor, GeneralTextExtractor>();

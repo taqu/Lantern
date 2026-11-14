@@ -7,7 +7,7 @@ namespace Lantern.Infrastructure.Extraction;
 public sealed class XlsxExtractor : IDocumentExtractor
 {
     public bool CanExtract(DocFormat format) =>
-        format is DocFormat.Xlsx or DocFormat.Csv or DocFormat.Xls;
+        format is DocFormat.Xlsx or DocFormat.Csv;
 
     public Task<ExtractedDocument> ExtractAsync(DocumentInput input, CancellationToken cancellationToken = default)
     {
@@ -26,10 +26,8 @@ public sealed class XlsxExtractor : IDocumentExtractor
             throw new InvalidOperationException($"No Toxy spreadsheet parser for {input.Extension}");
 
         ToxySpreadsheet spreadsheet = parser.Parse();
-        DocFormat earlyFormat = string.Equals(input.Extension, ".xls", StringComparison.OrdinalIgnoreCase)
-            ? DocFormat.Xls : DocFormat.Xlsx;
         if(spreadsheet?.Tables == null)
-            return EmptyDocument(input, earlyFormat);
+            return EmptyDocument(input, DocFormat.Xlsx);
 
         List<ExtractedBlock> blocks = new List<ExtractedBlock>();
         List<string> worksheetNames = new List<string>();
@@ -64,15 +62,12 @@ public sealed class XlsxExtractor : IDocumentExtractor
 
         string title = input.FileName != null ? Path.GetFileNameWithoutExtension(input.FileName) : "Untitled";
 
-        DocFormat format = string.Equals(input.Extension, ".xls", StringComparison.OrdinalIgnoreCase)
-            ? DocFormat.Xls : DocFormat.Xlsx;
-
         return new ExtractedDocument {
             Title = title,
             Blocks = blocks,
             Metadata = new ExtractedDocumentMetadata(
                 Title: title,
-                Format: format,
+                Format: DocFormat.Xlsx,
                 WorksheetNames: worksheetNames)
         };
     }

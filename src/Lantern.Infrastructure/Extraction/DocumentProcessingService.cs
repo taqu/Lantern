@@ -54,7 +54,9 @@ public sealed class DocumentProcessingService : IDocumentProcessingService
                 extracted = await _dispatcher.ExtractAsync(input, cancellationToken);
             } catch(NotSupportedException ex) {
                 return Failure(ExtractionFailureCategory.UnsupportedFormat, ex.Message);
-            } catch(InvalidOperationException ex) when(ex.Message.StartsWith("PDF_ENCRYPTED")) {
+            } catch(InvalidOperationException ex) when(
+                ex.Message.StartsWith("PDF_ENCRYPTED") ||
+                ex.Message.StartsWith("DOC_ENCRYPTED")) {
                 return Failure(ExtractionFailureCategory.EncryptedDocument, "Document is encrypted or password-protected");
             } catch(OperationCanceledException) {
                 return Failure(ExtractionFailureCategory.ExtractionTimeout, "Extraction was cancelled");

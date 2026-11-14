@@ -14,7 +14,7 @@ local AI-powered semantic search — entirely offline, with no cloud dependencie
 - Full-text keyword search (Meilisearch)
 - Hybrid search — keyword + local semantic embeddings (Granite 97M)
 - Administrator-managed search categories
-- Document extraction: PDF, DOCX, XLSX, PPTX, HTML, plain text
+- Document extraction: PDF, DOCX, XLSX, PPTX, legacy DOC/XLS/PPT (Office 97–2003), HTML, plain text
 - Windows Service support
 - Offline operation — no internet required after installation
 

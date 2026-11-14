@@ -16,7 +16,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
     public Task InitializeAsync()
     {
         _client = new(Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", _key ?? "");
-        _service = new(_client, new MeilisearchOptions { IndexName = _name, MaxDocumentsPerBatch = 2 }, NullLogger<MeilisearchIndexingService>.Instance);
+        _service = new(new TestMeilisearchClientFactory(_client), new MeilisearchOptions { IndexName = _name, MaxDocumentsPerBatch = 2 }, NullLogger<MeilisearchIndexingService>.Instance);
         return Task.CompletedTask;
     }
 
@@ -52,7 +52,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Assert.Equal(new[] { "indexedAt", "modifiedAt", "size" }, settings.SortableAttributes!.Order());
         Assert.Equal(5, settings.FilterableAttributes!.Count());
         await _service.UpsertAsync(Doc(0));
-        MeilisearchIndexingService reinitialize = new MeilisearchIndexingService(_client, new MeilisearchOptions { IndexName = _name }, NullLogger<MeilisearchIndexingService>.Instance);
+        MeilisearchIndexingService reinitialize = new MeilisearchIndexingService(new TestMeilisearchClientFactory(_client), new MeilisearchOptions { IndexName = _name }, NullLogger<MeilisearchIndexingService>.Instance);
         await reinitialize.EnsureIndexAsync();
         Assert.Equal(1L, (await index.GetStatsAsync()).NumberOfDocuments);
         await _service.UpsertBatchAsync(Enumerable.Range(1, 5).Select(i => Doc(i)));
@@ -69,7 +69,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         Assert.Equal("web", hit.SourceType);
         Assert.Equal("text/html", hit.MimeType);
         MeilisearchOptions searchOpts = new MeilisearchOptions { Url = Environment.GetEnvironmentVariable("MEILI_HOST") ?? "http://localhost:7700", IndexName = _name };
-        MeilisearchSearchService search = new MeilisearchSearchService(_client, searchOpts,
+        MeilisearchSearchService search = new MeilisearchSearchService(new TestMeilisearchClientFactory(_client), searchOpts,
             NullLogger<MeilisearchSearchService>.Instance, _service);
         SearchPageResponse page = await search.SearchPageAsync("replacement", 1);
         Assert.Equal(hit.Uri, Assert.Single(page.Items).Url);

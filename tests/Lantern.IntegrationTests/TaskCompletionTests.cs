@@ -11,7 +11,7 @@ public sealed class TaskCompletionTests
     public async Task UnfinishedTaskTimesOutWithOperationAndUid()
     {
         using HttpClient http = new HttpClient(new ProcessingTaskHandler()) { BaseAddress = new Uri("http://localhost:7700") };
-        MeilisearchIndexingService service = new MeilisearchIndexingService(new MeilisearchClient(http, ""),
+        MeilisearchIndexingService service = new MeilisearchIndexingService(new TestMeilisearchClientFactory(new MeilisearchClient(http, "")),
             new MeilisearchOptions { TaskTimeoutSeconds = 1 }, NullLogger<MeilisearchIndexingService>.Instance);
         TimeoutException error = await Assert.ThrowsAsync<TimeoutException>(() => service.WaitAsync(7, "upsert"));
         Assert.Contains("7", error.Message);
@@ -22,7 +22,7 @@ public sealed class TaskCompletionTests
     public async Task WaitingTaskHonorsCallerCancellation()
     {
         using HttpClient http = new HttpClient(new ProcessingTaskHandler()) { BaseAddress = new Uri("http://localhost:7700") };
-        MeilisearchIndexingService service = new MeilisearchIndexingService(new MeilisearchClient(http, ""),
+        MeilisearchIndexingService service = new MeilisearchIndexingService(new TestMeilisearchClientFactory(new MeilisearchClient(http, "")),
             new MeilisearchOptions(), NullLogger<MeilisearchIndexingService>.Instance);
         using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.WaitAsync(7, "upsert", cts.Token));
