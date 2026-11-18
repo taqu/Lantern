@@ -58,7 +58,7 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         await _service.UpsertBatchAsync(Enumerable.Range(1, 5).Select(i => Doc(i)));
         await _service.UpsertAsync(Doc(0, "replacement content"));
         Assert.Equal(6L, (await index.GetStatsAsync()).NumberOfDocuments);
-        Core.Administration.SearchEngineStatus health = await new MeilisearchHealthService(_client, new MeilisearchOptions { IndexName = _name }).GetAsync(true);
+        Core.Administration.SearchEngineStatus health = await new MeilisearchHealthService(new TestMeilisearchClientFactory(_client), new MeilisearchOptions { IndexName = _name }).GetAsync(true);
         Assert.True(health.Available);
         Assert.Equal(6L, health.DocumentCount);
         Assert.Equal(_name, health.IndexName);

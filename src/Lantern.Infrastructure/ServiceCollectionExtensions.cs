@@ -52,7 +52,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILogger<MeilisearchIndexingService>>()));
         services.AddSingleton<IDocumentIndexingService>(sp => sp.GetRequiredService<MeilisearchIndexingService>());
         services.AddSingleton<ISearchEngineHealthService>(sp => new MeilisearchHealthService(
-            sp.GetRequiredService<IMeilisearchClientFactory>().GetSearchClient(),
+            sp.GetRequiredService<IMeilisearchClientFactory>(),
             sp.GetRequiredService<IOptions<MeilisearchOptions>>().Value));
 
         services.AddSingleton<ISearchService>(sp => {
