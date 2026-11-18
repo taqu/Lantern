@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Lantern.Core.Search;
 using Meilisearch;
 using Meilisearch.QueryParameters;
@@ -48,12 +49,9 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         string indexName = _hybridOptions.ChunkIndexName;
         _logger.LogInformation("Configuring chunk index '{IndexName}'", indexName);
 
-        try {
-            TaskInfo createTask = await _client.CreateIndexAsync(indexName, "id");
-            await WaitAsync(createTask.TaskUid, cancellationToken);
-        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") { throw new MeilisearchAuthenticationException(ex); }
-
-        Meilisearch.Index index = _client.Index(indexName);
+        Meilisearch.Index index = await EnsureIndexCreatedAsync(indexName, cancellationToken);
+        if(index.PrimaryKey != "id")
+            throw new InvalidOperationException($"Chunk index '{indexName}' exists with incompatible primary key '{index.PrimaryKey}'.");
 
         TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings {
             SearchableAttributes = ["title", "sectionTitle", "content"],
@@ -62,6 +60,55 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         });
         await WaitAsync(settingsTask.TaskUid, cancellationToken);
         _logger.LogInformation("Chunk index '{IndexName}' configured", indexName);
+    }
+
+    private async Task<Meilisearch.Index> EnsureIndexCreatedAsync(string indexName, CancellationToken cancellationToken)
+    {
+        try {
+            return await _client.GetIndexAsync(indexName, cancellationToken);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") {
+            _ = ex;
+        }
+
+        TaskInfo createTask = await _client.CreateIndexAsync(indexName, "id");
+        TaskResource createResult = await WaitForTaskRawAsync(createTask.TaskUid, cancellationToken);
+
+        if(createResult.Status == TaskInfoStatus.Succeeded) {
+            return await _client.GetIndexAsync(indexName, cancellationToken);
+        }
+
+        if(createResult.Error != null && createResult.Error.TryGetValue("code", out string? code) && code == "index_already_exists") {
+            _logger.LogInformation("Chunk index '{IndexName}' was already created concurrently; verifying compatibility", indexName);
+            Meilisearch.Index existing;
+            try {
+                existing = await _client.GetIndexAsync(indexName, cancellationToken);
+            } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+                throw new MeilisearchAuthenticationException(ex);
+            }
+            if(existing.PrimaryKey != "id")
+                throw new InvalidOperationException($"Chunk index '{indexName}' exists with incompatible primary key '{existing.PrimaryKey}'.");
+            return existing;
+        }
+
+        throw new InvalidOperationException(
+            $"Meilisearch create chunk index task {createTask.TaskUid}: {createResult.Status}; {System.Text.Json.JsonSerializer.Serialize(createResult.Error)}");
+    }
+
+    private async Task<TaskResource> WaitForTaskRawAsync(int taskUid, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(_documentOptions.TaskTimeoutSeconds));
+        try {
+            return await _client.WaitForTaskAsync(taskUid,
+                timeoutMs: _documentOptions.TaskTimeoutSeconds * 1000d,
+                intervalMs: 100, cancellationToken: cts.Token);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(OperationCanceledException ex) when(!cancellationToken.IsCancellationRequested) {
+            throw new TimeoutException($"Meilisearch chunk create task {taskUid} did not finish within {_documentOptions.TaskTimeoutSeconds}s.", ex);
+        }
     }
 
     public async Task UpsertChunksAsync(IEnumerable<SearchChunk> chunks, CancellationToken cancellationToken = default)

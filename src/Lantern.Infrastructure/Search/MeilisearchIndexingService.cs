@@ -45,23 +45,9 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
                 throw new Exception("cannot get indexing client");
             }
         }
-        Meilisearch.Index index;
-        try {
-            TaskInfo create = await _client.CreateIndexAsync(name, "id", ct);
-            await WaitAsync(create.TaskUid, "create index", ct);
-            index = await _client.GetIndexAsync(name, ct);
-        } catch (MeilisearchApiError ex) when (ex.Code is "missing_authorization_header" or "invalid_api_key")
-        {
-            throw new MeilisearchAuthenticationException(ex);
-        }
-        catch (MeilisearchApiError ex) when (ex.Code == "index_not_found")
-        {
-            TaskInfo create = await _client.CreateIndexAsync(name, "id", ct);
-            await WaitAsync(create.TaskUid, "create index", ct);
-            index = await _client.GetIndexAsync(name, ct);
-        }
+        Meilisearch.Index index = await EnsureIndexCreatedAsync(name, ct);
         string? primaryKey = index.PrimaryKey;
-        if(primaryKey != "id") throw new InvalidOperationException($"Index {name} must use primary key id.");
+        if(primaryKey != "id") throw new InvalidOperationException($"Index '{name}' exists with incompatible primary key '{primaryKey}'.");
         TaskInfo task = await index.UpdateSettingsAsync(new Settings {
             SearchableAttributes = new[] { "title", "content" },
             FilterableAttributes = new FilterableAttribute[] { "sourceId", "sourceType", "extension", "mimeType", "categoryIds" },
@@ -69,6 +55,59 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             DisplayedAttributes = new[] { "*" }
         }, ct);
         await WaitAsync(task.TaskUid, "configure index", ct);
+    }
+
+    private async Task<Meilisearch.Index> EnsureIndexCreatedAsync(string name, CancellationToken ct)
+    {
+        // Check existence first to avoid unnecessary creation attempts
+        try {
+            return await _client.GetIndexAsync(name, ct);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") {
+            // Fall through to create
+            _ = ex;
+        }
+
+        TaskInfo createTask = await _client.CreateIndexAsync(name, "id", ct);
+        TaskResource createResult = await WaitForTaskRawAsync(createTask.TaskUid, "create index", ct);
+
+        if(createResult.Status == TaskInfoStatus.Succeeded) {
+            return await _client.GetIndexAsync(name, ct);
+        }
+
+        // Concurrent startup may have already created the index — treat this as benign
+        if(createResult.Error != null && createResult.Error.TryGetValue("code", out string? code) && code == "index_already_exists") {
+            _logger.LogInformation("Index '{Name}' was already created concurrently; verifying compatibility", name);
+            Meilisearch.Index existing;
+            try {
+                existing = await _client.GetIndexAsync(name, ct);
+            } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+                throw new MeilisearchAuthenticationException(ex);
+            }
+            if(existing.PrimaryKey != "id")
+                throw new InvalidOperationException($"Index '{name}' exists with incompatible primary key '{existing.PrimaryKey}'.");
+            return existing;
+        }
+
+        throw new InvalidOperationException(
+            $"Meilisearch create index task {createTask.TaskUid}: {createResult.Status}; {System.Text.Json.JsonSerializer.Serialize(createResult.Error)}");
+    }
+
+    private async Task<TaskResource> WaitForTaskRawAsync(int taskUid, string operation, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(_options.TaskTimeoutSeconds));
+        try {
+            return await _client.WaitForTaskAsync(taskUid, timeoutMs: _options.TaskTimeoutSeconds * 1000d,
+                intervalMs: 100, cancellationToken: deadline.Token);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(OperationCanceledException ex) when(!cancellationToken.IsCancellationRequested) {
+            throw new TimeoutException($"Meilisearch {operation}, task {taskUid} did not finish within {_options.TaskTimeoutSeconds} seconds.", ex);
+        } catch(MeilisearchTimeoutError ex) {
+            throw new TimeoutException($"Meilisearch {operation}, task {taskUid} timed out.", ex);
+        }
     }
 
     private async Task InitializeAsync(CancellationToken ct)
