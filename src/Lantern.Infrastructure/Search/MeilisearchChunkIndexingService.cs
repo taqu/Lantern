@@ -31,6 +31,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
     public async Task EnsureIndexAsync(CancellationToken cancellationToken = default)
     {
+        if(!_hybridOptions.Enabled) return;
         await _initLock.WaitAsync(cancellationToken);
         try {
             if(_initialized) return;
@@ -113,6 +114,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
     public async Task UpsertChunksAsync(IEnumerable<SearchChunk> chunks, CancellationToken cancellationToken = default)
     {
+        if(!_hybridOptions.Enabled) return;
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         List<SearchChunk> batch = chunks.ToList();
@@ -127,6 +129,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
     public async Task DeleteChunksByDocumentAsync(string documentId, CancellationToken cancellationToken = default)
     {
+        if(!_hybridOptions.Enabled) return;
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         DeleteDocumentsQuery query = new Meilisearch.QueryParameters.DeleteDocumentsQuery { Filter = $"documentId = \"{documentId}\"" };
@@ -136,6 +139,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
     public async Task ReplaceDocumentChunksAsync(string documentId, IEnumerable<SearchChunk> newChunks, CancellationToken cancellationToken = default)
     {
+        if(!_hybridOptions.Enabled) return;
         await EnsureIndexAsync(cancellationToken);
         List<SearchChunk> chunkList = newChunks.ToList();
 
@@ -148,6 +152,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
     public async Task DeleteChunkAsync(string chunkId, CancellationToken cancellationToken = default)
     {
+        if(!_hybridOptions.Enabled) return;
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         TaskInfo task = await index.DeleteOneDocumentAsync(chunkId);

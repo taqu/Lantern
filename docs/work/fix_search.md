@@ -1,206 +1,652 @@
-# Lantern — Fix Keyword Search Regression Introduced by Clipboard Feature
+# Lantern — Fix Keyword Search Returning Zero Results After Clipboard Implementation
 
-## Confirmed Facts
+## Confirmed Symptoms
 
-- Keyword Search worked correctly before the search-result clipboard feature was implemented.
-- After the clipboard changes, `/search` no longer returns results normally.
-- Meilisearch is running.
-- The search endpoint is successfully routed.
-- An outgoing HTTP operation eventually reaches the default 100-second `HttpClient.Timeout`.
-- The failing request is a Keyword Search request, not a Hybrid or Semantic Search request.
+Lantern's Keyword Search worked correctly before the search-result clipboard feature was implemented.
+
+After the clipboard implementation:
+
+1. The `/search` page initially experienced HTTP requests timing out after 100 seconds.
+2. The timeout exceptions have now disappeared.
+3. The `/search` page loads.
+4. Searching for a previously successful keyword returns:
+
+   `No documents matched your search.`
+
+5. The Meilisearch index `lantern-dev-documents` exists.
+6. The same keyword returned results before the clipboard changes.
+
+The known reproduction URL is:
+
+```text
+https://localhost:7108/search?q=ライティング&page=1
+```
 
 ## Objective
 
-Identify and fix the regression introduced by the clipboard feature without removing the requested functionality.
+Identify and fix why Keyword Search now returns zero results.
 
-**Prioritize investigating the changes made for clipboard support. Do not begin by redesigning Meilisearch, API key management, or the embedding infrastructure.**
+**Treat this as a regression until evidence establishes otherwise.**
 
-## 1. Identify the Regression Commit
+Do not assume that the absence of exceptions means search is working correctly.
 
-Inspect the Git history and working-tree changes.
+Do not delete or recreate the existing Meilisearch index.
 
-Find the last revision where Keyword Search worked and the revision that introduced clipboard support.
+Do not clear SQLite or trigger a full reindex as a troubleshooting shortcut.
 
-Use commands such as:
+Preserve the file path, directory path, and URL clipboard functionality.
 
-```bash
-git status
-git log --oneline -15
-git diff <working-revision>..<clipboard-revision> --stat
-git diff <working-revision>..<clipboard-revision>
+---
+
+## Phase 1 — Establish the Actual Search Data State
+
+### 1. Verify the Correct Meilisearch Instance
+
+Identify the exact Meilisearch instance used by Lantern.
+
+Record:
+
+- Base URL and port.
+- Active environment.
+- Index UID.
+- Data directory.
+- Search API Key role.
+- Meilisearch version.
+
+Do not print authentication secrets.
+
+Ensure that Lantern has not silently switched to another Meilisearch instance or index after recent configuration changes.
+
+### 2. Verify Actual Indexed Documents
+
+Inspect:
+
+```text
+lantern-dev-documents
 ```
 
-Adapt the revision range to the actual repository.
+Determine:
 
-Do not discard unrelated uncommitted changes.
+- Whether the index exists.
+- Actual number of indexed documents.
+- Whether previously searchable documents are still present.
+- Whether their extracted text fields remain populated.
+- Whether the relevant text fields are searchable.
+- Whether unexpected index settings changes occurred.
 
-Inspect all changes affecting:
+**Index existence alone is not sufficient.**
 
-- Search Razor components.
-- Search result rendering.
-- Clipboard interop.
-- JavaScript modules.
+If the index contains zero documents, investigate when and why its contents disappeared.
+
+Do not recreate the index or reindex documents before establishing the cause.
+
+### 3. Perform Direct Keyword Search
+
+Execute a direct authenticated Meilisearch search using the exact query:
+
+```text
+ライティング
+```
+
+Use the configured parent document index.
+
+First, execute a minimal search request without additional filters, attributes, hybrid options, or result transformations.
+
+For example:
+
+```http
+POST /indexes/lantern-dev-documents/search
+Content-Type: application/json
+
+{
+  "q": "ライティング",
+  "limit": 20
+}
+```
+
+Use the appropriate Search API Key through the existing secure development tooling.
+
+Record:
+
+- HTTP status.
+- Meilisearch `estimatedTotalHits` or equivalent total.
+- Number of returned hits.
+- Returned document IDs.
+- Names of returned document fields.
+- Searchable attributes.
+- Applied filters, if any.
+
+Do not log sensitive document content.
+
+### Required comparison
+
+**Case A: Direct Meilisearch search returns results.**
+
+The regression is likely in Lantern's request construction, result mapping, filtering, aggregation, or UI.
+
+**Case B: Direct Meilisearch search returns zero results.**
+
+Investigate index contents, searchable attributes, source data synchronization, and index configuration.
+
+**Case C: Direct Meilisearch search fails.**
+
+Investigate authentication, index access, and actual API errors separately.
+
+Do not proceed with assumptions about which case applies.
+
+---
+
+## Phase 2 — Compare the Working and Failing Revisions
+
+### 4. Identify the Relevant Git Changes
+
+Locate:
+
+- The last revision with working Keyword Search.
+- The clipboard feature implementation.
+- Subsequent changes intended to fix the HTTP timeout.
+
+Inspect the complete diff between the working revision and the current version.
+
+Focus on:
+
+- Search page Razor components.
+- Search result components.
 - Search result DTOs.
-- Source path handling.
-- Search services.
+- Parent document models.
+- Search service interfaces.
+- Meilisearch query construction.
+- Search result deserialization.
+- Result mapping.
+- Source type detection.
+- File path processing.
+- Document identity handling.
+- Search result aggregation.
+- Pagination and filtering.
 - Dependency injection.
-- HttpClient configuration.
+- Credential configuration.
 
-## 2. Reproduce Both Revisions
+Do not revert unrelated features.
 
-Using an isolated development environment, verify:
+### 5. Test the Last Known Working Revision
 
-**Before clipboard implementation:**
+If practical, run the previous revision against an isolated, compatible test configuration.
+
+Use the same test query and equivalent index data.
+
+Determine whether the regression is reproducible from code changes rather than differences in Meilisearch data or configuration.
+
+If the original index has changed, document that limitation and use a controlled fixture for comparison.
+
+---
+
+## Phase 3 — Trace the Entire Keyword Search Pipeline
+
+### 6. Add Search Result Count Diagnostics
+
+Instrument the search pipeline.
+
+Capture counts at each stage:
+
+```text
+HTTP /search
+    |
+    v
+Query Parameter Binding
+    |
+    v
+Keyword Search Request Construction
+    |
+    v
+Meilisearch Response
+    |
+    v
+Response Deserialization
+    |
+    v
+Parent Document Mapping
+    |
+    v
+Source Metadata Mapping
+    |
+    v
+Post-Search Filtering
+    |
+    v
+Pagination
+    |
+    v
+Blazor Search Result Rendering
+```
+
+Record:
+
+- Query value received by the component.
+- Search mode.
+- Selected index.
+- Filter expression.
+- Requested page and page size.
+- Meilisearch total hits.
+- Meilisearch returned hit count.
+- Mapped result count.
+- Filtered result count.
+- Displayed result count.
+
+Use structured logs.
+
+Do not log API keys or private document contents.
+
+### 7. Identify the First Stage Where Results Disappear
+
+The critical question is:
+
+**At which exact stage does a nonzero result count become zero?**
+
+Examples:
+
+```text
+Meilisearch hits:        12
+Deserialized hits:       12
+Mapped results:           0
+Displayed results:        0
+```
+
+This indicates a mapping problem.
+
+Alternatively:
+
+```text
+Meilisearch hits:        12
+Mapped results:          12
+After filtering:          0
+Displayed results:        0
+```
+
+This indicates a filtering problem.
+
+Alternatively:
+
+```text
+Meilisearch hits:         0
+Mapped results:           0
+Displayed results:        0
+```
+
+This requires checking the actual Meilisearch request and index state.
+
+Do not add fallback results to conceal the defect.
+
+---
+
+## Phase 4 — Audit Search Result Mapping Changes
+
+### 8. Inspect Clipboard-Related DTO Changes
+
+The clipboard feature may have added fields such as:
+
+```text
+SourceType
+SourcePath
+SourceUrl
+DirectoryPath
+OriginalPath
+ParentDocumentId
+```
+
+Determine whether any new field became mandatory.
+
+Look for logic equivalent to:
+
+```csharp
+if (string.IsNullOrWhiteSpace(document.SourcePath))
+{
+    continue;
+}
+```
+
+or:
+
+```csharp
+results = results
+    .Where(x => x.SourceType != null)
+    .ToList();
+```
+
+Such logic may incorrectly discard existing indexed documents that predate the clipboard feature.
+
+### Critical requirement
+
+**Clipboard metadata must not be a prerequisite for a document to appear in search results.**
+
+If a result lacks a source path:
+
+- Preserve the search result.
+- Disable only unavailable copy actions.
+- Keep the title, snippet, and navigation behavior when valid.
+
+Do not filter out valid search results merely because clipboard metadata is absent.
+
+### 9. Maintain Backward Compatibility
+
+Existing indexed documents may not contain newly introduced fields.
+
+Ensure:
+
+- Missing source fields are tolerated.
+- Optional clipboard properties remain optional.
+- Parent document IDs are mapped correctly.
+- Search result deserialization remains compatible.
+- Unknown source types do not cause result removal.
+- Search hit text and scoring remain unaffected.
+
+Do not require a full reindex solely for clipboard support.
+
+If metadata migration is genuinely necessary, provide a safe, explicitly justified migration strategy.
+
+---
+
+## Phase 5 — Audit Query and Filtering Changes
+
+### 10. Compare Generated Meilisearch Requests
+
+Compare the exact search request before and after the clipboard changes.
+
+Inspect:
+
+- Query text.
+- Index UID.
+- Search mode.
+- Filters.
+- Sort rules.
+- Distinct attributes.
+- Searchable attributes.
+- Attributes to retrieve.
+- Limit.
+- Offset.
+- Pagination behavior.
+
+The clipboard feature should not change search matching behavior.
+
+### 11. Check Unexpected Source-Type Filters
+
+Investigate whether the implementation introduced restrictions such as:
+
+```text
+sourceType = "file"
+```
+
+or:
+
+```text
+sourceType IN ["file", "web"]
+```
+
+These may exclude documents indexed with older source-type values or missing metadata.
+
+Do not add source-type filtering solely to determine available clipboard actions.
+
+Clipboard actions should be selected during result presentation.
+
+### 12. Check Attributes to Retrieve
+
+Determine whether the search request now restricts returned fields.
+
+For example:
+
+```json
+{
+  "attributesToRetrieve": [
+    "id",
+    "title",
+    "sourcePath"
+  ]
+}
+```
+
+This could omit fields required by the existing result mapper.
+
+Restore all fields required for normal search result construction.
+
+Add clipboard fields as optional metadata.
+
+### 13. Verify Pagination
+
+The reproduction request uses:
+
+```text
+page=1
+```
+
+Check that:
+
+- UI page numbering is interpreted correctly.
+- Meilisearch offsets are calculated correctly.
+- The first page does not accidentally skip all available results.
+- Total hit counts are preserved.
+- Empty pages are distinguished from zero matching documents.
+
+If Meilisearch returns hits but Lantern requests an out-of-range offset, correct the pagination logic.
+
+Do not display "No documents matched your search" when matching documents exist but the requested page is invalid.
+
+---
+
+## Phase 6 — Check Index Content and Settings
+
+### 14. Investigate Data Loss Only If Verified
+
+If direct Meilisearch search also returns zero results, inspect:
+
+- Index document count.
+- Indexed document content.
+- Searchable attributes.
+- Recent index creation operations.
+- Index replacement operations.
+- Document deletion tasks.
+- Crawler synchronization.
+- Failed indexing tasks.
+- Environment configuration changes.
+
+The earlier `index_already_exists` error may indicate that index initialization was recently modified.
+
+Verify that the fix did not accidentally:
+
+- Select a different index.
+- Recreate or swap an index.
+- Reset index settings.
+- Remove searchable content.
+- Submit document deletions.
+- Mark indexed documents as deleted.
+
+These are hypotheses to verify, not established causes.
+
+### 15. Do Not Mask Data Loss
+
+If documents have genuinely disappeared, determine the cause before restoring them.
+
+Provide a safe recovery method using the existing crawler and indexing pipeline.
+
+Preserve:
+
+- SQLite metadata.
+- Categories.
+- Crawler configuration.
+- Existing document IDs.
+- Unrelated indexed documents.
+
+Do not execute destructive recovery automatically.
+
+---
+
+## Phase 7 — Fix the Regression
+
+### 16. Apply the Smallest Correct Fix
+
+Based on evidence, correct the responsible stage.
+
+Expected design:
+
+- Search matching remains independent of clipboard functionality.
+- Clipboard metadata is optional.
+- Search results are not discarded because of missing paths.
+- Copy actions are rendered only when a valid source location exists.
+- Source-platform path handling does not modify search queries.
+- Search response mapping remains backward compatible.
+- Pagination and filtering preserve their previous behavior.
+
+Do not merely modify the empty-results message.
+
+Do not insert fake results.
+
+Do not disable source authorization checks.
+
+Do not increase HTTP timeouts.
+
+---
+
+## Phase 8 — Regression Testing
+
+### 17. Keyword Search Tests
+
+Verify:
+
+1. Japanese keyword search.
+2. English keyword search.
+3. Matching documents are returned.
+4. No-match queries return zero results correctly.
+5. Pagination works.
+6. Category filtering works.
+7. Missing optional metadata does not remove search hits.
+8. Existing indexed documents remain searchable.
+9. Clipboard actions do not affect search matching.
+10. Search works after repeated page navigation.
+
+### 18. Legacy Document Compatibility Tests
+
+Create test documents representing the old Meilisearch schema.
+
+Include records without:
+
+- `SourceType`.
+- `SourcePath`.
+- `DirectoryPath`.
+- New clipboard-related properties.
+
+Verify that:
+
+- They remain searchable.
+- Titles and snippets render.
+- Appropriate copy actions are disabled.
+- No exceptions occur.
+- No silent filtering occurs.
+
+### 19. End-to-End Tests
+
+Use real authenticated Meilisearch.
+
+Test sequence:
+
+1. Index a known test document.
+2. Search for a unique known phrase.
+3. Verify a nonzero Meilisearch hit count.
+4. Verify a nonzero Lantern result count.
+5. Verify the search result renders.
+6. Verify clipboard actions where metadata is available.
+7. Index a legacy-format document without clipboard metadata.
+8. Verify that it still appears in search.
+9. Verify the missing copy action is handled gracefully.
+10. Repeat with Japanese text.
+
+### 20. Regression Verification
+
+Run the exact reported query:
 
 ```text
 /search?q=ライティング&page=1
 ```
 
-Expected: Keyword Search completes and displays results.
+Confirm that it returns the previously matching documents, provided those documents still exist and their relevant content remains indexed.
 
-**After clipboard implementation:**
+If the documents no longer exist in the index, report that separately and investigate the data loss.
 
-Reproduce the timeout.
+---
 
-Use the same Meilisearch instance, index, credentials, and query where possible.
+## Acceptance Criteria
 
-Do not modify or reset existing search indexes.
+The task is complete when:
 
-## 3. Isolate the Clipboard Changes
+- The first stage causing search results to disappear is identified.
+- The exact regression-causing code change is documented.
+- Direct Meilisearch results and Lantern results agree for equivalent search parameters.
+- Existing indexed documents remain searchable.
+- Missing clipboard metadata does not remove valid search results.
+- Japanese Keyword Search works.
+- Pagination behaves correctly.
+- Clipboard actions still work.
+- No new HTTP timeout occurs.
+- Existing Meilisearch data is preserved.
+- Automated regression tests pass.
 
-Determine whether the regression is caused by:
+## Required Completion Report
 
-1. Clipboard UI controls.
-2. JavaScript module initialization.
-3. Blazor component lifecycle changes.
-4. Parent directory path calculation.
-5. New search result DTO fields.
-6. Additional database or HTTP requests.
-7. Dependency injection changes.
-8. Search result mapping.
-9. A blocking or recursive asynchronous operation.
+Provide:
 
-Temporarily disable individual changed components in a controlled test to identify the responsible code path.
+### A. Root Cause
 
-Do not permanently remove clipboard functionality as the solution.
+Identify the exact method and code change responsible.
 
-## 4. Instrument Search Execution
+### B. Search Pipeline Counts
 
-Add targeted timing diagnostics around:
+Report actual counts from:
 
-```text
-/search request
-    |
-    v
-Blazor component initialization
-    |
-    v
-Keyword Search service
-    |
-    v
-Meilisearch HTTP request
-    |
-    v
-Search result mapping
-    |
-    v
-Clipboard-related data preparation
-    |
-    v
-Razor rendering
-```
+- Direct Meilisearch search.
+- Meilisearch response received by Lantern.
+- Result mapping.
+- Post-processing and filtering.
+- Final UI display.
 
-For each stage, record:
+### C. Index State
 
-- Start and completion.
-- Elapsed duration.
-- Cancellation.
-- Exceptions.
-- Relevant request correlation ID.
+Report whether the expected documents still exist and whether their content remains searchable.
 
-Never log API keys or sensitive search document contents.
+### D. Changes Made
 
-## 5. Identify the Timed-Out HTTP Operation
+List files modified and describe the correction.
 
-Capture the complete stack trace of the `HttpClient.Timeout` exception.
+### E. Compatibility
 
-Determine the exact outgoing endpoint and calling method.
+Explain how older indexed documents without clipboard metadata are handled.
 
-Check whether clipboard support introduced an additional HTTP request that did not exist previously.
+### F. Tests
 
-Do not assume the timed-out request is the main Meilisearch search request.
+Provide actual commands and test outcomes.
 
-In particular, inspect any new service call used to retrieve original file paths, source metadata, or parent documents.
+### G. Remaining Issues
 
-## 6. Verify Blazor Lifecycle
+List any unresolved problems or data recovery requirements.
 
-Check that clipboard functionality does not invoke JavaScript during static prerendering.
+---
 
-Verify:
+## Final Instructions
 
-- No JS invocation in `OnInitializedAsync`.
-- No inappropriate JS invocation in `OnParametersSetAsync`.
-- Browser-only operations occur during valid interactive lifecycle stages.
-- Clipboard initialization is not required to complete the search request.
-- No blocking `.Result` or `.Wait()`.
-- No render loops triggered by state updates.
-- No repeated search invocation caused by query parameter binding.
-- Clipboard controls do not submit forms or trigger navigation.
+Fix the Keyword Search regression introduced after clipboard support was added.
 
-## 7. Fix the Root Cause
+The previous implementation returned matching documents for the same Japanese query.
 
-Implement the smallest targeted correction.
+The current implementation returns zero results without exceptions.
 
-Requirements:
+Do not treat this as a successful search operation merely because no exception is thrown.
 
-- Preserve Keyword Search behavior.
-- Preserve file path copying.
-- Preserve directory path copying.
-- Preserve URL copying.
-- Preserve pagination.
-- Preserve category filtering.
-- Preserve Japanese query handling.
-- Do not alter Meilisearch authentication unnecessarily.
-- Do not increase HTTP timeouts to hide the problem.
-- Do not suppress unexpected exceptions.
+Start by verifying actual Meilisearch documents and executing the query directly against the configured index.
 
-Prefer separating clipboard operations from search execution.
+Then trace the number of results through every Lantern search processing stage.
 
-Clipboard operations should run only after a user explicitly clicks a copy action.
+Inspect clipboard-related DTO changes, source metadata filtering, retrieved attributes, and pagination.
 
-## 8. Regression Tests
+Ensure the new clipboard feature never excludes otherwise valid search results.
 
-Verify:
+Preserve existing indexed documents and maintain backward compatibility.
 
-1. Keyword Search works before and after clipboard initialization.
-2. `/search?q=ライティング&page=1` returns results.
-3. Japanese query parameters work.
-4. Search completes without unexplained 100-second timeouts.
-5. Search results render with clipboard controls.
-6. Copy File Path works.
-7. Copy Directory Path works.
-8. Copy URL works.
-9. Clipboard failures do not affect search results.
-10. Missing source paths do not crash rendering.
-11. Repeated searches work.
-12. Pagination works.
-13. Category filters work.
-14. Navigation does not cause repeated search requests.
-15. No additional unnecessary backend HTTP requests are introduced.
+Implement the smallest evidence-based correction and add real Meilisearch regression tests.
 
-Use real authenticated Meilisearch for end-to-end verification.
-
-## 9. Completion Report
-
-Report:
-
-- Last known working revision.
-- Regression-introducing change.
-- Exact failing source method.
-- Exact HTTP request that timed out.
-- Root cause.
-- Files changed.
-- Tests executed and results.
-- Confirmation that clipboard functionality remains available.
-
-**The task is complete only when Keyword Search works as it did before the clipboard implementation, while the new copy actions also function correctly.**
+**Success means that previously matching documents appear in Keyword Search again, while file path, parent directory path, and URL copying continue to work.**
