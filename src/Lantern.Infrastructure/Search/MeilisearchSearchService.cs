@@ -157,8 +157,8 @@ public sealed class MeilisearchSearchService : ISearchService
             List<SearchPageItem> items = results.Hits.Select(h => new SearchPageItem(
                 Id: h.Id,
                 Title: string.IsNullOrEmpty(h.Title) ? "(Untitled)" : h.Title,
-                Url: h.Uri ?? "",
-                Path: null,
+                Url: h.SourceType == "file" ? null : (h.Uri ?? ""),
+                Path: h.SourceType == "file" ? DecodeFileUri(h.Uri) : null,
                 Snippet: BuildSnippet(h.Content),
                 DocumentType: h.Extension?.TrimStart('.').ToUpperInvariant(),
                 SourceId: h.SourceId, SourceType: h.SourceType, Extension: h.Extension,
@@ -246,6 +246,24 @@ public sealed class MeilisearchSearchService : ISearchService
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    private static string? DecodeFileUri(string? uri)
+    {
+        if (string.IsNullOrEmpty(uri)) return null;
+        if (uri.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+        {
+            string decoded = Uri.UnescapeDataString(uri["file:///".Length..]);
+            if (decoded.Length >= 2 && char.IsAsciiLetter(decoded[0]) && decoded[1] == ':')
+                return decoded.Replace('/', '\\');
+            return "/" + decoded.TrimStart('/');
+        }
+        if (uri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            string decoded = Uri.UnescapeDataString(uri["file://".Length..]);
+            return "\\\\" + decoded.Replace('/', '\\').TrimEnd('\\');
+        }
+        return null;
+    }
 
     private static SearchPageResponse EmptyResponse(string query, int page) =>
         new(Items: Array.Empty<SearchPageItem>(),

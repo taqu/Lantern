@@ -1,5 +1,6 @@
 @page "/search"
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 @using Lantern.Core.Search
 @using Lantern.Core.Administration
 @using Lantern.Infrastructure.Search
@@ -8,6 +9,7 @@
 @inject ISearchCategoryRepository CategoryRepo
 @inject NavigationManager Nav
 @inject IOptions<HybridSearchOptions> HybridOptions
+@inject IJSRuntime JS
 
 <PageTitle>Search — Lantern</PageTitle>
 
@@ -109,10 +111,30 @@
                             {
                                 <div class="result-snippet">@item.Snippet</div>
                             }
-                            @if (!string.IsNullOrEmpty(item.DocumentType))
-                            {
-                                <span class="result-type">@item.DocumentType</span>
-                            }
+                            <div class="result-footer">
+                                @if (!string.IsNullOrEmpty(item.DocumentType))
+                                {
+                                    <span class="result-type">@item.DocumentType</span>
+                                }
+                                @if (!SourcePathHelper.IsWebResult(item) && SourcePathHelper.GetCopyPath(item) is { } filePath)
+                                {
+                                    <button class="copy-btn" type="button" aria-label="Copy file path"
+                                            @onclick="@(() => CopyToClipboard(filePath, "File path copied."))"
+                                            @onclick:stopPropagation="true">Copy Path</button>
+                                }
+                                @if (!SourcePathHelper.IsWebResult(item) && SourcePathHelper.GetCopyDirectory(item) is { } dirPath)
+                                {
+                                    <button class="copy-btn" type="button" aria-label="Copy directory path"
+                                            @onclick="@(() => CopyToClipboard(dirPath, "Directory path copied."))"
+                                            @onclick:stopPropagation="true">Copy Dir</button>
+                                }
+                                @if (SourcePathHelper.IsWebResult(item) && SourcePathHelper.GetCopyPath(item) is { } webUrl)
+                                {
+                                    <button class="copy-btn" type="button" aria-label="Copy URL"
+                                            @onclick="@(() => CopyToClipboard(webUrl, "URL copied."))"
+                                            @onclick:stopPropagation="true">Copy URL</button>
+                                }
+                            </div>
                         </li>
                     }
                 </ol>
@@ -145,6 +167,13 @@
     {
         <p class="search-hint">Enter a search query above to find documents.</p>
     }
+
+    @if (_toastMessage != null)
+    {
+        <div class="copy-toast @(_toastIsError ? "error" : "")" role="status" aria-live="polite">
+            @_toastMessage
+        </div>
+    }
 </div>
 
 @code {
@@ -162,6 +191,11 @@
     private SearchMode _searchMode = SearchMode.Keyword;
     private IReadOnlyList<SearchCategory> _categories = Array.Empty<SearchCategory>();
     private string? _activeCategory;
+
+    private IJSObjectReference? _clipboardModule;
+    private string? _toastMessage;
+    private bool _toastIsError;
+    private CancellationTokenSource? _toastCts;
 
     private int CurrentPage => _response?.Page ?? 1;
     private int TotalPages => _response is null || _response.PageSize == 0
@@ -247,6 +281,44 @@
         }
     }
 
+    private async Task CopyToClipboard(string text, string successMessage)
+    {
+        try
+        {
+            _clipboardModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/clipboard.js");
+            var result = await _clipboardModule.InvokeAsync<ClipboardResult>("copyText", text);
+            SetToast(result.Success ? successMessage : "Could not copy to clipboard.", !result.Success);
+        }
+        catch
+        {
+            SetToast("Could not copy to clipboard.", true);
+        }
+    }
+
+    private void SetToast(string message, bool isError)
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        _toastCts = new CancellationTokenSource();
+        _toastMessage = message;
+        _toastIsError = isError;
+        _ = AutoDismissToast(_toastCts.Token);
+    }
+
+    private async Task AutoDismissToast(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(2500, token);
+            await InvokeAsync(() =>
+            {
+                _toastMessage = null;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) { }
+    }
+
     private string BuildUrl(string q, int page, string? category = null)
     {
         var sb = new System.Text.StringBuilder($"/search?q={Uri.EscapeDataString(q)}&page={page}");
@@ -254,5 +326,19 @@
         if (!string.IsNullOrEmpty(cat)) sb.Append($"&category={Uri.EscapeDataString(cat)}");
         if (_searchMode == SearchMode.Hybrid) sb.Append("&mode=hybrid");
         return sb.ToString();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        if (_clipboardModule is not null)
+            await _clipboardModule.DisposeAsync();
+    }
+
+    private sealed class ClipboardResult
+    {
+        public bool Success { get; init; }
+        public string? Error { get; init; }
     }
 }

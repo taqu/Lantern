@@ -10,7 +10,4 @@
     <Project Path="tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj" />
     <Project Path="tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj" />
   </Folder>
-  <Folder Name="/tools/">
-    <Project Path="tools/Lantern.Feasibility/Lantern.Feasibility.csproj" />
-  </Folder>
 </Solution>
