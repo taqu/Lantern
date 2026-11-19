@@ -263,7 +263,7 @@
                 _response = await SearchService.SearchPageAsync(query, page, ct);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             // Superseded by a newer search — ignore.
         }
@@ -330,6 +330,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        _cts?.Cancel();
+        _cts?.Dispose();
         _toastCts?.Cancel();
         _toastCts?.Dispose();
         if (_clipboardModule is not null)
