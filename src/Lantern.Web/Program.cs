@@ -1,3 +1,4 @@
+using Lantern.Core.Search;
 using Lantern.Crawling;
 using Lantern.Embedding;
 using Lantern.Infrastructure;
@@ -105,8 +106,13 @@ if(!isCommandMode) {
 
     EmbeddingOptions embeddingOptions =
         builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>() ?? new();
-    if(embeddingOptions.Enabled)
+    if(embeddingOptions.Enabled) {
         builder.Services.AddLanternEmbedding(builder.Configuration);
+        HybridSearchOptions hybridSetupOpts =
+            builder.Configuration.GetSection(HybridSearchOptions.SectionName).Get<HybridSearchOptions>() ?? new();
+        if(hybridSetupOpts.Enabled)
+            builder.Services.AddHostedService<EmbedderSetupService>();
+    }
 }
 
 WebApplication app = builder.Build();

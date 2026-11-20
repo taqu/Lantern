@@ -184,6 +184,7 @@
 
     private string _query = "";
     private string _submittedQuery = "";
+    private SearchMode _submittedMode = SearchMode.Keyword;
     private bool _isLoading;
     private string? _errorMessage;
     private SearchPageResponse? _response;
@@ -220,10 +221,12 @@
         var page = PageParam is > 0 ? PageParam.Value : 1;
         _activeCategory = CategoryParam;
 
-        if (ModeParam == "hybrid" && HybridOptions.Value.Enabled)
-            _searchMode = SearchMode.Hybrid;
+        _searchMode = ModeParam == "hybrid" && HybridOptions.Value.Enabled
+            ? SearchMode.Hybrid
+            : SearchMode.Keyword;
 
-        if (q == _submittedQuery && page == CurrentPage && _response != null && _activeCategory == CategoryParam)
+        if (q == _submittedQuery && page == CurrentPage && _response != null
+            && _activeCategory == CategoryParam && _searchMode == _submittedMode)
             return;
 
         _query = q;
@@ -248,6 +251,7 @@
         _isLoading = true;
         _errorMessage = null;
         _submittedQuery = query;
+        _submittedMode = _searchMode;
         _response = null;
 
         try
