@@ -48,9 +48,26 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         if(!string.IsNullOrEmpty(index.PrimaryKey))
             throw new InvalidOperationException($"Chunk index '{name}' exists with incompatible primary key '{index.PrimaryKey}'.");
 
-        // Primary key is unset: check whether the index is empty before assigning.
-        // Use _client.Index() for a live SDK-managed reference rather than the
-        // deserialized metadata DTO from GetIndexAsync, which may not carry an HTTP client.
+        // Primary key is unset in the metadata DTO. Re-fetch current metadata to confirm
+        // the index still exists and get its latest state before attempting any writes.
+        Meilisearch.Index current;
+        try {
+            current = await _client.GetIndexAsync(name, ct);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") {
+            throw new InvalidOperationException(
+                $"Chunk index '{name}' disappeared between creation and primary-key assignment. " +
+                $"Meilisearch error code: {ex.Code}", ex);
+        }
+
+        if(current.PrimaryKey == "id") return;
+        if(!string.IsNullOrEmpty(current.PrimaryKey))
+            throw new InvalidOperationException(
+                $"Chunk index '{name}' primary key was concurrently set to '{current.PrimaryKey}'; expected 'id'.");
+
+        // Index exists with no primary key set. Check whether it is safe to assign one.
+        // Use _client.Index() for a live SDK-managed reference, not the deserialized DTO.
         IndexStats stats;
         try {
             stats = await _client.Index(name).GetStatsAsync();
@@ -60,7 +77,13 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
             throw new InvalidOperationException(
                 $"Chunk index '{name}' was confirmed to exist but returned index_not_found when fetching stats. " +
                 $"Unexpected Meilisearch state. Code: {ex.Code}", ex);
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
+            throw new InvalidOperationException(
+                $"Chunk index '{name}' has no primary key set but fetching its statistics failed. " +
+                "Cannot safely assign primary key 'id' without knowing whether the index contains documents. " +
+                $"Underlying error ({ex.GetType().Name}): {ex.Message}", ex);
         }
+
         if(stats.NumberOfDocuments > 0)
             throw new InvalidOperationException(
                 $"Chunk index '{name}' has an unset primary key and contains {stats.NumberOfDocuments} document(s). " +
@@ -108,7 +131,12 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         TaskResource createResult = await WaitForTaskRawAsync(createTask.TaskUid, cancellationToken);
 
         if(createResult.Status == TaskInfoStatus.Succeeded) {
-            return await _client.GetIndexAsync(indexName, cancellationToken);
+            Meilisearch.Index created = await _client.GetIndexAsync(indexName, cancellationToken);
+            if(string.IsNullOrEmpty(created.PrimaryKey))
+                _logger.LogWarning(
+                    "Chunk index '{IndexName}' was created with primaryKey='id' but GetIndexAsync returned null PrimaryKey. " +
+                    "EnsureCompatiblePrimaryKeyAsync will attempt to recover.", indexName);
+            return created;
         }
 
         if(createResult.Error != null && createResult.Error.TryGetValue("code", out string? code) && code == "index_already_exists") {
