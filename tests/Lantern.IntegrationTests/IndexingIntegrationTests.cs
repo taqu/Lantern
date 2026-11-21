@@ -110,4 +110,33 @@ public sealed class IndexingIntegrationTests : IAsyncLifetime
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _service.UpsertAsync(Doc(0), cts.Token));
     }
+
+    [SkippableFact]
+    public async Task EnsureIndexAsync_ExistingEmptyIndexWithNoPrimaryKey_AssignsPrimaryKeyAndSucceeds()
+    {
+        Skip.If(_key == null, "Set MEILI_MASTER_KEY to run against a real Meilisearch instance.");
+        // Pre-create the index without a primary key (simulating a legacy or manually-created index)
+        TaskInfo create = await _client.CreateIndexAsync(_name);
+        await _service.WaitAsync(create.TaskUid, "create keyless index");
+        Meilisearch.Index before = await _client.GetIndexAsync(_name);
+        Assert.True(string.IsNullOrEmpty(before.PrimaryKey), "Precondition: index should have no primary key.");
+
+        await _service.EnsureIndexAsync();
+
+        Meilisearch.Index after = await _client.GetIndexAsync(_name);
+        Assert.Equal("id", after.PrimaryKey);
+    }
+
+    [SkippableFact]
+    public async Task EnsureIndexAsync_ExistingIndexWithIncompatiblePrimaryKey_ThrowsIncompatibilityError()
+    {
+        Skip.If(_key == null, "Set MEILI_MASTER_KEY to run against a real Meilisearch instance.");
+        TaskInfo create = await _client.CreateIndexAsync(_name, "url");
+        await _service.WaitAsync(create.TaskUid, "create incompatible index");
+
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.EnsureIndexAsync());
+        Assert.Contains("incompatible primary key", ex.Message);
+        Assert.Contains("url", ex.Message);
+    }
 }

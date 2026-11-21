@@ -73,7 +73,7 @@ Write-Host ""
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-$MEILI_VERSION = '1.55.0'
+$MEILI_VERSION = '1.57.0'
 $MEILI_SHA256  = '948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A'
 $LLAMA_VERSION = '1.0.4'
 

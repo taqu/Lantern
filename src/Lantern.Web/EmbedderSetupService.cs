@@ -63,7 +63,12 @@ internal sealed class EmbedderSetupService : IHostedService
                 return;
             }
 
-            await _chunkIndexing.EnsureIndexAsync(cancellationToken);
+            try {
+                await _chunkIndexing.EnsureIndexAsync(cancellationToken);
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                _logger.LogError(ex, "Failed to initialize chunk index for hybrid search. Embedder configuration skipped.");
+                return;
+            }
 
             string embedUrl = $"http://{_embeddingOptions.ListenAddress}:{_embeddingOptions.Port}/embed";
             await _embedderConfig.ConfigureEmbedderAsync(embedUrl, cancellationToken);

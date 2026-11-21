@@ -271,13 +271,13 @@
         {
             // Superseded by a newer search — ignore.
         }
-        catch (SearchException)
+        catch (SearchException ex)
         {
-            _errorMessage = "Search is temporarily unavailable. Please try again later.";
+			_errorMessage = $"Search is temporarily unavailable. Please try again later.\n{ex.Message}";
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            _errorMessage = "Search is temporarily unavailable. Please try again later.";
+            _errorMessage = $"Search is temporarily unavailable. Please try again later.\n{ex.Message}";
         }
         finally
         {

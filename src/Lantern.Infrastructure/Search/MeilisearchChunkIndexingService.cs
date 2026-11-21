@@ -42,6 +42,38 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         }
     }
 
+    private async Task EnsureCompatiblePrimaryKeyAsync(Meilisearch.Index index, string name, CancellationToken ct)
+    {
+        if(index.PrimaryKey == "id") return;
+        if(!string.IsNullOrEmpty(index.PrimaryKey))
+            throw new InvalidOperationException($"Chunk index '{name}' exists with incompatible primary key '{index.PrimaryKey}'.");
+
+        // Primary key is unset: check whether the index is empty before assigning.
+        // Use _client.Index() for a live SDK-managed reference rather than the
+        // deserialized metadata DTO from GetIndexAsync, which may not carry an HTTP client.
+        IndexStats stats;
+        try {
+            stats = await _client.Index(name).GetStatsAsync();
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") {
+            throw new InvalidOperationException(
+                $"Chunk index '{name}' was confirmed to exist but returned index_not_found when fetching stats. " +
+                $"Unexpected Meilisearch state. Code: {ex.Code}", ex);
+        }
+        if(stats.NumberOfDocuments > 0)
+            throw new InvalidOperationException(
+                $"Chunk index '{name}' has an unset primary key and contains {stats.NumberOfDocuments} document(s). " +
+                "Cannot safely assign primary key 'id'. Set the primary key manually in Meilisearch before crawling.");
+
+        TaskInfo setPkTask = await _client.UpdateIndexAsync(name, "id", ct);
+        TaskResource setPkResult = await WaitForTaskRawAsync(setPkTask.TaskUid, ct);
+        if(setPkResult.Status != TaskInfoStatus.Succeeded)
+            throw new InvalidOperationException(
+                $"Chunk index '{name}': failed to set primary key: task {setPkTask.TaskUid} {setPkResult.Status}; {System.Text.Json.JsonSerializer.Serialize(setPkResult.Error)}");
+        _logger.LogInformation("Assigned primary key 'id' on chunk index '{Name}' that had no primary key set", name);
+    }
+
     private async Task ConfigureAsync(CancellationToken cancellationToken)
     {
         if(null == _client) {
@@ -51,8 +83,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         _logger.LogInformation("Configuring chunk index '{IndexName}'", indexName);
 
         Meilisearch.Index index = await EnsureIndexCreatedAsync(indexName, cancellationToken);
-        if(index.PrimaryKey != "id")
-            throw new InvalidOperationException($"Chunk index '{indexName}' exists with incompatible primary key '{index.PrimaryKey}'.");
+        await EnsureCompatiblePrimaryKeyAsync(index, indexName, cancellationToken);
 
         TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings {
             SearchableAttributes = ["title", "sectionTitle", "content"],
@@ -88,8 +119,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
             } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
                 throw new MeilisearchAuthenticationException(ex);
             }
-            if(existing.PrimaryKey != "id")
-                throw new InvalidOperationException($"Chunk index '{indexName}' exists with incompatible primary key '{existing.PrimaryKey}'.");
+            await EnsureCompatiblePrimaryKeyAsync(existing, indexName, cancellationToken);
             return existing;
         }
 

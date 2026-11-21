@@ -87,6 +87,34 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
     }
 
     [SkippableFact]
+    public async Task EnsureIndexAsync_ExistingEmptyChunkIndexWithNoPrimaryKey_AssignsPrimaryKeyAndSucceeds()
+    {
+        Skip.If(_key == null, "MEILI_MASTER_KEY not set; skipping integration test.");
+        TaskInfo create = await _client.CreateIndexAsync(_chunkIndex);
+        await _client.WaitForTaskAsync(create.TaskUid);
+        Meilisearch.Index before = await _client.GetIndexAsync(_chunkIndex);
+        Assert.True(string.IsNullOrEmpty(before.PrimaryKey), "Precondition: chunk index should have no primary key.");
+
+        await _service.EnsureIndexAsync();
+
+        Meilisearch.Index after = await _client.GetIndexAsync(_chunkIndex);
+        Assert.Equal("id", after.PrimaryKey);
+    }
+
+    [SkippableFact]
+    public async Task EnsureIndexAsync_ExistingChunkIndexWithIncompatiblePrimaryKey_ThrowsIncompatibilityError()
+    {
+        Skip.If(_key == null, "MEILI_MASTER_KEY not set; skipping integration test.");
+        TaskInfo create = await _client.CreateIndexAsync(_chunkIndex, "chunkId");
+        await _client.WaitForTaskAsync(create.TaskUid);
+
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.EnsureIndexAsync());
+        Assert.Contains("incompatible primary key", ex.Message);
+        Assert.Contains("chunkId", ex.Message);
+    }
+
+    [SkippableFact]
     public async Task ReplaceDocumentChunks_ReplacesExistingChunks()
     {
         Skip.If(_key == null, "MEILI_MASTER_KEY not set; skipping integration test.");

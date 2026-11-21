@@ -37,6 +37,38 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             throw new InvalidOperationException($"Meilisearch {operation}, task {taskUid}: {result.Status}; {System.Text.Json.JsonSerializer.Serialize(result.Error)}");
     }
 
+    private async Task EnsureCompatiblePrimaryKeyAsync(Meilisearch.Index index, string name, CancellationToken ct)
+    {
+        if(index.PrimaryKey == "id") return;
+        if(!string.IsNullOrEmpty(index.PrimaryKey))
+            throw new InvalidOperationException($"Index '{name}' exists with incompatible primary key '{index.PrimaryKey}'.");
+
+        // Primary key is unset: check whether the index is empty before assigning.
+        // Use _client!.Index() for a live SDK-managed reference rather than the
+        // deserialized metadata DTO from GetIndexAsync, which may not carry an HTTP client.
+        IndexStats stats;
+        try {
+            stats = await _client!.Index(name).GetStatsAsync();
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") {
+            throw new InvalidOperationException(
+                $"Index '{name}' was confirmed to exist but returned index_not_found when fetching stats. " +
+                $"Unexpected Meilisearch state. Code: {ex.Code}", ex);
+        }
+        if(stats.NumberOfDocuments > 0)
+            throw new InvalidOperationException(
+                $"Index '{name}' has an unset primary key and contains {stats.NumberOfDocuments} document(s). " +
+                "Cannot safely assign primary key 'id'. Set the primary key manually in Meilisearch before crawling.");
+
+        TaskInfo setPkTask = await _client!.UpdateIndexAsync(name, "id", ct);
+        TaskResource setPkResult = await WaitForTaskRawAsync(setPkTask.TaskUid, "set primary key", ct);
+        if(setPkResult.Status != TaskInfoStatus.Succeeded)
+            throw new InvalidOperationException(
+                $"Index '{name}': failed to set primary key: task {setPkTask.TaskUid} {setPkResult.Status}; {System.Text.Json.JsonSerializer.Serialize(setPkResult.Error)}");
+        _logger.LogInformation("Assigned primary key 'id' on index '{Name}' that had no primary key set", name);
+    }
+
     private async Task ConfigureAsync(string name, CancellationToken ct)
     {
         if(null == _client) {
@@ -46,8 +78,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             }
         }
         Meilisearch.Index index = await EnsureIndexCreatedAsync(name, ct);
-        string? primaryKey = index.PrimaryKey;
-        if(primaryKey != "id") throw new InvalidOperationException($"Index '{name}' exists with incompatible primary key '{primaryKey}'.");
+        await EnsureCompatiblePrimaryKeyAsync(index, name, ct);
         TaskInfo task = await index.UpdateSettingsAsync(new Settings {
             SearchableAttributes = new[] { "title", "content" },
             FilterableAttributes = new FilterableAttribute[] { "sourceId", "sourceType", "extension", "mimeType", "categoryIds" },
@@ -85,8 +116,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
                 throw new MeilisearchAuthenticationException(ex);
             }
-            if(existing.PrimaryKey != "id")
-                throw new InvalidOperationException($"Index '{name}' exists with incompatible primary key '{existing.PrimaryKey}'.");
+            await EnsureCompatiblePrimaryKeyAsync(existing, name, ct);
             return existing;
         }
 

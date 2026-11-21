@@ -31,6 +31,13 @@ public sealed class EmbedderConfigurationService
             _client = _clientFactory.GetIndexingClient();
         }
     }
+    // How long to wait for the embedder settings update task to reach a terminal state.
+    // Meilisearch 1.55+ runs embedding generation (for existing documents) inside the
+    // settingsUpdate task, which can take many minutes for large indexes.  We only wait
+    // long enough to detect an immediate failure; a still-processing task is treated as
+    // accepted and continues running in the background.
+    private const int EmbedderSettleSeconds = 10;
+
     public async Task ConfigureEmbedderAsync(string embedUrl, CancellationToken cancellationToken = default)
     {
         string indexName = _options.ChunkIndexName;
@@ -55,28 +62,43 @@ public sealed class EmbedderConfigurationService
 
         try {
             TaskInfo task = await index.UpdateEmbeddersAsync(embedders, cancellationToken);
-            await WaitAsync(task.TaskUid, cancellationToken);
-            _logger.LogInformation("Embedder '{EmbedderName}' configured on index '{IndexName}'", embedderName, indexName);
+            _logger.LogInformation("Embedder settings task {TaskUid} submitted; waiting up to {Seconds}s for quick completion or immediate failure",
+                task.TaskUid, EmbedderSettleSeconds);
+
+            TaskResource? result = await WaitUpToAsync(task.TaskUid, EmbedderSettleSeconds, cancellationToken);
+            if(result == null) {
+                // Still processing (long-running embedding generation) — the settings will be
+                // applied when Meilisearch finishes re-embedding existing documents.
+                _logger.LogInformation(
+                    "Embedder settings task {TaskUid} is still processing (generating embeddings for existing documents). " +
+                    "Hybrid search will become available once Meilisearch finishes the background indexing.",
+                    task.TaskUid);
+            } else if(result.Status == TaskInfoStatus.Succeeded) {
+                _logger.LogInformation("Embedder '{EmbedderName}' configured on index '{IndexName}'", embedderName, indexName);
+            } else {
+                throw new InvalidOperationException(
+                    $"Meilisearch embedder settings task {task.TaskUid} {result.Status}: {System.Text.Json.JsonSerializer.Serialize(result.Error)}");
+            }
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
         } catch(Exception ex) {
             _logger.LogError(ex, "Failed to configure embedder '{EmbedderName}' on index '{IndexName}'", embedderName, indexName);
             throw;
         }
     }
 
-    private async Task WaitAsync(int taskUid, CancellationToken cancellationToken)
+    // Returns the TaskResource if the task completed within maxSeconds, null if still processing.
+    private async Task<TaskResource?> WaitUpToAsync(int taskUid, int maxSeconds, CancellationToken cancellationToken)
     {
         EnsureClient();
         using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(_documentOptions.TaskTimeoutSeconds));
-        TaskResource result;
+        cts.CancelAfter(TimeSpan.FromSeconds(maxSeconds));
         try {
-            result = await _client.WaitForTaskAsync(taskUid,
-                timeoutMs: _documentOptions.TaskTimeoutSeconds * 1000d,
-                intervalMs: 100, cancellationToken: cts.Token);
-        } catch(OperationCanceledException ex) when(!cancellationToken.IsCancellationRequested) {
-            throw new TimeoutException($"Meilisearch task {taskUid} timed out after {_documentOptions.TaskTimeoutSeconds}s.", ex);
+            return await _client.WaitForTaskAsync(taskUid,
+                timeoutMs: maxSeconds * 1000d,
+                intervalMs: 500, cancellationToken: cts.Token);
+        } catch(OperationCanceledException) when(!cancellationToken.IsCancellationRequested) {
+            return null;
         }
-        if(result.Status != TaskInfoStatus.Succeeded)
-            throw new InvalidOperationException($"Meilisearch task {taskUid}: {result.Status}; {System.Text.Json.JsonSerializer.Serialize(result.Error)}");
     }
 }

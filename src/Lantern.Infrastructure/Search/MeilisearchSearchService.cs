@@ -154,6 +154,17 @@ public sealed class MeilisearchSearchService : ISearchService
             ISearchable<MeiliChunkDocument> searchable = await index.SearchAsync<MeiliChunkDocument>(query, searchQuery, cancellationToken);
             SearchResult<MeiliChunkDocument> results = (Meilisearch.SearchResult<MeiliChunkDocument>)searchable;
 
+            if(results.Hits == null) {
+                _logger.LogError(
+                    "Hybrid search on index '{IndexName}' returned a SearchResult with null Hits for query '{Query}'. " +
+                    "The embedder '{EmbedderName}' may not be configured, embeddings may not have been generated, " +
+                    "or the Meilisearch response format may be incompatible with the SDK.",
+                    _hybridOptions.ChunkIndexName, query, _hybridOptions.EmbedderName);
+                throw new SearchException(
+                    $"Hybrid search returned an invalid response (null hits) on index '{_hybridOptions.ChunkIndexName}'. " +
+                    "Ensure the embedder is configured and Meilisearch has finished generating document embeddings.");
+            }
+
             List<SearchPageItem> items = results.Hits.Select(h => new SearchPageItem(
                 Id: h.Id,
                 Title: string.IsNullOrEmpty(h.Title) ? "(Untitled)" : h.Title,

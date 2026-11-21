@@ -59,6 +59,7 @@ $meiliKeyFile   = Join-Path $secretsDir "meilisearch-master-key.txt"
 $localConfig    = Join-Path $webRoot "appsettings.Development.Local.json"
 $dbPath       = Join-Path $appData "database\lantern.db"
 $meiliExeAbs  = if ([System.IO.Path]::IsPathRooted($MeilisearchExe)) { $MeilisearchExe } else { Join-Path $repoRoot $MeilisearchExe }
+$resourceDir = Join-Path $repoRoot "resources"
 
 # ── -ResetAdmin: reset the administrator password without touching any other data ─
 if ($ResetAdmin) {
@@ -155,6 +156,7 @@ $modelPath = Join-Path $repoRoot "resources\granite-embedding-97M-multilingual-r
 Write-Host "Checking embedding model..." -NoNewline
 if (Test-Path $modelPath -PathType Leaf) {
     Write-Host " found" -ForegroundColor Green
+    Copy-Item -Path $resourceDir -Destination $webRoot -Recurse -Force
 } else {
     Write-Host " not present (hybrid search disabled)" -ForegroundColor DarkGray
 }

@@ -131,3 +131,129 @@ idempotent initialization, upserts, duplicate prevention, metadata, search, dele
 successful rebuild, failed rebuild preservation and asynchronous task failure. The
 controlled task handler is used only to make nonterminal waiting deterministic; actual
 production and end-to-end integration operations use the official SDK and real server.
+
+## Hybrid Search and Embedding Architecture
+
+Lantern implements Option A: **Meilisearch REST Embedder**. The local embedding model runs
+as a sidecar HTTP server; Meilisearch calls it autonomously to generate vectors for indexed
+chunks and for each incoming hybrid query. Lantern never generates embeddings directly for
+ordinary indexing or search.
+
+### Component responsibilities
+
+| Component | Responsibility |
+|-----------|----------------|
+| `Lantern.Embedding.EmbeddingServer` | Runs a local REST server on port 7701. Accepts `POST /embed {"text":"..."}`, returns `{"embedding":[float[384]]}`. |
+| `Lantern.Embedding.InferenceWorker` | Loads the `granite-embedding-97M-multilingual` model via LlamaPure; processes inference requests from an internal queue. |
+| `EmbedderSetupService` | Background service that waits for the embedding model to reach `Ready`, then calls `EmbedderConfigurationService` to register the REST embedder on the chunk index. |
+| `EmbedderConfigurationService` | Sends `UpdateEmbeddersAsync` to Meilisearch. Waits up to 10 seconds for immediate success or failure; treats a still-processing task as accepted (Meilisearch re-embeds existing documents in the background). |
+| `MeilisearchChunkIndexingService` | Indexes `SearchChunk` objects to the `lantern-chunks` index. When the embedder is configured, Meilisearch generates vectors automatically on ingest. |
+| `MeilisearchSearchService` | For hybrid search, sets `searchQuery.Hybrid` with the embedder name and semantic ratio, then delegates to Meilisearch which calls the embedding server for the query vector. |
+
+### Why `Lantern.Embedding` is not called directly
+
+Document-level and query-level embedding is fully owned by Meilisearch once the embedder
+is configured. Lantern.Embedding serves only as the REST endpoint that Meilisearch calls.
+Direct embedding generation inside Lantern would duplicate work and risk producing
+incompatible vectors (different batching, normalization, or model versions).
+
+### Configuration
+
+Embedding and hybrid search require two config sections:
+
+```json
+{
+  "Embedding": {
+    "Enabled": true,
+    "ModelPath": "resources/granite-embedding-97M-multilingual-r2.gguf",
+    "Port": 7701
+  },
+  "HybridSearch": {
+    "Enabled": true,
+    "EmbedderName": "lantern-granite",
+    "ChunkIndexName": "lantern-chunks",
+    "SemanticRatio": 0.5
+  }
+}
+```
+
+Both flags must be `true` for hybrid search to become available. `Embedding.Enabled = false`
+with `HybridSearch.Enabled = true` creates the chunk index and enables keyword search on
+chunks, but hybrid mode will be rejected by Meilisearch because no embedder is configured.
+
+### Crawl-to-index path
+
+```
+FileSynchronizationService.SyncAsync()
+  └─ DocumentProcessingService.ProcessAsync()     → returns Document + Chunks
+       ├─ MeilisearchIndexingService.UpsertAsync() → lantern-documents (parent)
+       └─ MeilisearchChunkIndexingService.ReplaceDocumentChunksAsync()
+              → lantern-chunks (Meilisearch calls http://127.0.0.1:7701/embed per chunk)
+```
+
+The parent document index supports keyword search only. The chunk index supports both
+keyword and hybrid search.
+
+### Query path (hybrid mode)
+
+```
+MeilisearchSearchService.SearchChunksPageAsync(mode=Hybrid)
+  └─ Meilisearch internal:
+       1. POST http://127.0.0.1:7701/embed {"text": query}
+       2. Semantic search using returned 384-dimensional vector
+       3. BM25 keyword search
+       4. Merge with SemanticRatio (default 0.5)
+  └─ Map MeiliChunkDocument → SearchPageItem
+```
+
+Keyword mode skips steps 1–3 and performs BM25 on the chunk index only.
+
+### Verifying embedding readiness
+
+The admin Status page (`/admin`) shows:
+- **Embedding** — enabled or disabled (from configuration)
+- **Model status** — `NotLoaded / Loading / Ready / Failed`
+- **Hybrid search** — enabled or disabled
+- **Chunk index** — name and current document count
+
+A hybrid query requires all of: Embedding = Enabled, Model status = Ready, embedder task
+completed on Meilisearch, and at least one chunk in the index.
+
+For a live check, run:
+
+```
+curl http://127.0.0.1:7701/ready
+curl -X POST http://127.0.0.1:7701/embed -H "Content-Type: application/json" \
+  -d '{"text":"パフォーマンス計測"}'
+```
+
+The `/ready` endpoint returns 200 when the model is loaded. The `/embed` endpoint must
+return a JSON object with an `"embedding"` array of 384 floats.
+
+### Diagnosing failures
+
+| Symptom | Likely cause |
+|---------|-------------|
+| Hybrid search returns `SearchException` with "null hits" | Embedder not yet configured; model not ready or task pending |
+| `SearchException`: "Meilisearch returned an error" | Embedder name mismatch, API key lacking required permissions |
+| Chunk index shows 0 documents | Crawl not yet run with `HybridSearch.Enabled = true` |
+| Model status = Failed | LlamaPure failed to load the `.gguf` model; check path and GPU/memory |
+| Embedding server unreachable | Embedding.Enabled = false or model still loading; check /health |
+
+### Keyword search on chunks
+
+`SearchChunksPageAsync(mode=Keyword)` targets the chunk index without an embedder call.
+This works even when embedding is disabled or the model is not ready. If the application
+needs to operate without vectors, set `HybridSearch.Enabled = true` and
+`Embedding.Enabled = false`; keyword search on chunks will function but hybrid will not.
+
+### Integration test coverage
+
+`HybridSearchIntegrationTests` (requires `MEILI_MASTER_KEY`; optional `MEILI_EMBED_URL`):
+
+- Keyword mode returns populated hits from the chunk index.
+- File chunks map to `Path`, web chunks map to `Url`.
+- Hybrid mode without a configured embedder throws `SearchException`.
+- Japanese query `パフォーマンス計測` returns expected results (requires live embedder).
+- Hybrid mode with a live embedder returns populated hits.
+- Empty results produce zero `TotalHits` with an empty `Items` list, not null.

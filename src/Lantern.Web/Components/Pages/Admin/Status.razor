@@ -26,6 +26,23 @@ else if (_health != null)
         <AntiforgeryToken />
         <button class="btn btn-outline-primary" type="submit">Test connection</button>
     </form>
+    @if (_embedding != null)
+    {
+        <h2 class="h5 mt-4">Embedding &amp; Hybrid Search</h2>
+        <dl class="row">
+            <dt class="col-sm-3">Embedding</dt><dd class="col-sm-9">@(_embedding.EmbeddingEnabled ? "Enabled" : "Disabled")</dd>
+            @if (_embedding.EmbeddingEnabled)
+            {
+                <dt class="col-sm-3">Model status</dt><dd class="col-sm-9">@_embedding.ModelStatus</dd>
+            }
+            <dt class="col-sm-3">Hybrid search</dt><dd class="col-sm-9">@(_embedding.HybridEnabled ? "Enabled" : "Disabled")</dd>
+            @if (_embedding.HybridEnabled)
+            {
+                <dt class="col-sm-3">Chunk index</dt><dd class="col-sm-9">@_embedding.ChunkIndexName</dd>
+                <dt class="col-sm-3">Indexed chunks</dt><dd class="col-sm-9">@(_embedding.ChunkDocumentCount?.ToString("N0") ?? "Unavailable")</dd>
+            }
+        </dl>
+    }
     <h2 class="h5 mt-4">Application</h2>
     <dl class="row">
         <dt class="col-sm-3">Version</dt><dd class="col-sm-9">@typeof(Program).Assembly.GetName().Version</dd>
@@ -38,6 +55,7 @@ else if (_health != null)
 
 @code {
     private SearchEngineStatus? _health;
+    private EmbeddingHealthStatus? _embedding;
     private bool _database;
     private bool _error;
     private string Title => Navigation.Uri.Split('?', '#')[0].TrimEnd('/').Split('/').Last() switch
@@ -52,7 +70,11 @@ else if (_health != null)
     }
     protected override async Task OnInitializedAsync()
     {
-        try { _database = await Administration.DatabaseAvailableAsync(); _health = await Administration.GetHealthAsync(); }
+        try {
+            _database = await Administration.DatabaseAvailableAsync();
+            _health = await Administration.GetHealthAsync();
+            _embedding = await Administration.GetEmbeddingHealthAsync();
+        }
         catch (Exception ex) when (ex is not UnauthorizedAccessException)
         { Logger.LogError("Unable to load administration status ({ErrorType})", ex.GetType().Name); _error = true; }
     }

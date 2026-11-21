@@ -1,7 +1,10 @@
 using Lantern.Core.Administration;
+using Lantern.Embedding;
 using Lantern.Infrastructure.Persistence;
+using Lantern.Infrastructure.Search;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Lantern.Web.Administration;
 
@@ -9,7 +12,7 @@ namespace Lantern.Web.Administration;
 public sealed class AdministrationService(
     IHttpContextAccessor accessor, IAuthorizationService authorization,
     IApplicationSettingsService settings, ISearchEngineHealthService health,
-    IDbContextFactory<LanternDbContext> factory)
+    IDbContextFactory<LanternDbContext> factory, IServiceProvider sp)
 {
     private async Task DemandAsync()
     {
@@ -39,5 +42,35 @@ public sealed class AdministrationService(
         await DemandAsync();
         await using LanternDbContext db = await factory.CreateDbContextAsync(ct);
         return await db.CrawlerDefinitions.AsNoTracking().OrderBy(c => c.Name).ToListAsync(ct);
+    }
+
+    public async Task<EmbeddingHealthStatus> GetEmbeddingHealthAsync(CancellationToken ct = default)
+    {
+        await DemandAsync();
+
+        IConfiguration config = sp.GetRequiredService<IConfiguration>();
+        bool embeddingEnabled = config.GetValue<bool>("Embedding:Enabled");
+        bool hybridEnabled = config.GetValue<bool>("HybridSearch:Enabled");
+        string chunkIndexName = config.GetValue<string>("HybridSearch:ChunkIndexName") ?? "lantern-chunks";
+
+        string modelStatus = embeddingEnabled ? "Service not started" : "Disabled";
+        if(embeddingEnabled) {
+            EmbeddingServiceStatus? embeddingStatus = sp.GetService<EmbeddingServiceStatus>();
+            modelStatus = embeddingStatus != null ? embeddingStatus.Status.ToString() : "Service not registered";
+        }
+
+        long? chunkCount = null;
+        if(hybridEnabled) {
+            try {
+                IMeilisearchClientFactory clientFactory = sp.GetRequiredService<IMeilisearchClientFactory>();
+                using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                deadline.CancelAfter(TimeSpan.FromSeconds(5));
+                var client = clientFactory.GetIndexingClient();
+                var stats = await client.Index(chunkIndexName).GetStatsAsync(deadline.Token);
+                chunkCount = stats.NumberOfDocuments;
+            } catch { }
+        }
+
+        return new EmbeddingHealthStatus(embeddingEnabled, modelStatus, hybridEnabled, chunkIndexName, chunkCount);
     }
 }
