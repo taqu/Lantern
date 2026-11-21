@@ -39,7 +39,7 @@ public sealed class MeilisearchClientFactory : IMeilisearchClientFactory
                     continue;
                 }
 
-                HttpClient http = new HttpClient(new CredentialHandler(_credentialManager, role, new HttpClientHandler())) {
+                HttpClient http = new HttpClient(new CredentialHandler(_credentialManager, role, new MeilisearchMessageHandler(new HttpClientHandler()))) {
                     BaseAddress = new Uri(_options.Url),
                 };
                 MeilisearchCredential credential = _credentialManager.GetCredential(role);
@@ -61,7 +61,7 @@ public sealed class MeilisearchClientFactory : IMeilisearchClientFactory
             if(_clients.TryGetValue(role, out MeilisearchClient? existing))
                 return existing;
 
-            HttpClient http = new HttpClient(new CredentialHandler(_credentialManager, role, new HttpClientHandler())) {
+            HttpClient http = new HttpClient(new CredentialHandler(_credentialManager, role, new MeilisearchMessageHandler(new HttpClientHandler()))) {
                 BaseAddress = new Uri(_options.Url),
             };
             MeilisearchClient client = new MeilisearchClient(http, "");
