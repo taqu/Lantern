@@ -92,6 +92,11 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         _logger.LogInformation("Assigned primary key 'id' on index '{Name}' that had no primary key set", name);
     }
 
+    // Maximum seconds to wait for the one-time embedder reset on the parent index.
+    // Meilisearch must delete vector data for all existing documents, which can be slow
+    // on large indexes. This only runs once per index lifetime (when a stale embedder is found).
+    private const int EmbedderResetTimeoutSeconds = 300;
+
     private async Task ConfigureAsync(string name, CancellationToken ct)
     {
         if(null == _client) {
@@ -109,6 +114,49 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             DisplayedAttributes = new[] { "*" }
         }, ct);
         await WaitAsync(task.TaskUid, "configure index", ct);
+        await EnsureNoEmbeddersAsync(name, ct);
+    }
+
+    // The parent document index is keyword-only; hybrid search embeddings belong on the chunk index.
+    // If a stale embedder was accidentally configured here, remove it so document upserts do not
+    // trigger embedding inference and cause task timeouts.
+    private async Task EnsureNoEmbeddersAsync(string name, CancellationToken ct)
+    {
+        Dictionary<string, Embedder>? embedders;
+        try {
+            embedders = await _client!.Index(name).GetEmbeddersAsync(ct);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
+            _logger.LogWarning(ex, "Could not check embedders on parent index '{Name}'; skipping reset", name);
+            return;
+        }
+
+        if(embedders == null || embedders.Count == 0) return;
+
+        _logger.LogWarning(
+            "Parent index '{Name}' has {Count} embedder(s) configured ({Names}); removing them. " +
+            "Embeddings belong on the chunk index only. This reset may take several minutes on large indexes.",
+            name, embedders.Count, string.Join(", ", embedders.Keys));
+
+        TaskInfo resetTask;
+        try {
+            resetTask = await _client!.Index(name).ResetEmbeddersAsync(ct);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        }
+
+        _logger.LogInformation("Submitted embedder reset task {TaskUid} on parent index '{Name}'; waiting up to {Seconds}s",
+            resetTask.TaskUid, name, EmbedderResetTimeoutSeconds);
+
+        TaskResource result = await WaitForTaskRawAsync(resetTask.TaskUid, "reset parent embedders",
+            EmbedderResetTimeoutSeconds, ct);
+        if(result.Status != TaskInfoStatus.Succeeded)
+            throw new InvalidOperationException(
+                $"Parent index '{name}': embedder reset task {resetTask.TaskUid} {result.Status}; " +
+                $"{System.Text.Json.JsonSerializer.Serialize(result.Error)}");
+
+        _logger.LogInformation("Embedder(s) removed from parent index '{Name}'; index is now keyword-only", name);
     }
 
     private async Task<Meilisearch.Index> EnsureIndexCreatedAsync(string name, CancellationToken ct)
@@ -152,17 +200,20 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             $"Meilisearch create index task {createTask.TaskUid}: {createResult.Status}; {System.Text.Json.JsonSerializer.Serialize(createResult.Error)}");
     }
 
-    private async Task<TaskResource> WaitForTaskRawAsync(int taskUid, string operation, CancellationToken cancellationToken)
+    private Task<TaskResource> WaitForTaskRawAsync(int taskUid, string operation, CancellationToken cancellationToken)
+        => WaitForTaskRawAsync(taskUid, operation, _options.TaskTimeoutSeconds, cancellationToken);
+
+    private async Task<TaskResource> WaitForTaskRawAsync(int taskUid, string operation, int timeoutSeconds, CancellationToken cancellationToken)
     {
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(_options.TaskTimeoutSeconds));
+        deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try {
-            return await _client.WaitForTaskAsync(taskUid, timeoutMs: _options.TaskTimeoutSeconds * 1000d,
+            return await _client.WaitForTaskAsync(taskUid, timeoutMs: timeoutSeconds * 1000d,
                 intervalMs: 100, cancellationToken: deadline.Token);
         } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
             throw new MeilisearchAuthenticationException(ex);
         } catch(OperationCanceledException ex) when(!cancellationToken.IsCancellationRequested) {
-            throw new TimeoutException($"Meilisearch {operation}, task {taskUid} did not finish within {_options.TaskTimeoutSeconds} seconds.", ex);
+            throw new TimeoutException($"Meilisearch {operation}, task {taskUid} did not finish within {timeoutSeconds} seconds.", ex);
         } catch(MeilisearchTimeoutError ex) {
             throw new TimeoutException($"Meilisearch {operation}, task {taskUid} timed out.", ex);
         }
