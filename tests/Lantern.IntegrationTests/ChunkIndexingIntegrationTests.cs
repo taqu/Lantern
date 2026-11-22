@@ -23,7 +23,7 @@ public sealed class ChunkIndexingIntegrationTests : IAsyncLifetime
         _service = new(
             new TestMeilisearchClientFactory(_client),
             Options.Create(new MeilisearchOptions { IndexName = "lantern-test", MaxDocumentsPerBatch = 10, TaskTimeoutSeconds = 60 }),
-            Options.Create(new HybridSearchOptions { ChunkIndexName = _chunkIndex, EmbedderName = "test-embedder" }),
+            Options.Create(new HybridSearchOptions { Enabled = true, ChunkIndexName = _chunkIndex, EmbedderName = "test-embedder" }),
             NullLogger<MeilisearchChunkIndexingService>.Instance);
         return Task.CompletedTask;
     }

@@ -180,9 +180,14 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
 
         try {
             TaskInfo task = await index.AddDocumentsAsync(batch, primaryKey: "id");
-            await WaitAsync(task.TaskUid, cancellationToken);
-        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") { throw new MeilisearchAuthenticationException(ex); }
-        _logger.LogDebug("Upserted {Count} chunks", batch.Count);
+            // Meilisearch generates embeddings inside the indexing task via REST calls to the
+            // embedding server. This can take many minutes for large batches. We submit the task
+            // and return immediately; Meilisearch processes it asynchronously in FIFO order.
+            _logger.LogInformation("Submitted chunk upsert task {TaskUid} for {Count} chunks (embedding generation pending)",
+                task.TaskUid, batch.Count);
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        }
     }
 
     public async Task DeleteChunksByDocumentAsync(string documentId, CancellationToken cancellationToken = default)
@@ -192,7 +197,9 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         DeleteDocumentsQuery query = new Meilisearch.QueryParameters.DeleteDocumentsQuery { Filter = $"documentId = \"{documentId}\"" };
         TaskInfo task = await index.DeleteDocumentsAsync(query, cancellationToken);
-        await WaitAsync(task.TaskUid, cancellationToken);
+        // Submit and return; Meilisearch processes this before any subsequently submitted upsert
+        // task due to FIFO ordering within the index.
+        _logger.LogDebug("Submitted chunk delete task {TaskUid} for document {DocumentId}", task.TaskUid, documentId);
     }
 
     public async Task ReplaceDocumentChunksAsync(string documentId, IEnumerable<SearchChunk> newChunks, CancellationToken cancellationToken = default)
@@ -201,8 +208,8 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         await EnsureIndexAsync(cancellationToken);
         List<SearchChunk> chunkList = newChunks.ToList();
 
-        // Delete all existing chunks for the document, then upsert new ones.
-        // Not atomic but reduces stale chunk window.
+        // Submit delete then upsert without waiting between them. Meilisearch guarantees FIFO
+        // task ordering within an index, so the delete always runs before the upsert.
         await DeleteChunksByDocumentAsync(documentId, cancellationToken);
         if(chunkList.Count > 0)
             await UpsertChunksAsync(chunkList, cancellationToken);
@@ -214,7 +221,7 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         TaskInfo task = await index.DeleteOneDocumentAsync(chunkId);
-        await WaitAsync(task.TaskUid, cancellationToken);
+        _logger.LogDebug("Submitted chunk delete task {TaskUid} for chunk {ChunkId}", task.TaskUid, chunkId);
     }
 
     private async Task WaitAsync(int taskUid, CancellationToken cancellationToken)
