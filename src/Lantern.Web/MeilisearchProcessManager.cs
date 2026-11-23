@@ -121,8 +121,13 @@ public sealed class MeilisearchProcessManager(
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        // Pass the master key via environment variable to avoid exposure in process listings.
+        // Pass secrets via environment variables to avoid exposure in process listings.
         startInfo.Environment["MEILI_MASTER_KEY"] = masterKey;
+        // Allow the loopback REST embedder URL (127.0.0.1) to be reached by Meilisearch.
+        // Without this, Meilisearch 1.9+ SSRF protection rejects loopback addresses with
+        // "bad uri: Rejected URI" on every embedding request.
+        if(!string.IsNullOrEmpty(_opts.AllowedIpNetworks))
+            startInfo.Environment["MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS"] = _opts.AllowedIpNetworks;
         startInfo.ArgumentList.Add("--db-path");
         startInfo.ArgumentList.Add(_opts.DataDirectory);
         startInfo.ArgumentList.Add("--http-addr");

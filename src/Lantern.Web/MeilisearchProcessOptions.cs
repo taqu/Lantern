@@ -48,4 +48,14 @@ public sealed class MeilisearchProcessOptions
 
     /// <summary>When true, failure to start Meilisearch prevents the application from starting.</summary>
     public bool FailOnStartupError { get; set; } = true;
+
+    /// <summary>
+    /// CIDR networks passed to Meilisearch's experimental IP allowlist
+    /// (<c>MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS</c>).  Defaults to loopback-only
+    /// (<c>127.0.0.0/8</c>) so the REST embedder on 127.0.0.1 is reachable without
+    /// disabling Meilisearch's SSRF protections globally.  Set to an empty string to
+    /// omit the flag (required when connecting to an older Meilisearch that does not
+    /// support it, though that version will also reject loopback REST embedders).
+    /// </summary>
+    public string AllowedIpNetworks { get; set; } = "127.0.0.0/8";
 }

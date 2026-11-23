@@ -1,3 +1,5 @@
+using System.Net.Http;
+using System.Text.Json;
 using Lantern.Core.Search;
 using Lantern.Embedding;
 using Lantern.Infrastructure.Search;
@@ -20,6 +22,7 @@ internal sealed class EmbedderSetupService : IHostedService
     private readonly IMeilisearchCredentialManager _credentialManager;
     private readonly EmbeddingOptions _embeddingOptions;
     private readonly ILogger<EmbedderSetupService> _logger;
+    private readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
 
     public EmbedderSetupService(
         EmbedderConfigurationService embedderConfig,
@@ -43,7 +46,54 @@ internal sealed class EmbedderSetupService : IHostedService
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _httpClient.Dispose();
+        return Task.CompletedTask;
+    }
+
+    // Returns false and logs if the embedding server cannot produce a valid response.
+    // This prevents Meilisearch from being pointed at an endpoint that will only fail.
+    private async Task<bool> VerifyEmbeddingServerAsync(string embedUrl, CancellationToken cancellationToken)
+    {
+        const string probe = "test";
+        try {
+            using var request = new StringContent(
+                $"{{\"text\":\"{probe}\"}}",
+                System.Text.Encoding.UTF8,
+                "application/json");
+            using var response = await _httpClient.PostAsync(embedUrl, request, cancellationToken);
+            if(!response.IsSuccessStatusCode) {
+                _logger.LogError(
+                    "Embedding server preflight failed: {Status} {Url}. Embedder not configured.",
+                    (int)response.StatusCode, embedUrl);
+                return false;
+            }
+            using var doc = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken), default, cancellationToken);
+            if(!doc.RootElement.TryGetProperty("embedding", out var arr) ||
+               arr.ValueKind != JsonValueKind.Array) {
+                _logger.LogError(
+                    "Embedding server response missing 'embedding' array at {Url}. Embedder not configured.",
+                    embedUrl);
+                return false;
+            }
+            int dims = arr.GetArrayLength();
+            if(dims != 384) {
+                _logger.LogError(
+                    "Embedding server returned {Dims} dimensions (expected 384) at {Url}. Embedder not configured.",
+                    dims, embedUrl);
+                return false;
+            }
+            _logger.LogInformation("Embedding server preflight passed: {Dims}-dimensional vector returned from {Url}.", dims, embedUrl);
+            return true;
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
+            _logger.LogError(ex,
+                "Embedding server at {Url} is unreachable. Confirm the server is running and the address is correct. Embedder not configured.",
+                embedUrl);
+            return false;
+        }
+    }
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -71,6 +121,10 @@ internal sealed class EmbedderSetupService : IHostedService
             }
 
             string embedUrl = $"http://{_embeddingOptions.ListenAddress}:{_embeddingOptions.Port}/embed";
+
+            if(!await VerifyEmbeddingServerAsync(embedUrl, cancellationToken))
+                return;
+
             await _embedderConfig.ConfigureEmbedderAsync(embedUrl, cancellationToken);
         } catch (OperationCanceledException) {
         } catch (Exception ex) {
