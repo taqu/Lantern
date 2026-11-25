@@ -122,7 +122,8 @@ public sealed class InferenceWorker : BackgroundService
                 await foreach(EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken)) {
                     request.Result.TrySetException(new InvalidOperationException(message));
                 }
-            } catch(OperationCanceledException) { }
+            } catch(OperationCanceledException) {
+            }
         }, CancellationToken.None);
     }
 }
