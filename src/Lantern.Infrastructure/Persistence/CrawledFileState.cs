@@ -12,4 +12,5 @@ public sealed class CrawledFileState
     public DateTimeOffset? LastIndexedAt { get; set; }
     public string SyncStatus { get; set; } = "Indexed";
     public string? LastError { get; set; }
+    public int? PendingMeilisearchTaskUid { get; set; }
 }

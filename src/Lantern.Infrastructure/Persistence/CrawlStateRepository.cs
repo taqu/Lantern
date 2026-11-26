@@ -23,6 +23,16 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
         return entities.ConvertAll(ToDto);
     }
 
+    public async Task<IReadOnlyList<FileState>> FindPendingIndexingAsync(int maxCount = 100, CancellationToken cancellationToken = default)
+    {
+        await using LanternDbContext db = await factory.CreateDbContextAsync(cancellationToken);
+        List<CrawledFileState> entities = await db.CrawledFileStates
+            .Where(e => e.SyncStatus == nameof(CrawlSyncStatus.IndexingPending) && e.PendingMeilisearchTaskUid != null)
+            .Take(maxCount)
+            .ToListAsync(cancellationToken);
+        return entities.ConvertAll(ToDto);
+    }
+
     public async Task SaveAsync(FileState state, CancellationToken cancellationToken = default)
     {
         await using LanternDbContext db = await factory.CreateDbContextAsync(cancellationToken);
@@ -64,7 +74,8 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
         LastSeenScanId = e.LastSeenScanId,
         LastIndexedAt = e.LastIndexedAt,
         SyncStatus = Enum.Parse<CrawlSyncStatus>(e.SyncStatus),
-        LastError = e.LastError
+        LastError = e.LastError,
+        PendingMeilisearchTaskUid = e.PendingMeilisearchTaskUid
     };
 
     private static CrawledFileState ToEntity(FileState s) => new() {
@@ -76,7 +87,8 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
         LastSeenScanId = s.LastSeenScanId,
         LastIndexedAt = s.LastIndexedAt,
         SyncStatus = s.SyncStatus.ToString(),
-        LastError = s.LastError
+        LastError = s.LastError,
+        PendingMeilisearchTaskUid = s.PendingMeilisearchTaskUid
     };
 
     private static void ApplyToEntity(FileState s, CrawledFileState e)
@@ -88,5 +100,6 @@ public sealed class CrawlStateRepository(IDbContextFactory<LanternDbContext> fac
         e.LastIndexedAt = s.LastIndexedAt;
         e.SyncStatus = s.SyncStatus.ToString();
         e.LastError = s.LastError;
+        e.PendingMeilisearchTaskUid = s.PendingMeilisearchTaskUid;
     }
 }

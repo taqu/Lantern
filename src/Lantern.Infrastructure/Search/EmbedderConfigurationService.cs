@@ -38,6 +38,24 @@ public sealed class EmbedderConfigurationService
     // accepted and continues running in the background.
     private const int EmbedderSettleSeconds = 10;
 
+    private const string EmbedderDocumentTemplate = "{{doc.title}}\n{{doc.sectionTitle}}\n{{doc.content}}";
+    private const int EmbedderDimensions = 384;
+
+    private async Task<bool> IsAlreadyConfiguredAsync(Meilisearch.Index index, string embedderName, string embedUrl, CancellationToken cancellationToken)
+    {
+        try {
+            Dictionary<string, Embedder>? current = await index.GetEmbeddersAsync(cancellationToken);
+            if(current == null || !current.TryGetValue(embedderName, out Embedder? existing)) return false;
+            return existing.Source == EmbedderSource.Rest
+                && existing.Url == embedUrl
+                && existing.Dimensions == EmbedderDimensions
+                && existing.DocumentTemplate == EmbedderDocumentTemplate;
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
+            _logger.LogDebug(ex, "Could not read current embedder configuration; will re-apply");
+            return false;
+        }
+    }
+
     public async Task ConfigureEmbedderAsync(string embedUrl, CancellationToken cancellationToken = default)
     {
         string indexName = _options.ChunkIndexName;
@@ -48,14 +66,21 @@ public sealed class EmbedderConfigurationService
         EnsureClient();
         Meilisearch.Index index = _client.Index(indexName);
 
+        if(await IsAlreadyConfiguredAsync(index, embedderName, embedUrl, cancellationToken)) {
+            _logger.LogInformation(
+                "REST embedder '{EmbedderName}' on index '{IndexName}' is already configured with matching URL and dimensions; skipping update to avoid re-embedding.",
+                embedderName, indexName);
+            return;
+        }
+
         Dictionary<string, Embedder> embedders = new Dictionary<string, Embedder> {
             [embedderName] = new Embedder {
                 Source = EmbedderSource.Rest,
                 Url = embedUrl,
-                Dimensions = 384,
+                Dimensions = EmbedderDimensions,
                 Request = new Dictionary<string, object> { ["text"] = "{{text}}" },
                 Response = new Dictionary<string, object> { ["embedding"] = "{{embedding}}" },
-                DocumentTemplate = "{{doc.title}}\n{{doc.sectionTitle}}\n{{doc.content}}",
+                DocumentTemplate = EmbedderDocumentTemplate,
                 DocumentTemplateMaxBytes = 8192
             }
         };

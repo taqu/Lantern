@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LlamaPure;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ public sealed class InferenceWorker : BackgroundService
     private readonly ILogger<InferenceWorker> _logger;
     private readonly string _modelPath;
     private const int ExpectedDimensions = 384;
+    private long _requestCounter;
 
     public InferenceWorker(
         InferenceQueue queue,
@@ -56,9 +58,13 @@ public sealed class InferenceWorker : BackgroundService
         LlamaPureClient? client = null;
         try {
             _status.SetLoading();
-            client = new LlamaPureClient(_modelPath, _options.ContextSize, _options.Threads);
+            Stopwatch loadSw = Stopwatch.StartNew();
+            client = new LlamaPureClient(_modelPath, _options.ContextSize, _options.Threads, enableEmbeddings:true);
+            loadSw.Stop();
             _status.SetReady();
-            _logger.LogInformation("Embedding model loaded successfully. Dimensions: {Dims}", ExpectedDimensions);
+            _logger.LogInformation(
+                "Embedding model loaded. Model: {Model}, Dimensions: {Dims}, LoadMs: {LoadMs}",
+                Path.GetFileName(_modelPath), ExpectedDimensions, loadSw.ElapsedMilliseconds);
         } catch(Exception ex) {
             _logger.LogError(ex, "Failed to load embedding model from '{ModelPath}'", _modelPath);
             _status.SetFailed($"Model load failed: {ex.Message}");
@@ -74,13 +80,22 @@ public sealed class InferenceWorker : BackgroundService
                 }
 
                 try {
+                    long reqId = Interlocked.Increment(ref _requestCounter);
+                    _logger.LogDebug("Inference request {ReqId} received, TextLen: {TextLen}", reqId, request.Text.Length);
+
+                    Stopwatch sw = Stopwatch.StartNew();
                     List<float[]> embeddings = client.GetEmbedding(request.Text, overlap: 0);
+                    sw.Stop();
+
+                    _logger.LogDebug("Inference request {ReqId} completed in {ElapsedMs}ms, results: {Count}",
+                        reqId, sw.ElapsedMilliseconds, embeddings.Count);
+
                     if(embeddings.Count == 0) {
                         request.Result.TrySetException(new InvalidOperationException("Empty embedding result"));
                         continue;
                     }
 
-                    float[] vector = embeddings[0]; // Use first chunk's embedding
+                    float[] vector = embeddings[0];
 
                     if(vector.Length != ExpectedDimensions) {
                         request.Result.TrySetException(new InvalidOperationException(
@@ -88,7 +103,6 @@ public sealed class InferenceWorker : BackgroundService
                         continue;
                     }
 
-                    // Validate finite values
                     bool hasNonFinite = false;
                     foreach(float f in vector) {
                         if(!float.IsFinite(f)) { hasNonFinite = true; break; }
@@ -98,6 +112,7 @@ public sealed class InferenceWorker : BackgroundService
                         continue;
                     }
 
+                    _logger.LogDebug("Inference request {ReqId} validated: {Dims} dimensions", reqId, vector.Length);
                     request.Result.TrySetResult(vector);
                 } catch(OperationCanceledException) when(request.CancellationToken.IsCancellationRequested) {
                     request.Result.TrySetCanceled(request.CancellationToken);

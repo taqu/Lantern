@@ -184,6 +184,114 @@ public sealed class CrawlStateRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task FindPendingIndexingReturnsRecordsWithPendingStatus()
+    {
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = CreateRepo();
+
+        await repo.SaveAsync(new FileState {
+            CrawlerId = crawlerId,
+            DocumentId = "doc-pending",
+            CanonicalPath = @"C:\pending.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.IndexingPending,
+            PendingMeilisearchTaskUid = 42
+        });
+        await repo.SaveAsync(new FileState {
+            CrawlerId = crawlerId,
+            DocumentId = "doc-indexed",
+            CanonicalPath = @"C:\indexed.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.Indexed
+        });
+
+        IReadOnlyList<FileState> pending = await repo.FindPendingIndexingAsync();
+
+        Assert.Single(pending);
+        Assert.Equal("doc-pending", pending[0].DocumentId);
+        Assert.Equal(42, pending[0].PendingMeilisearchTaskUid);
+    }
+
+    [Fact]
+    public async Task FindPendingIndexingExcludesNullTaskUid()
+    {
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = CreateRepo();
+
+        await repo.SaveAsync(new FileState {
+            CrawlerId = crawlerId,
+            DocumentId = "doc-no-uid",
+            CanonicalPath = @"C:\nouid.txt",
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.IndexingPending,
+            PendingMeilisearchTaskUid = null
+        });
+
+        IReadOnlyList<FileState> pending = await repo.FindPendingIndexingAsync();
+        Assert.Empty(pending);
+    }
+
+    [Fact]
+    public async Task FindPendingIndexingRoundTripsTaskUid()
+    {
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = CreateRepo();
+        string path = @"C:\taskuid.txt";
+
+        await repo.SaveAsync(new FileState {
+            CrawlerId = crawlerId,
+            DocumentId = "doc1",
+            CanonicalPath = path,
+            FileSize = 10,
+            LastWriteTimeUtc = DateTimeOffset.UtcNow,
+            LastSeenScanId = Guid.NewGuid(),
+            SyncStatus = CrawlSyncStatus.IndexingPending,
+            PendingMeilisearchTaskUid = 999
+        });
+
+        IReadOnlyList<FileState> pending = await repo.FindPendingIndexingAsync();
+        Assert.Single(pending);
+        Assert.Equal(999, pending[0].PendingMeilisearchTaskUid);
+
+        // Simulate reconciliation clearing the pending task
+        pending[0].SyncStatus = CrawlSyncStatus.Indexed;
+        pending[0].PendingMeilisearchTaskUid = null;
+        await repo.SaveAsync(pending[0]);
+
+        IReadOnlyList<FileState> afterReconcile = await repo.FindPendingIndexingAsync();
+        Assert.Empty(afterReconcile);
+    }
+
+    [Fact]
+    public async Task FindPendingIndexingRespectsMaxCount()
+    {
+        Guid crawlerId = Guid.NewGuid();
+        CrawlStateRepository repo = CreateRepo();
+
+        for(int i = 0; i < 5; i++) {
+            await repo.SaveAsync(new FileState {
+                CrawlerId = crawlerId,
+                DocumentId = $"doc{i}",
+                CanonicalPath = $@"C:\file{i}.txt",
+                FileSize = 10,
+                LastWriteTimeUtc = DateTimeOffset.UtcNow,
+                LastSeenScanId = Guid.NewGuid(),
+                SyncStatus = CrawlSyncStatus.IndexingPending,
+                PendingMeilisearchTaskUid = i + 1
+            });
+        }
+
+        IReadOnlyList<FileState> pending = await repo.FindPendingIndexingAsync(maxCount: 3);
+        Assert.Equal(3, pending.Count);
+    }
+
+    [Fact]
     public async Task GetNotSeenIsScopedToCrawler()
     {
         Guid crawler1 = Guid.NewGuid();

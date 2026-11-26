@@ -12,4 +12,6 @@ public sealed class FileState
     public DateTimeOffset? LastIndexedAt { get; set; }
     public CrawlSyncStatus SyncStatus { get; set; }
     public string? LastError { get; set; }
+    // Meilisearch task UID for the pending document upsert. Set while SyncStatus == IndexingPending.
+    public int? PendingMeilisearchTaskUid { get; set; }
 }

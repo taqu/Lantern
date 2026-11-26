@@ -35,8 +35,8 @@ public sealed class FileSynchronizationService(
     {
         FileState? existing = await stateRepository.FindAsync(crawlerId, file.CanonicalPath, cancellationToken);
 
-        // Unchanged check
-        if(existing is { SyncStatus: CrawlSyncStatus.Indexed }
+        // Unchanged check — also skip IndexingPending so we don't re-submit a task that's still in-flight
+        if(existing is { SyncStatus: CrawlSyncStatus.Indexed or CrawlSyncStatus.IndexingPending }
             && existing.FileSize == file.FileSize
             && existing.LastWriteTimeUtc == file.LastWriteTimeUtc) {
             existing.LastSeenScanId = scanId;
@@ -125,11 +125,13 @@ public sealed class FileSynchronizationService(
             }).ToList()
             : result.Chunks ?? [];
 
+        int parentTaskUid;
+        int? chunkTaskUid;
         try {
-            await documentIndexing.UpsertAsync(doc, cancellationToken);
-            await chunkIndexing.ReplaceDocumentChunksAsync(documentId, chunks, cancellationToken);
+            parentTaskUid = await documentIndexing.SubmitUpsertAsync(doc, cancellationToken);
+            chunkTaskUid = await chunkIndexing.ReplaceDocumentChunksAsync(documentId, chunks, cancellationToken);
         } catch(Exception ex) {
-            logger.LogError(ex, "Indexing failed for {Path}", file.CanonicalPath);
+            logger.LogError(ex, "Indexing submission failed for {Path}", file.CanonicalPath);
             await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, ex.Message, cancellationToken);
             return (FileSyncOutcome.Failed, ex.Message);
         }
@@ -146,9 +148,14 @@ public sealed class FileSynchronizationService(
         if(sizeAfter != file.FileSize || lwAfter != file.LastWriteTimeUtc) {
             // File changed while we were processing it; mark for retry next scan
             state.SyncStatus = CrawlSyncStatus.PendingRetry;
+            state.PendingMeilisearchTaskUid = null;
             logger.LogWarning("File changed during processing: {Path}", file.CanonicalPath);
         } else {
-            state.SyncStatus = CrawlSyncStatus.Indexed;
+            state.SyncStatus = CrawlSyncStatus.IndexingPending;
+            // Prefer the chunk upsert task UID: that task calls the REST embedder and can fail
+            // independently (e.g. Rejected URI). Fall back to parent task UID when hybrid search
+            // is disabled or the document produced no chunks.
+            state.PendingMeilisearchTaskUid = chunkTaskUid ?? parentTaskUid;
         }
 
         await stateRepository.SaveAsync(state, cancellationToken);

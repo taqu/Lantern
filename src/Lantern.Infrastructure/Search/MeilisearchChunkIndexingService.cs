@@ -97,6 +97,32 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         _logger.LogInformation("Assigned primary key 'id' on chunk index '{Name}' that had no primary key set", name);
     }
 
+    private static readonly string[] _desiredSearchableAttributes = ["title", "sectionTitle", "content"];
+    private static readonly HashSet<string> _desiredFilterableAttributeNames = new(StringComparer.Ordinal) { "documentId", "sourceId", "sourceType", "extension", "categoryIds" };
+
+    private async Task<bool> IsSettingsAlreadyAppliedAsync(Meilisearch.Index index, string indexName, CancellationToken ct)
+    {
+        try {
+            Settings current = await index.GetSettingsAsync(ct);
+            if(!_desiredSearchableAttributes.SequenceEqual(current.SearchableAttributes ?? [], StringComparer.Ordinal))
+                return false;
+            HashSet<string> currentFilterable = new(
+                (current.FilterableAttributes ?? []).Select(f => f.Attribute ?? ""),
+                StringComparer.Ordinal);
+            if(!currentFilterable.SetEquals(_desiredFilterableAttributeNames))
+                return false;
+            string[] displayed = (current.DisplayedAttributes ?? []).ToArray();
+            if(displayed.Length != 1 || displayed[0] != "*")
+                return false;
+            return true;
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
+            _logger.LogDebug(ex, "Could not read current settings on chunk index '{IndexName}'; will re-apply", indexName);
+            return false;
+        }
+    }
+
     private async Task ConfigureAsync(CancellationToken cancellationToken)
     {
         if(null == _client) {
@@ -108,13 +134,17 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         Meilisearch.Index index = await EnsureIndexCreatedAsync(indexName, cancellationToken);
         await EnsureCompatiblePrimaryKeyAsync(index, indexName, cancellationToken);
 
-        TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings {
-            SearchableAttributes = ["title", "sectionTitle", "content"],
-            FilterableAttributes = ["documentId", "sourceId", "sourceType", "extension", "categoryIds"],
-            DisplayedAttributes = ["*"]
-        });
-        await WaitAsync(settingsTask.TaskUid, cancellationToken);
-        _logger.LogInformation("Chunk index '{IndexName}' configured", indexName);
+        if(await IsSettingsAlreadyAppliedAsync(index, indexName, cancellationToken)) {
+            _logger.LogInformation("Chunk index '{IndexName}' settings are already up to date; skipping UpdateSettingsAsync", indexName);
+        } else {
+            TaskInfo settingsTask = await index.UpdateSettingsAsync(new Settings {
+                SearchableAttributes = ["title", "sectionTitle", "content"],
+                FilterableAttributes = ["documentId", "sourceId", "sourceType", "extension", "categoryIds"],
+                DisplayedAttributes = ["*"]
+            });
+            await WaitAsync(settingsTask.TaskUid, cancellationToken);
+            _logger.LogInformation("Chunk index '{IndexName}' settings updated (task {TaskUid})", indexName, settingsTask.TaskUid);
+        }
     }
 
     private async Task<Meilisearch.Index> EnsureIndexCreatedAsync(string indexName, CancellationToken cancellationToken)
@@ -171,20 +201,24 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     }
 
     public async Task UpsertChunksAsync(IEnumerable<SearchChunk> chunks, CancellationToken cancellationToken = default)
+        => await SubmitChunkUpsertAsync(chunks, cancellationToken);
+
+    // Submits the chunk upsert task and returns its UID (or null when disabled/empty).
+    // Meilisearch generates embeddings inside this task via REST calls to the embedding server;
+    // it can take many minutes for large batches and can fail if the embedder URL is misconfigured.
+    private async Task<int?> SubmitChunkUpsertAsync(IEnumerable<SearchChunk> chunks, CancellationToken cancellationToken)
     {
-        if(!_hybridOptions.Enabled) return;
+        if(!_hybridOptions.Enabled) return null;
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         List<SearchChunk> batch = chunks.ToList();
-        if(batch.Count == 0) return;
+        if(batch.Count == 0) return null;
 
         try {
             TaskInfo task = await index.AddDocumentsAsync(batch, primaryKey: "id");
-            // Meilisearch generates embeddings inside the indexing task via REST calls to the
-            // embedding server. This can take many minutes for large batches. We submit the task
-            // and return immediately; Meilisearch processes it asynchronously in FIFO order.
             _logger.LogInformation("Submitted chunk upsert task {TaskUid} for {Count} chunks (embedding generation pending)",
                 task.TaskUid, batch.Count);
+            return task.TaskUid;
         } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
             throw new MeilisearchAuthenticationException(ex);
         }
@@ -202,9 +236,9 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         _logger.LogDebug("Submitted chunk delete task {TaskUid} for document {DocumentId}", task.TaskUid, documentId);
     }
 
-    public async Task ReplaceDocumentChunksAsync(string documentId, IEnumerable<SearchChunk> newChunks, CancellationToken cancellationToken = default)
+    public async Task<int?> ReplaceDocumentChunksAsync(string documentId, IEnumerable<SearchChunk> newChunks, CancellationToken cancellationToken = default)
     {
-        if(!_hybridOptions.Enabled) return;
+        if(!_hybridOptions.Enabled) return null;
         await EnsureIndexAsync(cancellationToken);
         List<SearchChunk> chunkList = newChunks.ToList();
 
@@ -212,7 +246,8 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
         // task ordering within an index, so the delete always runs before the upsert.
         await DeleteChunksByDocumentAsync(documentId, cancellationToken);
         if(chunkList.Count > 0)
-            await UpsertChunksAsync(chunkList, cancellationToken);
+            return await SubmitChunkUpsertAsync(chunkList, cancellationToken);
+        return null;
     }
 
     public async Task DeleteChunkAsync(string chunkId, CancellationToken cancellationToken = default)

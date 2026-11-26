@@ -65,6 +65,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITextChunkingService, TextChunkingService>();
         services.AddSingleton<IChunkIndexingService, MeilisearchChunkIndexingService>();
         services.AddSingleton<EmbedderConfigurationService>();
+        services.AddHostedService<MeilisearchTaskReconciliationService>();
 
         // Document extraction services
         services.Configure<ExtractionOptions>(configuration.GetSection(ExtractionOptions.SectionName));

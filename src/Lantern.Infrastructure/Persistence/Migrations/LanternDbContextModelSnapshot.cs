@@ -141,6 +141,9 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("LastWriteTimeUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("PendingMeilisearchTaskUid")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SyncStatus")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -152,6 +155,8 @@ namespace Lantern.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("CrawlerId", "LastSeenScanId");
+
+                    b.HasIndex("SyncStatus");
 
                     b.ToTable("CrawledFileStates", (string)null);
                 });

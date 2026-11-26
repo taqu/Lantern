@@ -56,6 +56,7 @@ public sealed class LanternDbContext(DbContextOptions<LanternDbContext> options)
         fileState.Property(x => x.SyncStatus).IsRequired().HasMaxLength(20);
         fileState.HasIndex(x => new { x.CrawlerId, x.CanonicalPath }).IsUnique();
         fileState.HasIndex(x => new { x.CrawlerId, x.LastSeenScanId });
+        fileState.HasIndex(x => x.SyncStatus);
 
         Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<FileCrawlerProfileRecord> profile = modelBuilder.Entity<FileCrawlerProfileRecord>();
         profile.ToTable("FileCrawlerProfiles", t => {

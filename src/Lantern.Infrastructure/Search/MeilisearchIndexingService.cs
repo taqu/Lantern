@@ -26,6 +26,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
 
     public async Task WaitAsync(int taskUid, string operation, CancellationToken cancellationToken = default)
     {
+        if(_client == null) _client = _clientFactory.GetIndexingClient();
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(_options.TaskTimeoutSeconds));
         TaskResource result;
@@ -97,6 +98,36 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
     // on large indexes. This only runs once per index lifetime (when a stale embedder is found).
     private const int EmbedderResetTimeoutSeconds = 300;
 
+    private static readonly string[] _desiredSearchableAttributes = ["title", "content"];
+    private static readonly HashSet<string> _desiredFilterableAttributeNames = new(StringComparer.Ordinal) { "sourceId", "sourceType", "extension", "mimeType", "categoryIds" };
+    private static readonly HashSet<string> _desiredSortableAttributeNames = new(StringComparer.Ordinal) { "modifiedAt", "indexedAt", "size" };
+
+    private async Task<bool> IsSettingsAlreadyAppliedAsync(Meilisearch.Index index, string name, CancellationToken ct)
+    {
+        try {
+            Settings current = await index.GetSettingsAsync(ct);
+            if(!_desiredSearchableAttributes.SequenceEqual(current.SearchableAttributes ?? [], StringComparer.Ordinal))
+                return false;
+            HashSet<string> currentFilterable = new(
+                (current.FilterableAttributes ?? []).Select(f => f.Attribute ?? ""),
+                StringComparer.Ordinal);
+            if(!currentFilterable.SetEquals(_desiredFilterableAttributeNames))
+                return false;
+            HashSet<string> currentSortable = new(current.SortableAttributes ?? [], StringComparer.Ordinal);
+            if(!currentSortable.SetEquals(_desiredSortableAttributeNames))
+                return false;
+            string[] displayed = (current.DisplayedAttributes ?? []).ToArray();
+            if(displayed.Length != 1 || displayed[0] != "*")
+                return false;
+            return true;
+        } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+            throw new MeilisearchAuthenticationException(ex);
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
+            _logger.LogDebug(ex, "Could not read current settings on parent index '{Name}'; will re-apply", name);
+            return false;
+        }
+    }
+
     private async Task ConfigureAsync(string name, CancellationToken ct)
     {
         if(null == _client) {
@@ -107,13 +138,18 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         }
         Meilisearch.Index index = await EnsureIndexCreatedAsync(name, ct);
         await EnsureCompatiblePrimaryKeyAsync(index, name, ct);
-        TaskInfo task = await index.UpdateSettingsAsync(new Settings {
-            SearchableAttributes = new[] { "title", "content" },
-            FilterableAttributes = new FilterableAttribute[] { "sourceId", "sourceType", "extension", "mimeType", "categoryIds" },
-            SortableAttributes = new[] { "modifiedAt", "indexedAt", "size" },
-            DisplayedAttributes = new[] { "*" }
-        }, ct);
-        await WaitAsync(task.TaskUid, "configure index", ct);
+        if(await IsSettingsAlreadyAppliedAsync(index, name, ct)) {
+            _logger.LogInformation("Parent index '{Name}' settings are already up to date; skipping UpdateSettingsAsync", name);
+        } else {
+            TaskInfo task = await index.UpdateSettingsAsync(new Settings {
+                SearchableAttributes = new[] { "title", "content" },
+                FilterableAttributes = new FilterableAttribute[] { "sourceId", "sourceType", "extension", "mimeType", "categoryIds" },
+                SortableAttributes = new[] { "modifiedAt", "indexedAt", "size" },
+                DisplayedAttributes = new[] { "*" }
+            }, ct);
+            await WaitAsync(task.TaskUid, "configure index", ct);
+            _logger.LogInformation("Parent index '{Name}' settings updated (task {TaskUid})", name, task.TaskUid);
+        }
         await EnsureNoEmbeddersAsync(name, ct);
     }
 
@@ -163,7 +199,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
     {
         // Check existence first to avoid unnecessary creation attempts
         try {
-            return await _client.GetIndexAsync(name, ct);
+            return await _client!.GetIndexAsync(name, ct);
         } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
             throw new MeilisearchAuthenticationException(ex);
         } catch(MeilisearchApiError ex) when(ex.Code == "index_not_found") {
@@ -171,7 +207,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             _ = ex;
         }
 
-        TaskInfo createTask = await _client.CreateIndexAsync(name, "id", ct);
+        TaskInfo createTask = await _client!.CreateIndexAsync(name, "id", ct);
         TaskResource createResult = await WaitForTaskRawAsync(createTask.TaskUid, "create index", ct);
 
         if(createResult.Status == TaskInfoStatus.Succeeded) {
@@ -208,7 +244,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try {
-            return await _client.WaitForTaskAsync(taskUid, timeoutMs: timeoutSeconds * 1000d,
+            return await _client!.WaitForTaskAsync(taskUid, timeoutMs: timeoutSeconds * 1000d,
                 intervalMs: 100, cancellationToken: deadline.Token);
         } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
             throw new MeilisearchAuthenticationException(ex);
@@ -234,6 +270,25 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
 
     public Task UpsertAsync(SearchDocument document, CancellationToken cancellationToken = default) => UpsertBatchAsync(new[] { document }, cancellationToken);
 
+    public async Task<int> SubmitUpsertAsync(SearchDocument document, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        await _gate.WaitAsync(cancellationToken);
+        try {
+            await InitializeAsync(cancellationToken);
+            SearchDocument normalized = DocumentNormalizer.Normalize(document);
+            try {
+                TaskInfo task = await _client!.Index(_options.IndexName).AddDocumentsAsync(new[] { normalized }, "id", cancellationToken);
+                _logger.LogInformation("Submitted parent document upsert task {TaskUid} for {DocumentId}", task.TaskUid, normalized.Id);
+                return task.TaskUid;
+            } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") {
+                throw new MeilisearchAuthenticationException(ex);
+            }
+        } finally {
+            _gate.Release();
+        }
+    }
+
     private async Task PopulateAsync(string name, IEnumerable<SearchDocument> documents, CancellationToken ct)
     {
         if(null == _client) {
@@ -242,7 +297,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
         foreach(IReadOnlyList<SearchDocument> batch in DocumentBatcher.Split(documents.Select(DocumentNormalizer.Normalize), _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch)) {
             ct.ThrowIfCancellationRequested();
             try {
-                TaskInfo task = await _client.Index(name).AddDocumentsAsync(batch, "id", ct);
+                TaskInfo task = await _client!.Index(name).AddDocumentsAsync(batch, "id", ct);
                 await WaitAsync(task.TaskUid, "upsert documents", ct);
             } catch(MeilisearchApiError ex) when(ex.Code is "missing_authorization_header" or "invalid_api_key") { throw new MeilisearchAuthenticationException(ex); }
         }
@@ -265,7 +320,7 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             await InitializeAsync(cancellationToken);
             IEnumerable<string> ids = documentIds.Select(id => { ArgumentException.ThrowIfNullOrWhiteSpace(id); return id; });
             foreach(IReadOnlyList<string> batch in DocumentBatcher.Split(ids, _options.MaxDocumentsPerBatch, _options.MaxPayloadBytesPerBatch)) {
-                TaskInfo task = await _client.Index(_options.IndexName).DeleteDocumentsAsync(batch, cancellationToken);
+                TaskInfo task = await _client!.Index(_options.IndexName).DeleteDocumentsAsync(batch, cancellationToken);
                 await WaitAsync(task.TaskUid, "delete documents", cancellationToken);
             }
         } finally { _gate.Release(); }
@@ -286,13 +341,13 @@ public sealed class MeilisearchIndexingService : IDocumentIndexingService
             // Retain the temporary index in that case; it may hold the old active data.
             cancellationToken.ThrowIfCancellationRequested();
             promotionSubmitted = true;
-            TaskInfo swap = await _client.SwapIndexesAsync(new List<IndexSwap> { new(_options.IndexName, temporary) }, cancellationToken);
+            TaskInfo swap = await _client!.SwapIndexesAsync(new List<IndexSwap> { new(_options.IndexName, temporary) }, cancellationToken);
             await WaitAsync(swap.TaskUid, "promote rebuilt index", cancellationToken);
             promotionConfirmed = true;
         } finally {
             try {
                 if(!promotionSubmitted || promotionConfirmed) {
-                    TaskInfo cleanup = await _client.DeleteIndexAsync(temporary, CancellationToken.None);
+                    TaskInfo cleanup = await _client!.DeleteIndexAsync(temporary, CancellationToken.None);
                     await WaitAsync(cleanup.TaskUid, "remove temporary index", CancellationToken.None);
                 } else _logger.LogWarning("Rebuild promotion outcome uncertain; retained index {Index} for inspection", temporary);
             } catch(Exception ex) { _logger.LogWarning(ex, "Could not clean up rebuild index {Index}", temporary); } finally { _gate.Release(); }
