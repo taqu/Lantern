@@ -1,0 +1,52 @@
+.about-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1rem 0;
+}
+
+.about-section {
+    margin-bottom: 2rem;
+}
+
+.about-section h2 {
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 0.25rem;
+}
+
+.license-text {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 1rem;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.thirdparty-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.thirdparty-table th,
+.thirdparty-table td {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #dee2e6;
+    text-align: left;
+    vertical-align: top;
+}
+
+.thirdparty-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.thirdparty-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.thirdparty-table a {
+    word-break: break-all;
+}

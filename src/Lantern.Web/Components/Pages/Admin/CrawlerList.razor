@@ -1,0 +1,259 @@
+@page "/admin/crawlers"
+@rendermode InteractiveServer
+@using Lantern.Crawling
+@using Lantern.Crawling.Jobs
+@using Lantern.Core.Crawling
+@using Lantern.Core.Jobs
+@inject CrawlerManagementService Management
+@inject CrawlerJobService Jobs
+@inject NavigationManager Nav
+@inject ILogger<CrawlerList> Logger
+
+<PageTitle>Crawlers · Lantern Administration</PageTitle>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Crawlers</h1>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-primary" href="/admin/crawlers/create">New File Crawler</a>
+        <a class="btn btn-primary" href="/admin/crawlers/web/create">New Web Crawler</a>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_loadError)
+{
+    <p class="alert alert-danger" role="alert">Crawler definitions could not be loaded. Check database access.</p>
+}
+else if (_crawlers.Count == 0)
+{
+    <div class="border rounded p-5 text-center">
+        <p class="lead mb-3">No crawlers have been created.</p>
+        <div class="d-flex justify-content-center gap-2">
+            <a class="btn btn-outline-primary" href="/admin/crawlers/create">Create a file crawler</a>
+            <a class="btn btn-primary" href="/admin/crawlers/web/create">Create a web crawler</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Configuration</th>
+                    <th>Enabled</th>
+                    <th>Last Run</th>
+                    <th>Result</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _crawlers)
+                {
+                    var def = item.Definition;
+                    var profile = item.Profile;
+                    var webProfile = item.WebProfile;
+                    bool hasConfig = def.CrawlerType == "web" ? webProfile != null : profile != null;
+                    string configDisplay = profile?.RootPath ?? (webProfile?.StartUrls.FirstOrDefault() ?? "—");
+                    string editHref = def.CrawlerType == "web"
+                        ? $"/admin/crawlers/web/{def.Id}/edit"
+                        : $"/admin/crawlers/{def.Id}/edit";
+                    _activeJobs.TryGetValue(def.Id, out CrawlerJob? activeJob);
+                    <tr>
+                        <td><a href="/admin/crawlers/@def.Id">@def.Name</a></td>
+                        <td><span class="badge bg-light text-dark border">@(def.CrawlerType == "web" ? "Web" : "File")</span></td>
+                        <td><code class="small">@configDisplay</code></td>
+                        <td>@(def.Enabled ? "Enabled" : "Disabled")</td>
+                        <td>@FormatLastRun(activeJob)</td>
+                        <td>@FormatResult(activeJob)</td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                <a class="btn btn-sm btn-outline-secondary" href="@editHref">Edit</a>
+                                @if (def.Enabled)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleAsync(def.Id, false)" disabled="@_busy">Disable</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleAsync(def.Id, true)" disabled="@_busy">Enable</button>
+                                }
+                                @if (activeJob?.Status == JobStatus.Running || activeJob?.Status == JobStatus.Pending)
+                                {
+                                    <a class="btn btn-sm btn-outline-info" href="/admin/jobs/@activeJob.Id">@(activeJob.Status == JobStatus.Running ? "Running…" : "Queued…")</a>
+                                }
+                                else if (def.Enabled && hasConfig)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => RunAsync(def.Id)" disabled="@_busy">Run</button>
+                                }
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RequestDelete(def.Id)" disabled="@_busy">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_confirmDeleteId.HasValue)
+{
+    var deleteName = _crawlers.FirstOrDefault(c => c.Definition.Id == _confirmDeleteId.Value)?.Definition.Name;
+    <div class="alert alert-warning mt-3" role="dialog" aria-label="Delete confirmation">
+        <p class="mb-1">Delete <strong>@deleteName</strong>?</p>
+        <p class="small mb-2">Previously indexed documents will remain searchable. Crawl state records will be removed. Job history is preserved.</p>
+        <button class="btn btn-danger btn-sm me-2" @onclick="ConfirmDeleteAsync" disabled="@_busy">Delete</button>
+        <button class="btn btn-secondary btn-sm" @onclick="CancelDelete">Cancel</button>
+    </div>
+}
+
+@if (_message != null)
+{
+    <div class="alert @(_messageIsError ? "alert-danger" : "alert-success") mt-3" role="@(_messageIsError ? "alert" : "status")">
+        @_message
+    </div>
+}
+
+@code {
+    private List<CrawlerWithProfile> _crawlers = [];
+    private Dictionary<Guid, CrawlerJob> _activeJobs = [];
+    private bool _loading = true;
+    private bool _loadError;
+    private bool _busy;
+    private Guid? _confirmDeleteId;
+    private string? _message;
+    private bool _messageIsError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _crawlers = await Management.GetAllAsync();
+            await LoadActiveJobsAsync();
+        }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        {
+            Logger.LogError(ex, "Failed to load crawler definitions");
+            _loadError = true;
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadActiveJobsAsync()
+    {
+        _activeJobs = [];
+        foreach (var item in _crawlers)
+        {
+            CrawlerJob? job = await Jobs.GetActiveJobForCrawlerAsync(item.Definition.Id);
+            if (job != null) _activeJobs[item.Definition.Id] = job;
+        }
+    }
+
+    private async Task ToggleAsync(Guid id, bool enabled)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            await Management.SetEnabledAsync(id, enabled);
+            _crawlers = await Management.GetAllAsync();
+            _message = enabled ? "Crawler enabled." : "Crawler disabled.";
+            _messageIsError = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to toggle crawler {Id}", id);
+            _message = "Could not update crawler state.";
+            _messageIsError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RunAsync(Guid id)
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            JobSubmissionResult result = await Management.TryStartAsync(id);
+            if (result.Status == JobSubmissionStatus.Submitted && result.JobId.HasValue)
+                Nav.NavigateTo($"/admin/jobs/{result.JobId.Value}");
+            else
+            {
+                _message = result.Status switch
+                {
+                    JobSubmissionStatus.AlreadyActive => "This crawler already has an active or pending job.",
+                    JobSubmissionStatus.Disabled => "This crawler is disabled.",
+                    JobSubmissionStatus.InvalidConfiguration => "Crawler has no file path configuration.",
+                    JobSubmissionStatus.NotFound => "Crawler not found.",
+                    _ => "Could not start crawler."
+                };
+                _messageIsError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start crawler {Id}", id);
+            _message = "Could not start crawler. Check server logs.";
+            _messageIsError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private void RequestDelete(Guid id) { _confirmDeleteId = id; _message = null; }
+    private void CancelDelete() => _confirmDeleteId = null;
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (!_confirmDeleteId.HasValue) return;
+        Guid id = _confirmDeleteId.Value;
+        _confirmDeleteId = null;
+        _busy = true;
+        try
+        {
+            if (_activeJobs.TryGetValue(id, out CrawlerJob? job) && job.Status == JobStatus.Running)
+            {
+                _message = "This crawler is currently running. Wait for it to finish before deleting.";
+                _messageIsError = true;
+                return;
+            }
+            await Management.DeleteAsync(id);
+            _crawlers = await Management.GetAllAsync();
+            await LoadActiveJobsAsync();
+            _message = "Crawler deleted.";
+            _messageIsError = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete crawler {Id}", id);
+            _message = "Could not delete crawler.";
+            _messageIsError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private static string FormatLastRun(CrawlerJob? job)
+    {
+        if (job == null) return "—";
+        if (job.Status == JobStatus.Running) return "Running";
+        if (job.Status == JobStatus.Pending) return "Queued";
+        return (job.StartedAt ?? job.CreatedAt).ToLocalTime().ToString("g");
+    }
+
+    private static string FormatResult(CrawlerJob? job)
+    {
+        if (job == null) return "—";
+        return job.Status switch
+        {
+            JobStatus.Pending => "Pending",
+            JobStatus.Running => "—",
+            JobStatus.Completed => job.Progress.FailedFiles > 0 ? "Completed with errors" : "Completed",
+            JobStatus.Failed => "Failed",
+            JobStatus.Canceled => "Canceled",
+            _ => "—"
+        };
+    }
+}

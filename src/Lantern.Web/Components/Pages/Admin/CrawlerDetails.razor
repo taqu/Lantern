@@ -1,0 +1,376 @@
+@page "/admin/crawlers/{Id:guid}"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Lantern.Core.Crawling
+@using Lantern.Core.Jobs
+@using Lantern.Crawling
+@using Lantern.Crawling.Jobs
+@inject CrawlerManagementService Management
+@inject CrawlerJobService Jobs
+@inject PathTestService PathTest
+@inject NavigationManager Nav
+@inject ILogger<CrawlerDetails> Logger
+
+<PageTitle>@(_item?.Definition.Name ?? "Crawler") · Lantern Administration</PageTitle>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_notFound)
+{
+    <p class="alert alert-warning">Crawler not found.</p>
+    <a href="/admin/crawlers">Back to crawlers</a>
+}
+else if (_item != null)
+{
+    var def = _item.Definition;
+    var profile = _item.Profile;
+    var webProfile = _item.WebProfile;
+    bool isWeb = def.CrawlerType == "web";
+    bool hasConfig = isWeb ? webProfile != null : profile != null;
+    string editHref = isWeb ? $"/admin/crawlers/web/{Id}/edit" : $"/admin/crawlers/{Id}/edit";
+
+    @if (Created)
+    {
+        <div class="alert alert-success" role="status">Crawler created.</div>
+    }
+    @if (Saved)
+    {
+        <div class="alert alert-success" role="status">Changes saved.</div>
+    }
+
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h1 class="mb-0">@def.Name</h1>
+            <span class="badge @(def.Enabled ? "bg-success" : "bg-secondary") mt-1">@(def.Enabled ? "Enabled" : "Disabled")</span>
+            <span class="badge bg-light text-dark border ms-1">@(isWeb ? "Web" : "File")</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="@editHref">Edit</a>
+            <a class="btn btn-outline-secondary" href="/admin/crawlers/@Id/schedule">Schedule</a>
+            <button class="btn btn-outline-danger" @onclick="RequestDelete" disabled="@_busy">Delete</button>
+        </div>
+    </div>
+
+    @if (isWeb && webProfile != null)
+    {
+        <dl class="row">
+            <dt class="col-sm-3">Start URLs</dt>
+            <dd class="col-sm-9">
+                @foreach (var url in webProfile.StartUrls)
+                {
+                    <div><code>@url</code></div>
+                }
+            </dd>
+            <dt class="col-sm-3">Allowed Hosts</dt>
+            <dd class="col-sm-9"><code>@string.Join(", ", webProfile.AllowedHosts)</code></dd>
+            @if (webProfile.AllowedPathPrefixes.Count > 0)
+            {
+                <dt class="col-sm-3">Path Prefixes</dt>
+                <dd class="col-sm-9"><code>@string.Join(", ", webProfile.AllowedPathPrefixes)</code></dd>
+            }
+            <dt class="col-sm-3">Max Depth</dt>
+            <dd class="col-sm-9">@webProfile.MaximumDepth</dd>
+            <dt class="col-sm-3">Max Pages</dt>
+            <dd class="col-sm-9">@webProfile.MaximumPages</dd>
+            <dt class="col-sm-3">Request Delay</dt>
+            <dd class="col-sm-9">@webProfile.RequestDelayMilliseconds ms</dd>
+            <dt class="col-sm-3">Max Concurrent</dt>
+            <dd class="col-sm-9">@webProfile.MaximumConcurrentRequests</dd>
+            <dt class="col-sm-3">Respect robots.txt</dt>
+            <dd class="col-sm-9">@(webProfile.RespectRobotsTxt ? "Yes" : "No")</dd>
+            <dt class="col-sm-3">Follow Redirects</dt>
+            <dd class="col-sm-9">@(webProfile.FollowRedirects ? "Yes" : "No")</dd>
+            <dt class="col-sm-3">Index Linked Docs</dt>
+            <dd class="col-sm-9">@(webProfile.IndexLinkedDocuments ? "Yes" : "No")</dd>
+            <dt class="col-sm-3">Created</dt>
+            <dd class="col-sm-9">@def.CreatedAt.ToLocalTime().ToString("g")</dd>
+            <dt class="col-sm-3">Updated</dt>
+            <dd class="col-sm-9">@def.UpdatedAt.ToLocalTime().ToString("g")</dd>
+        </dl>
+    }
+    else if (!isWeb)
+    {
+        <dl class="row">
+            <dt class="col-sm-3">Root Directory</dt>
+            <dd class="col-sm-9"><code>@(profile?.RootPath ?? "—")</code></dd>
+            <dt class="col-sm-3">Recursive</dt>
+            <dd class="col-sm-9">@(profile?.Recursive == true ? "Yes" : "No")</dd>
+            <dt class="col-sm-3">File Types</dt>
+            <dd class="col-sm-9">@(profile?.UseAllSupportedFormats == true ? "All supported types" : "Selected extensions")</dd>
+            @if (profile?.UseAllSupportedFormats == false && profile.IncludedExtensions.Count > 0)
+            {
+                <dt class="col-sm-3">Included Extensions</dt>
+                <dd class="col-sm-9"><code>@string.Join(", ", profile.IncludedExtensions)</code></dd>
+            }
+            @if (profile?.ExcludedDirectories.Count > 0)
+            {
+                <dt class="col-sm-3">Excluded Directories</dt>
+                <dd class="col-sm-9"><code>@string.Join(", ", profile.ExcludedDirectories)</code></dd>
+            }
+            <dt class="col-sm-3">Max File Size</dt>
+            <dd class="col-sm-9">@(profile?.MaxFileSizeMB ?? 100) MB</dd>
+            <dt class="col-sm-3">Max Concurrent</dt>
+            <dd class="col-sm-9">@(profile?.MaxConcurrentFiles ?? 2)</dd>
+            <dt class="col-sm-3">Created</dt>
+            <dd class="col-sm-9">@def.CreatedAt.ToLocalTime().ToString("g")</dd>
+            <dt class="col-sm-3">Updated</dt>
+            <dd class="col-sm-9">@def.UpdatedAt.ToLocalTime().ToString("g")</dd>
+        </dl>
+
+        <h2 class="h5 mt-4">Path Access</h2>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary" @onclick="TestPathAsync" disabled="@(_testingPath || profile == null)">
+                @(_testingPath ? "Testing…" : "Test Path")
+            </button>
+            @if (_pathTestResult != null)
+            {
+                <span class="small @(_pathTestResult.Success ? "text-success" : "text-danger")">
+                    @(_pathTestResult.Success ? "✓" : "✗") @_pathTestResult.Message
+                </span>
+            }
+        </div>
+        <p class="form-text mt-1">Verifies the server process can access the directory without modifying files or the search index.
+            Browser credentials do not grant server access to UNC shares — the Lantern process identity is used.</p>
+    }
+
+    <h2 class="h5 mt-4">Execution</h2>
+
+    @if (_activeJob != null)
+    {
+        @if (_activeJob.Status == JobStatus.Running)
+        {
+            <div class="alert alert-info" role="status">
+                <strong>Running</strong> — started @((_activeJob.StartedAt ?? _activeJob.CreatedAt).ToLocalTime().ToString("T"))
+                <div class="mt-1">
+                    <a href="/admin/jobs/@_activeJob.Id" class="alert-link small">View job details</a>
+                    <span class="text-muted small ms-2">· Refreshes automatically every 3 seconds.</span>
+                </div>
+            </div>
+        }
+        else if (_activeJob.Status == JobStatus.Pending)
+        {
+            <div class="alert alert-secondary" role="status">
+                <strong>Queued</strong> — waiting to start
+                <div class="mt-1">
+                    <a href="/admin/jobs/@_activeJob.Id" class="alert-link small">View job details</a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <dl class="row">
+                <dt class="col-sm-3">Last Run</dt>
+                <dd class="col-sm-9">
+                    <a href="/admin/jobs/@_activeJob.Id">@FormatStatus(_activeJob.Status)</a>
+                    <span class="text-muted small ms-2">@((_activeJob.StartedAt ?? _activeJob.CreatedAt).ToLocalTime().ToString("g"))</span>
+                </dd>
+                <dt class="col-sm-3">Discovered</dt>
+                <dd class="col-sm-9">@_activeJob.Progress.DiscoveredFiles</dd>
+                <dt class="col-sm-3">Indexed / Updated</dt>
+                <dd class="col-sm-9">@_activeJob.Progress.ProcessedFiles (@_activeJob.Progress.IndexedFiles new)</dd>
+                <dt class="col-sm-3">Unchanged</dt>
+                <dd class="col-sm-9">@_activeJob.Progress.UnchangedFiles</dd>
+                <dt class="col-sm-3">Skipped</dt>
+                <dd class="col-sm-9">@_activeJob.Progress.SkippedFiles</dd>
+                <dt class="col-sm-3">Failed</dt>
+                <dd class="col-sm-9">@_activeJob.Progress.FailedFiles</dd>
+                <dt class="col-sm-3">Deleted</dt>
+                <dd class="col-sm-9">@_activeJob.Progress.DeletedFiles</dd>
+                @if (!string.IsNullOrEmpty(_activeJob.ErrorMessage))
+                {
+                    <dt class="col-sm-3">Error</dt>
+                    <dd class="col-sm-9 text-danger small">@_activeJob.ErrorMessage</dd>
+                }
+            </dl>
+        }
+    }
+    else
+    {
+        <p class="text-muted">No execution history found.</p>
+    }
+
+    @if (!def.Enabled)
+    {
+        <p class="text-muted small mt-2">This crawler is disabled. <a href="@editHref">Edit</a> to enable it.</p>
+    }
+    else if (!hasConfig)
+    {
+        <p class="text-warning small mt-2">No configuration found. <a href="@editHref">Configure</a> before running.</p>
+    }
+    else if (_activeJob?.Status != JobStatus.Running && _activeJob?.Status != JobStatus.Pending)
+    {
+        <button class="btn btn-primary mt-2" @onclick="RunAsync" disabled="@_busy">Run Now</button>
+    }
+
+    @if (_runMessage != null)
+    {
+        <div class="alert @(_runError ? "alert-danger" : "alert-success") mt-3" role="@(_runError ? "alert" : "status")">
+            @_runMessage
+        </div>
+    }
+
+    @if (_confirmDelete)
+    {
+        <div class="alert alert-warning mt-3" role="dialog" aria-label="Delete confirmation">
+            <p class="mb-1">Delete <strong>@def.Name</strong>?</p>
+            <p class="small mb-2">Previously indexed documents will remain searchable. Crawl state records will be removed from the database.</p>
+            <button class="btn btn-danger btn-sm me-2" @onclick="ConfirmDeleteAsync" disabled="@_busy">Delete</button>
+            <button class="btn btn-secondary btn-sm" @onclick="() => _confirmDelete = false">Cancel</button>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery] public bool Created { get; set; }
+    [SupplyParameterFromQuery] public bool Saved { get; set; }
+
+    private CrawlerWithProfile? _item;
+    private CrawlerJob? _activeJob;
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _busy;
+    private bool _testingPath;
+    private PathTestResult? _pathTestResult;
+    private bool _confirmDelete;
+    private string? _runMessage;
+    private bool _runError;
+    private PeriodicTimer? _pollTimer;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _item = await Management.GetAsync(Id);
+            if (_item == null) { _notFound = true; return; }
+            _activeJob = await Jobs.GetActiveJobForCrawlerAsync(Id);
+        }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        {
+            Logger.LogError(ex, "Failed to load crawler {Id}", Id);
+            _notFound = true;
+        }
+        finally { _loading = false; }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && (_activeJob?.Status == JobStatus.Running || _activeJob?.Status == JobStatus.Pending))
+            StartPolling();
+    }
+
+    private void StartPolling()
+    {
+        if (_pollTimer != null) return;
+        _pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        try
+        {
+            while (_pollTimer != null && await _pollTimer.WaitForNextTickAsync(_cts.Token))
+            {
+                _activeJob = await Jobs.GetActiveJobForCrawlerAsync(Id);
+                await InvokeAsync(StateHasChanged);
+                if (_activeJob?.Status != JobStatus.Running && _activeJob?.Status != JobStatus.Pending)
+                    StopPolling();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void StopPolling()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+    }
+
+    private async Task TestPathAsync()
+    {
+        if (_item?.Profile == null) return;
+        _testingPath = true;
+        _pathTestResult = null;
+        try { _pathTestResult = await PathTest.TestAsync(_item.Profile.RootPath); }
+        catch { _pathTestResult = new PathTestResult(false, "Path test failed unexpectedly."); }
+        finally { _testingPath = false; }
+    }
+
+    private async Task RunAsync()
+    {
+        _busy = true;
+        _runMessage = null;
+        try
+        {
+            JobSubmissionResult result = await Management.TryStartAsync(Id);
+            if (result.Status == JobSubmissionStatus.Submitted && result.JobId.HasValue)
+                Nav.NavigateTo($"/admin/jobs/{result.JobId.Value}");
+            else
+            {
+                _runMessage = result.Status switch
+                {
+                    JobSubmissionStatus.AlreadyActive => "This crawler already has an active or pending job.",
+                    JobSubmissionStatus.Disabled => "This crawler is disabled.",
+                    JobSubmissionStatus.InvalidConfiguration => "Crawler has no file path configuration.",
+                    JobSubmissionStatus.NotFound => "Crawler not found.",
+                    _ => "Could not start crawler."
+                };
+                _runError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start crawler {Id}", Id);
+            _runMessage = "Could not start crawler. Check server logs.";
+            _runError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private void RequestDelete() { _confirmDelete = true; _runMessage = null; }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        _confirmDelete = false;
+        if (_activeJob?.Status == JobStatus.Running)
+        {
+            _runMessage = "This crawler is currently running. Wait for it to finish before deleting.";
+            _runError = true;
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Management.DeleteAsync(Id);
+            Nav.NavigateTo("/admin/crawlers");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete crawler {Id}", Id);
+            _runMessage = "Could not delete crawler.";
+            _runError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private static string FormatStatus(JobStatus status) => status switch
+    {
+        JobStatus.Completed => "Completed",
+        JobStatus.Failed => "Failed",
+        JobStatus.Canceled => "Canceled",
+        JobStatus.Running => "Running",
+        JobStatus.Pending => "Pending",
+        _ => "Unknown"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        StopPolling();
+        _cts.Dispose();
+    }
+}

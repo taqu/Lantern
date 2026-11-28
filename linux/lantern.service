@@ -1,0 +1,52 @@
+[Unit]
+Description=Lantern Search Service
+Documentation=https://github.com/owner/lantern
+After=network.target
+
+[Service]
+Type=exec
+User=lantern
+Group=lantern
+
+# Application binary — adjust if installed to a different location.
+ExecStart=/opt/lantern/app/Lantern.Web
+WorkingDirectory=/opt/lantern/app
+
+# Restart on unexpected failures, up to 5 times before giving up.
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=120
+StartLimitBurst=5
+
+# Production environment — do NOT set ASPNETCORE_ENVIRONMENT to Development.
+Environment=ASPNETCORE_ENVIRONMENT=Production
+
+# Do not place secrets in this file.
+# Meilisearch master key and API key are read from /etc/lantern/secrets/
+# by MeilisearchProcessManager at startup.
+
+# Standard output and error are captured by journald.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lantern
+
+# Allow Lantern to bind to unprivileged ports (>= 1024) without root.
+# Remove if binding to port 80/443 via reverse proxy is not needed.
+AmbientCapabilities=
+
+# Security hardening — verify compatibility with your crawler configuration
+# before enabling additional restrictions.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/lantern /etc/lantern /var/log/lantern
+PrivateTmp=true
+ProtectHome=true
+
+# Allow file crawling of user-specified directories by adding them to
+# ReadWritePaths or by overriding this unit with a drop-in file.
+# Example drop-in at /etc/systemd/system/lantern.service.d/crawler.conf:
+#   [Service]
+#   ReadWritePaths=/mnt/documents
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,100 @@
+@page "/admin/categories"
+@rendermode InteractiveServer
+@using Lantern.Core.Administration
+
+<PageTitle>Search Categories · Lantern Administration</PageTitle>
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h1>Search Categories</h1>
+    <a class="btn btn-primary btn-sm" href="/admin/categories/create">New Category</a>
+</div>
+
+@if (_categories == null)
+{
+    <p>Loading&hellip;</p>
+}
+else if (_categories.Count == 0)
+{
+    <p class="text-muted">No categories defined. Create one to enable category-based search filtering.</p>
+}
+else
+{
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Key</th>
+                <th>Description</th>
+                <th>Sort</th>
+                <th>Crawlers</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var cat in _categories)
+            {
+                <tr>
+                    <td>@cat.Name</td>
+                    <td><code>@cat.Key</code></td>
+                    <td class="text-muted small">@cat.Description</td>
+                    <td>@cat.SortOrder</td>
+                    <td>@(_crawlerCounts.GetValueOrDefault(cat.Id, 0))</td>
+                    <td>
+                        @if (cat.Enabled)
+                        {
+                            <span class="badge bg-success">Enabled</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Disabled</span>
+                        }
+                    </td>
+                    <td>
+                        <a href="/admin/categories/@cat.Id/edit" class="btn btn-sm btn-outline-secondary me-1">Edit</a>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(cat.Id, cat.Name)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (_deleteError != null)
+{
+    <div class="alert alert-danger" role="alert">@_deleteError</div>
+}
+
+@code {
+    [Inject] private CategoryManagementService Categories { get; set; } = null!;
+
+    private IReadOnlyList<SearchCategory>? _categories;
+    private Dictionary<int, int> _crawlerCounts = new();
+    private string? _deleteError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _categories = await Categories.GetAllAsync();
+        _crawlerCounts = new Dictionary<int, int>();
+        foreach (var cat in _categories)
+            _crawlerCounts[cat.Id] = await Categories.CountCrawlersAsync(cat.Id);
+    }
+
+    private async Task DeleteAsync(int id, string name)
+    {
+        _deleteError = null;
+        try
+        {
+            await Categories.DeleteAsync(id);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _deleteError = $"Could not delete category '{name}': {ex.Message}";
+        }
+    }
+}

@@ -1,0 +1,276 @@
+@page "/admin/jobs/{Id:guid}"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Lantern.Core.Jobs
+@using Lantern.Crawling.Jobs
+@inject CrawlerJobService Jobs
+@inject NavigationManager Nav
+@inject ILogger<JobDetails> Logger
+
+<PageTitle>Job · Lantern Administration</PageTitle>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_job == null)
+{
+    <p class="alert alert-warning">Job not found.</p>
+    <a href="/admin/jobs">Back to jobs</a>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h1 class="mb-0 h3">@_job.CrawlerName</h1>
+            <div class="mt-1">
+                <span class="badge @StatusBadgeClass(_job.Status)">@_job.Status</span>
+                <span class="text-muted small ms-2">@_job.Trigger trigger · attempt #@_job.AttemptNumber</span>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/crawlers/@_job.CrawlerId">Crawler</a>
+            @if (_job.Status == JobStatus.Running || _job.Status == JobStatus.Pending)
+            {
+                <button class="btn btn-sm btn-outline-warning" @onclick="CancelAsync" disabled="@_busy">Cancel</button>
+            }
+            @if (_job.Status == JobStatus.Failed || _job.Status == JobStatus.Canceled)
+            {
+                <button class="btn btn-sm btn-outline-primary" @onclick="RetryAsync" disabled="@_busy">Retry</button>
+            }
+        </div>
+    </div>
+
+    @if (_message != null)
+    {
+        <div class="alert @(_messageIsError ? "alert-danger" : "alert-info") mb-3" role="@(_messageIsError ? "alert" : "status")">@_message</div>
+    }
+
+    <div class="row">
+        <div class="col-md-6">
+            <h2 class="h5">Details</h2>
+            <dl class="row">
+                <dt class="col-sm-5">Crawler</dt>
+                <dd class="col-sm-7"><a href="/admin/crawlers/@_job.CrawlerId">@_job.CrawlerName</a></dd>
+                <dt class="col-sm-5">Created</dt>
+                <dd class="col-sm-7">@_job.CreatedAt.ToLocalTime().ToString("g")</dd>
+                @if (_job.ScheduledAt.HasValue)
+                {
+                    <dt class="col-sm-5">Scheduled For</dt>
+                    <dd class="col-sm-7">@_job.ScheduledAt.Value.ToLocalTime().ToString("g")</dd>
+                }
+                @if (_job.StartedAt.HasValue)
+                {
+                    <dt class="col-sm-5">Started</dt>
+                    <dd class="col-sm-7">@_job.StartedAt.Value.ToLocalTime().ToString("g")</dd>
+                }
+                @if (_job.FinishedAt.HasValue)
+                {
+                    <dt class="col-sm-5">Finished</dt>
+                    <dd class="col-sm-7">@_job.FinishedAt.Value.ToLocalTime().ToString("g")</dd>
+                }
+                @if (_job.Duration.HasValue)
+                {
+                    <dt class="col-sm-5">Duration</dt>
+                    <dd class="col-sm-7">@FormatDuration(_job.Duration.Value)</dd>
+                }
+                @if (_job.RetryOfJobId.HasValue)
+                {
+                    <dt class="col-sm-5">Retry Of</dt>
+                    <dd class="col-sm-7"><a href="/admin/jobs/@_job.RetryOfJobId.Value">View original</a></dd>
+                }
+                @if (!string.IsNullOrEmpty(_job.ErrorMessage))
+                {
+                    <dt class="col-sm-5">Error</dt>
+                    <dd class="col-sm-7 text-danger small">@_job.ErrorMessage</dd>
+                }
+            </dl>
+        </div>
+
+        <div class="col-md-6">
+            <h2 class="h5">Progress</h2>
+            <dl class="row">
+                <dt class="col-sm-6">Discovered</dt>
+                <dd class="col-sm-6">@_job.Progress.DiscoveredFiles</dd>
+                <dt class="col-sm-6">Processed</dt>
+                <dd class="col-sm-6">@_job.Progress.ProcessedFiles</dd>
+                <dt class="col-sm-6">Indexed / Updated</dt>
+                <dd class="col-sm-6">@_job.Progress.IndexedFiles</dd>
+                <dt class="col-sm-6">Unchanged</dt>
+                <dd class="col-sm-6">@_job.Progress.UnchangedFiles</dd>
+                <dt class="col-sm-6">Skipped</dt>
+                <dd class="col-sm-6">@_job.Progress.SkippedFiles</dd>
+                <dt class="col-sm-6">Failed</dt>
+                <dd class="col-sm-6">@_job.Progress.FailedFiles</dd>
+                <dt class="col-sm-6">Deleted</dt>
+                <dd class="col-sm-6">@_job.Progress.DeletedFiles</dd>
+            </dl>
+            @if (_job.Status == JobStatus.Running)
+            {
+                <p class="text-muted small">Refreshes automatically every 3 seconds.</p>
+            }
+        </div>
+    </div>
+
+    @if (_events.Count > 0)
+    {
+        <h2 class="h5 mt-3">Event Log</h2>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Event</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var evt in _events)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@evt.OccurredAt.ToLocalTime().ToString("T")</td>
+                            <td>@evt.EventType</td>
+                            <td class="small text-muted">@evt.Details</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private CrawlerJob? _job;
+    private IReadOnlyList<CrawlerJobEvent> _events = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string? _message;
+    private bool _messageIsError;
+    private PeriodicTimer? _pollTimer;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _job = await Jobs.GetJobAsync(Id);
+            _events = await Jobs.GetJobEventsAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load job {Id}", Id);
+        }
+        finally { _loading = false; }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && (_job?.Status == JobStatus.Running || _job?.Status == JobStatus.Pending))
+            StartPolling();
+    }
+
+    private void StartPolling()
+    {
+        if (_pollTimer != null) return;
+        _pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        try
+        {
+            while (_pollTimer != null && await _pollTimer.WaitForNextTickAsync(_cts.Token))
+            {
+                _job = await Jobs.GetJobAsync(Id);
+                _events = await Jobs.GetJobEventsAsync(Id);
+                await InvokeAsync(StateHasChanged);
+                if (_job?.Status != JobStatus.Running && _job?.Status != JobStatus.Pending)
+                    StopPolling();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void StopPolling()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+    }
+
+    private async Task CancelAsync()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            bool ok = await Jobs.RequestCancellationAsync(Id);
+            _message = ok ? "Cancellation requested." : "Could not request cancellation.";
+            _messageIsError = !ok;
+            if (ok) { _job = await Jobs.GetJobAsync(Id); _events = await Jobs.GetJobEventsAsync(Id); }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to cancel job {Id}", Id);
+            _message = "Could not cancel job.";
+            _messageIsError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RetryAsync()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            JobSubmissionResult result = await Jobs.RetryJobAsync(Id, _job!.CrawlerName, null);
+            if (result.Status == JobSubmissionStatus.Submitted && result.JobId.HasValue)
+                Nav.NavigateTo($"/admin/jobs/{result.JobId.Value}");
+            else
+            {
+                _message = result.Status switch
+                {
+                    JobSubmissionStatus.AlreadyActive => "This crawler already has an active job.",
+                    JobSubmissionStatus.NotRetryable => "This job cannot be retried.",
+                    JobSubmissionStatus.NotFound => "Job not found.",
+                    _ => "Could not retry job."
+                };
+                _messageIsError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to retry job {Id}", Id);
+            _message = "Could not retry job.";
+            _messageIsError = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private static string StatusBadgeClass(JobStatus s) => s switch
+    {
+        JobStatus.Running => "bg-primary",
+        JobStatus.Pending => "bg-secondary",
+        JobStatus.Completed => "bg-success",
+        JobStatus.Failed => "bg-danger",
+        JobStatus.Canceled => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private static string FormatDuration(TimeSpan d) =>
+        d.TotalHours >= 1
+            ? $"{(int)d.TotalHours}h {d.Minutes}m {d.Seconds}s"
+            : d.TotalMinutes >= 1
+                ? $"{(int)d.TotalMinutes}m {d.Seconds}s"
+                : $"{d.TotalSeconds:F1}s";
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        StopPolling();
+        _cts.Dispose();
+    }
+}

@@ -1,0 +1,255 @@
+@page "/admin/crawlers/web/{Id:guid}/edit"
+@rendermode InteractiveServer
+@using Lantern.Core.Administration
+@inject CrawlerManagementService Management
+@inject CategoryManagementService CatService
+@inject NavigationManager Nav
+@inject ILogger<WebCrawlerEdit> Logger
+
+<PageTitle>Edit Web Crawler · Lantern Administration</PageTitle>
+<h1>Edit Web Crawler</h1>
+
+@if (_loading)
+{
+    <p>Loading…</p>
+}
+else if (_notFound)
+{
+    <p class="alert alert-warning">Crawler not found.</p>
+    <a href="/admin/crawlers">Back to crawlers</a>
+}
+else if (_saveError != null)
+{
+    <div class="alert alert-danger" role="alert">@_saveError</div>
+}
+
+@if (_model != null)
+{
+    <EditForm Model="_model" OnValidSubmit="SaveAsync" class="mt-3" style="max-width:42rem">
+        <DataAnnotationsValidator />
+
+        <div class="mb-3">
+            <label class="form-label" for="name">Name <span class="text-danger" aria-hidden="true">*</span></label>
+            <InputText id="name" class="form-control" @bind-Value="_model.Name" aria-required="true" maxlength="80" />
+            <ValidationMessage For="() => _model.Name" class="text-danger small" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="startUrls">Start URLs <span class="text-danger" aria-hidden="true">*</span></label>
+            <InputTextArea id="startUrls" class="form-control font-monospace" @bind-Value="_model.StartUrlsRaw"
+                rows="3" aria-required="true" />
+            <div class="form-text">One URL per line. Must be absolute http/https URLs.</div>
+            <ValidationMessage For="() => _model.StartUrlsRaw" class="text-danger small" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="allowedHosts">Allowed Hosts <span class="text-danger" aria-hidden="true">*</span></label>
+            <InputTextArea id="allowedHosts" class="form-control font-monospace" @bind-Value="_model.AllowedHostsRaw"
+                rows="2" aria-required="true" />
+            <div class="form-text">One host per line.</div>
+            <ValidationMessage For="() => _model.AllowedHostsRaw" class="text-danger small" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="allowedPaths">Allowed Path Prefixes</label>
+            <InputTextArea id="allowedPaths" class="form-control font-monospace" @bind-Value="_model.AllowedPathPrefixesRaw"
+                rows="2" />
+            <div class="form-text">One path prefix per line. Defaults to "/" (all paths).</div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-sm-6">
+                <label class="form-label" for="maxDepth">Maximum Depth</label>
+                <InputNumber id="maxDepth" class="form-control" @bind-Value="_model.MaximumDepth" min="1" max="100" />
+                <ValidationMessage For="() => _model.MaximumDepth" class="text-danger small" />
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label" for="maxPages">Maximum Pages</label>
+                <InputNumber id="maxPages" class="form-control" @bind-Value="_model.MaximumPages" min="1" max="100000" />
+                <ValidationMessage For="() => _model.MaximumPages" class="text-danger small" />
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-sm-6">
+                <label class="form-label" for="requestDelay">Request Delay (ms)</label>
+                <InputNumber id="requestDelay" class="form-control" @bind-Value="_model.RequestDelayMilliseconds" min="0" max="30000" />
+                <ValidationMessage For="() => _model.RequestDelayMilliseconds" class="text-danger small" />
+            </div>
+            <div class="col-sm-6">
+                <label class="form-label" for="maxConcurrent">Max Concurrent Requests</label>
+                <InputNumber id="maxConcurrent" class="form-control" @bind-Value="_model.MaximumConcurrentRequests" min="1" max="10" />
+                <ValidationMessage For="() => _model.MaximumConcurrentRequests" class="text-danger small" />
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="form-check">
+                <InputCheckbox id="respectRobots" class="form-check-input" @bind-Value="_model.RespectRobotsTxt" />
+                <label class="form-check-label" for="respectRobots">Respect robots.txt</label>
+            </div>
+            <div class="form-check">
+                <InputCheckbox id="followRedirects" class="form-check-input" @bind-Value="_model.FollowRedirects" />
+                <label class="form-check-label" for="followRedirects">Follow redirects</label>
+            </div>
+            <div class="form-check">
+                <InputCheckbox id="indexLinked" class="form-check-input" @bind-Value="_model.IndexLinkedDocuments" />
+                <label class="form-check-label" for="indexLinked">Index linked documents (PDF, Office, etc.)</label>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="form-check">
+                <InputCheckbox id="enabled" class="form-check-input" @bind-Value="_model.Enabled" />
+                <label class="form-check-label" for="enabled">Enabled</label>
+            </div>
+        </div>
+
+        @if (_allCategories.Count > 0)
+        {
+            <div class="mb-3">
+                <label class="form-label">Search Categories</label>
+                <div class="form-text mb-1">Assign this crawler to one or more search categories.</div>
+                @foreach (var cat in _allCategories)
+                {
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="cat-@cat.Id"
+                               checked="@_selectedCategoryIds.Contains(cat.Id)"
+                               @onchange="e => ToggleCategory(cat.Id, (bool)e.Value!)" />
+                        <label class="form-check-label" for="cat-@cat.Id">@cat.Name</label>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit" disabled="@_saving">@(_saving ? "Saving\u2026" : "Save")</button>
+            <a class="btn btn-outline-secondary" href="/admin/crawlers/@Id">Cancel</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private WebCrawlerFormModel? _model;
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _saving;
+    private string? _saveError;
+    private IReadOnlyList<SearchCategory> _allCategories = [];
+    private readonly HashSet<int> _selectedCategoryIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _allCategories = await CatService.GetAllAsync();
+            CrawlerWithProfile? item = await Management.GetAsync(Id);
+            if (item == null || item.WebProfile == null) { _notFound = true; return; }
+            _model = WebCrawlerFormModel.From(item.Definition.Name, item.Definition.Enabled, item.WebProfile);
+            IReadOnlyList<string> assignedKeys = await CatService.GetCategoryKeysForCrawlerAsync(Id);
+            foreach (var cat in _allCategories.Where(c => assignedKeys.Contains(c.Key)))
+                _selectedCategoryIds.Add(cat.Id);
+        }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        {
+            Logger.LogError(ex, "Failed to load web crawler {Id}", Id);
+            _notFound = true;
+        }
+        finally { _loading = false; }
+    }
+
+    private void ToggleCategory(int catId, bool selected)
+    {
+        if (selected) _selectedCategoryIds.Add(catId);
+        else _selectedCategoryIds.Remove(catId);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model == null) return;
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            WebCrawlerProfile profile = _model.ToProfile(Id);
+            await Management.UpdateWebAsync(Id, _model.Name, _model.Enabled, profile);
+            await CatService.SetCrawlerCategoriesAsync(Id, _selectedCategoryIds.ToList());
+            Nav.NavigateTo($"/admin/crawlers/{Id}?saved=true");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update web crawler {Id}", Id);
+            _saveError = "Could not save changes. Check that the configuration is valid and the database is accessible.";
+        }
+        finally { _saving = false; }
+    }
+
+    private sealed class WebCrawlerFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Name is required.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(80, ErrorMessage = "Name must not exceed 80 characters.")]
+        public string Name { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "At least one start URL is required.")]
+        public string StartUrlsRaw { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "At least one allowed host is required.")]
+        public string AllowedHostsRaw { get; set; } = "";
+
+        public string AllowedPathPrefixesRaw { get; set; } = "/";
+
+        [System.ComponentModel.DataAnnotations.Range(1, 100, ErrorMessage = "Maximum Depth must be between 1 and 100.")]
+        public int MaximumDepth { get; set; } = 5;
+
+        [System.ComponentModel.DataAnnotations.Range(1, 100000, ErrorMessage = "Maximum Pages must be between 1 and 100000.")]
+        public int MaximumPages { get; set; } = 10000;
+
+        [System.ComponentModel.DataAnnotations.Range(0, 30000, ErrorMessage = "Request Delay must be between 0 and 30000 ms.")]
+        public int RequestDelayMilliseconds { get; set; } = 500;
+
+        [System.ComponentModel.DataAnnotations.Range(1, 10, ErrorMessage = "Max Concurrent Requests must be between 1 and 10.")]
+        public int MaximumConcurrentRequests { get; set; } = 2;
+
+        public bool RespectRobotsTxt { get; set; } = true;
+        public bool FollowRedirects { get; set; } = true;
+        public bool IndexLinkedDocuments { get; set; } = true;
+        public bool Enabled { get; set; } = true;
+
+        public static WebCrawlerFormModel From(string name, bool enabled, WebCrawlerProfile profile) => new()
+        {
+            Name = name,
+            Enabled = enabled,
+            StartUrlsRaw = string.Join('\n', profile.StartUrls),
+            AllowedHostsRaw = string.Join('\n', profile.AllowedHosts),
+            AllowedPathPrefixesRaw = profile.AllowedPathPrefixes.Count > 0 ? string.Join('\n', profile.AllowedPathPrefixes) : "/",
+            MaximumDepth = profile.MaximumDepth,
+            MaximumPages = profile.MaximumPages,
+            RequestDelayMilliseconds = profile.RequestDelayMilliseconds,
+            MaximumConcurrentRequests = profile.MaximumConcurrentRequests,
+            RespectRobotsTxt = profile.RespectRobotsTxt,
+            FollowRedirects = profile.FollowRedirects,
+            IndexLinkedDocuments = profile.IndexLinkedDocuments
+        };
+
+        public WebCrawlerProfile ToProfile(Guid crawlerId) => new()
+        {
+            CrawlerId = crawlerId,
+            StartUrls = SplitLines(StartUrlsRaw),
+            AllowedHosts = SplitLines(AllowedHostsRaw),
+            AllowedPathPrefixes = SplitLines(AllowedPathPrefixesRaw) is { Count: > 0 } p ? p : ["/"],
+            MaximumDepth = MaximumDepth,
+            MaximumPages = MaximumPages,
+            RequestDelayMilliseconds = RequestDelayMilliseconds,
+            MaximumConcurrentRequests = MaximumConcurrentRequests,
+            RespectRobotsTxt = RespectRobotsTxt,
+            FollowRedirects = FollowRedirects,
+            IndexLinkedDocuments = IndexLinkedDocuments
+        };
+
+        private static List<string> SplitLines(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? [] :
+            [.. value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+    }
+}

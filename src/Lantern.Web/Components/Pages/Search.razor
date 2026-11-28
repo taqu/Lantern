@@ -1,0 +1,352 @@
+@page "/search"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using Lantern.Core.Search
+@using Lantern.Core.Administration
+@using Lantern.Infrastructure.Search
+@using Microsoft.Extensions.Options
+@inject ISearchService SearchService
+@inject ISearchCategoryRepository CategoryRepo
+@inject NavigationManager Nav
+@inject IOptions<HybridSearchOptions> HybridOptions
+@inject IServiceProvider Services
+@inject IJSRuntime JS
+
+<PageTitle>Search — Lantern</PageTitle>
+
+<div class="search-page">
+    <header class="search-header">
+        <h1 class="search-brand">Lantern</h1>
+    </header>
+
+    <section class="search-form-section">
+        <form @onsubmit="HandleSubmit" @onsubmit:preventDefault>
+            <div class="search-input-row">
+                <label for="search-input" class="visually-hidden">Search documents</label>
+                <input id="search-input"
+                       type="search"
+                       class="search-input"
+                       placeholder="Search documents..."
+                       @bind="_query"
+                       @bind:event="oninput"
+                       maxlength="500"
+                       autocomplete="off"
+                       aria-label="Search documents" />
+                <button type="submit" class="search-button" disabled="@_isLoading">
+                    @(_isLoading ? "Searching\u2026" : "Search")
+                </button>
+            </div>
+            @if (HybridAvailable)
+            {
+                <div class="search-mode-row">
+                    <span class="search-mode-label">Search mode:</span>
+                    <label class="search-mode-option">
+                        <input type="radio" name="search-mode" value="Keyword"
+                               checked="@(_searchMode == SearchMode.Keyword)"
+                               @onchange="@(() => _searchMode = SearchMode.Keyword)" />
+                        Keyword
+                    </label>
+                    <label class="search-mode-option">
+                        <input type="radio" name="search-mode" value="Hybrid"
+                               checked="@(_searchMode == SearchMode.Hybrid)"
+                               @onchange="@(() => _searchMode = SearchMode.Hybrid)" />
+                        Hybrid
+                    </label>
+                </div>
+            }
+        </form>
+    </section>
+
+    @if (_categories.Count > 0 && !string.IsNullOrEmpty(_submittedQuery))
+    {
+        <nav class="search-category-tabs" aria-label="Search categories" role="tablist">
+            <a class="search-tab @(string.IsNullOrEmpty(_activeCategory) ? "active" : "")"
+               href="@BuildUrl(_submittedQuery, 1, null)"
+               role="tab" aria-selected="@(string.IsNullOrEmpty(_activeCategory) ? "true" : "false")">All</a>
+            @foreach (var cat in _categories)
+            {
+                <a class="search-tab @(_activeCategory == cat.Key ? "active" : "")"
+                   href="@BuildUrl(_submittedQuery, 1, cat.Key)"
+                   role="tab" aria-selected="@(_activeCategory == cat.Key ? "true" : "false")">@cat.Name</a>
+            }
+        </nav>
+    }
+
+    @if (_errorMessage != null)
+    {
+        <div class="search-error" role="alert">@_errorMessage</div>
+    }
+    else if (_response != null)
+    {
+        <section class="search-results" aria-label="Search results">
+            @if (_response.TotalHits == 0)
+            {
+                <p class="search-noresults">No documents matched your search.</p>
+            }
+            else
+            {
+                <p class="search-count">About @_response.TotalHits result@(_response.TotalHits == 1 ? "" : "s")</p>
+                <ol class="result-list">
+                    @foreach (var item in _response.Items)
+                    {
+                        <li class="result-item">
+                            <div class="result-title">
+                                @if (UrlValidator.IsSafeDisplayUrl(item.Url))
+                                {
+                                    <a href="@item.Url" target="_blank" rel="noopener noreferrer">@(item.Title.Length > 0 ? item.Title : "(Untitled)")</a>
+                                }
+                                else
+                                {
+                                    <span>@(item.Title.Length > 0 ? item.Title : "(Untitled)")</span>
+                                }
+                            </div>
+                            @if (UrlValidator.IsSafeDisplayUrl(item.Url))
+                            {
+                                <div class="result-url">@item.Url</div>
+                            }
+                            else if (!string.IsNullOrEmpty(item.Path))
+                            {
+                                <div class="result-path">@item.Path</div>
+                            }
+                            @if (!string.IsNullOrEmpty(item.Snippet))
+                            {
+                                <div class="result-snippet">@item.Snippet</div>
+                            }
+                            <div class="result-footer">
+                                @if (!string.IsNullOrEmpty(item.DocumentType))
+                                {
+                                    <span class="result-type">@item.DocumentType</span>
+                                }
+                                @if (!SourcePathHelper.IsWebResult(item) && SourcePathHelper.GetCopyPath(item) is { } filePath)
+                                {
+                                    <button class="copy-btn" type="button" aria-label="Copy file path"
+                                            @onclick="@(() => CopyToClipboard(filePath, "File path copied."))"
+                                            @onclick:stopPropagation="true">Copy Path</button>
+                                }
+                                @if (!SourcePathHelper.IsWebResult(item) && SourcePathHelper.GetCopyDirectory(item) is { } dirPath)
+                                {
+                                    <button class="copy-btn" type="button" aria-label="Copy directory path"
+                                            @onclick="@(() => CopyToClipboard(dirPath, "Directory path copied."))"
+                                            @onclick:stopPropagation="true">Copy Dir</button>
+                                }
+                                @if (SourcePathHelper.IsWebResult(item) && SourcePathHelper.GetCopyPath(item) is { } webUrl)
+                                {
+                                    <button class="copy-btn" type="button" aria-label="Copy URL"
+                                            @onclick="@(() => CopyToClipboard(webUrl, "URL copied."))"
+                                            @onclick:stopPropagation="true">Copy URL</button>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ol>
+
+                <nav class="pagination" aria-label="Pagination">
+                    @if (_response.Page > 1)
+                    {
+                        <a class="page-link" href="@BuildUrl(_submittedQuery, _response.Page - 1)">Previous</a>
+                    }
+                    else
+                    {
+                        <span class="page-link disabled" aria-disabled="true">Previous</span>
+                    }
+
+                    <span class="page-current">Page @_response.Page of @TotalPages</span>
+
+                    @if (_response.Page < TotalPages)
+                    {
+                        <a class="page-link" href="@BuildUrl(_submittedQuery, _response.Page + 1)">Next</a>
+                    }
+                    else
+                    {
+                        <span class="page-link disabled" aria-disabled="true">Next</span>
+                    }
+                </nav>
+            }
+        </section>
+    }
+    else if (!_isLoading)
+    {
+        <p class="search-hint">Enter a search query above to find documents.</p>
+    }
+
+    @if (_toastMessage != null)
+    {
+        <div class="copy-toast @(_toastIsError ? "error" : "")" role="status" aria-live="polite">
+            @_toastMessage
+        </div>
+    }
+</div>
+
+@code {
+    private bool HybridAvailable => HybridOptions.Value.Enabled && Services.GetService<HybridSearchReadiness>()?.IsReady != false;
+    [SupplyParameterFromQuery(Name = "q")] public string? QueryParam { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageParam { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? CategoryParam { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")] public string? ModeParam { get; set; }
+
+    private string _query = "";
+    private string _submittedQuery = "";
+    private SearchMode _submittedMode = SearchMode.Keyword;
+    private bool _isLoading;
+    private string? _errorMessage;
+    private SearchPageResponse? _response;
+    private CancellationTokenSource? _cts;
+    private SearchMode _searchMode = SearchMode.Keyword;
+    private IReadOnlyList<SearchCategory> _categories = Array.Empty<SearchCategory>();
+    private string? _activeCategory;
+
+    private IJSObjectReference? _clipboardModule;
+    private string? _toastMessage;
+    private bool _toastIsError;
+    private CancellationTokenSource? _toastCts;
+
+    private int CurrentPage => _response?.Page ?? 1;
+    private int TotalPages => _response is null || _response.PageSize == 0
+        ? 1
+        : (int)Math.Ceiling((double)_response.TotalHits / _response.PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _categories = await CategoryRepo.GetEnabledAsync();
+        }
+        catch
+        {
+            _categories = Array.Empty<SearchCategory>();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var q = QueryParam?.Trim() ?? "";
+        var page = PageParam is > 0 ? PageParam.Value : 1;
+        _activeCategory = CategoryParam;
+
+        _searchMode = ModeParam == "hybrid" && HybridAvailable
+            ? SearchMode.Hybrid
+            : SearchMode.Keyword;
+
+        if (q == _submittedQuery && page == CurrentPage && _response != null
+            && _activeCategory == CategoryParam && _searchMode == _submittedMode)
+            return;
+
+        _query = q;
+
+        if (!string.IsNullOrEmpty(q))
+            await ExecuteSearchAsync(q, page);
+    }
+
+    private async Task HandleSubmit()
+    {
+        var q = _query.Trim();
+        if (string.IsNullOrEmpty(q)) return;
+        Nav.NavigateTo(BuildUrl(q, 1));
+    }
+
+    private async Task ExecuteSearchAsync(string query, int page)
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _isLoading = true;
+        _errorMessage = null;
+        _submittedQuery = query;
+        _submittedMode = _searchMode;
+        _response = null;
+
+        try
+        {
+            if (_searchMode == SearchMode.Hybrid && HybridAvailable)
+            {
+                var filters = new SearchFilters(
+                    CategoryKey: string.IsNullOrEmpty(_activeCategory) ? null : _activeCategory);
+                _response = await SearchService.SearchChunksPageAsync(query, page, _searchMode, filters, ct);
+            }
+            else
+            {
+                _response = await SearchService.SearchPageAsync(query, page, ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Superseded by a newer search — ignore.
+        }
+        catch (SearchException ex)
+        {
+			_errorMessage = $"Search is temporarily unavailable. Please try again later.\n{ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Search is temporarily unavailable. Please try again later.\n{ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CopyToClipboard(string text, string successMessage)
+    {
+        try
+        {
+            _clipboardModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "/clipboard.js");
+            var result = await _clipboardModule.InvokeAsync<ClipboardResult>("copyText", text);
+            SetToast(result.Success ? successMessage : "Could not copy to clipboard.", !result.Success);
+        }
+        catch
+        {
+            SetToast("Could not copy to clipboard.", true);
+        }
+    }
+
+    private void SetToast(string message, bool isError)
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        _toastCts = new CancellationTokenSource();
+        _toastMessage = message;
+        _toastIsError = isError;
+        _ = AutoDismissToast(_toastCts.Token);
+    }
+
+    private async Task AutoDismissToast(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(2500, token);
+            await InvokeAsync(() =>
+            {
+                _toastMessage = null;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private string BuildUrl(string q, int page, string? category = null)
+    {
+        var sb = new System.Text.StringBuilder($"/search?q={Uri.EscapeDataString(q)}&page={page}");
+        string? cat = category ?? _activeCategory;
+        if (!string.IsNullOrEmpty(cat)) sb.Append($"&category={Uri.EscapeDataString(cat)}");
+        if (_searchMode == SearchMode.Hybrid) sb.Append("&mode=hybrid");
+        return sb.ToString();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        if (_clipboardModule is not null)
+            await _clipboardModule.DisposeAsync();
+    }
+
+    private sealed class ClipboardResult
+    {
+        public bool Success { get; init; }
+        public string? Error { get; init; }
+    }
+}
