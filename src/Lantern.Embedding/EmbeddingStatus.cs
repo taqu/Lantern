@@ -4,6 +4,10 @@ public enum ModelStatus { NotLoaded, Loading, Ready, Failed, Stopping }
 
 public sealed class EmbeddingServiceStatus
 {
+    private readonly TaskCompletionSource _listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task Listening => _listening.Task;
+    internal void SetListening() => _listening.TrySetResult();
+
     private volatile ModelStatus _status = ModelStatus.NotLoaded;
     private string _message = "Not initialized";
 

@@ -7,6 +7,7 @@ This document explains how to run Lantern's test suite locally and in CI.
 | Project | Type | External dependencies |
 |---|---|---|
 | `tests/Lantern.Core.Tests` | Unit | None |
+| `tests/Lantern.Embedding.Tests` | Unit | None |
 | `tests/Lantern.IntegrationTests` | Integration | SQLite (temp files), Meilisearch (optional), filesystem |
 
 ## Quick Start
@@ -14,6 +15,7 @@ This document explains how to run Lantern's test suite locally and in CI.
 ```powershell
 # Run all unit tests (no external services required)
 dotnet test tests/Lantern.Core.Tests
+dotnet test tests/Lantern.Embedding.Tests
 
 # Run all integration tests (Meilisearch skips if MEILI_MASTER_KEY is not set)
 dotnet test tests/Lantern.IntegrationTests
@@ -78,12 +80,12 @@ dotnet test tests/Lantern.IntegrationTests --configuration Release
 The `tools/meilisearch/meilisearch.exe` binary must exist. If it does not:
 
 ```powershell
-# Download Meilisearch v1.55.0
+# Download Meilisearch v1.57.0
 ./scripts/download-meilisearch.ps1
 
 # Verify the SHA-256 (optional but recommended)
 certutil -hashfile tools/meilisearch/meilisearch.exe SHA256
-# Expected: 948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A
+# Expected: 032CD009E73A16FF77BBBF1FC911A03D6F8672F57E02D8A43310C63732BF6888
 ```
 
 Then start the service:
@@ -221,4 +223,28 @@ dotnet build src/Lantern.Embedding --configuration Release
 Get-ChildItem src/Lantern.Embedding/bin/Release/net10.0 -Filter "*.dll"
 ```
 
-Native embedding tests should only be run on x64 Windows.
+### REST embedder and crawler verification
+
+Run the isolated configuration, HTTP handler, queue, lifecycle, and vector validation tests with:
+
+```powershell
+dotnet test tests/Lantern.Embedding.Tests
+```
+
+The native test requires .NET 10 x64, the Granite GGUF and PowerPoint fixture checked out through Git LFS, and Meilisearch 1.57.0. It uses a temporary SQLite database and unique Meilisearch indexes. Start a separate Meilisearch instance with a new database directory and the loopback allowance in its process environment. In PowerShell, run the following from the repository root:
+
+```powershell
+$env:MEILI_MASTER_KEY = [guid]::NewGuid().ToString('N')
+$env:MEILI_HOST = 'http://127.0.0.1:17700'
+$env:MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS = '127.0.0.1/32'
+$env:MODEL_PATH = (Resolve-Path resources/granite-embedding-97M-multilingual-r2.gguf).Path
+$db = Join-Path $env:TEMP ([guid]::NewGuid().ToString())
+$process = Start-Process tools/meilisearch/meilisearch.exe -WindowStyle Hidden -PassThru -ArgumentList @('--db-path', $db, '--http-addr', '127.0.0.1:17700', '--no-analytics')
+try {
+    dotnet test tests/Lantern.IntegrationTests --filter Category=NativeEmbedding --logger 'console;verbosity=detailed'
+} finally {
+    if (!$process.HasExited) { $process.Kill() }
+}
+```
+
+The test starts the real embedding service on port 17703. It exercises a stale request template and its repair, vector retrieval, Japanese and English inference, PDF and PPTX crawling, semantic search, reconciliation, and bounded concurrent submissions. Detailed output includes task UIDs, queue and processing times, and native inference logs. The fixture explicitly skips when MODEL_PATH is absent. The native CI workflow fetches LFS resources and requires the model before running tests.

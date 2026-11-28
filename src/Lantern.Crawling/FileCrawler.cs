@@ -90,6 +90,7 @@ public sealed class FileCrawler(
                             if(error != null) errors.Add($"{file.CanonicalPath}: {error}");
                             break;
                         case FileSyncOutcome.Skipped: Interlocked.Increment(ref skipped); break;
+                        case FileSyncOutcome.Deferred: Interlocked.Increment(ref skipped); break;
                         }
                     } catch(OperationCanceledException) { break; } catch(Exception ex) {
                         Interlocked.Increment(ref failed);

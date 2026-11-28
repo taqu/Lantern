@@ -106,23 +106,11 @@ public sealed class HybridSearchIntegrationTests : IAsyncLifetime
 
     private async Task ConfigureEmbedderAsync()
     {
-        Meilisearch.Index index = _rawClient!.Index(_chunkIndex);
-        Dictionary<string, Embedder> embedders = new() {
-            [_hybridOptions.EmbedderName] = new Embedder {
-                Source = EmbedderSource.Rest,
-                Url = _embedUrl!,
-                Dimensions = 384,
-                Request = new Dictionary<string, object> { ["text"] = "{{text}}" },
-                Response = new Dictionary<string, object> { ["embedding"] = "{{embedding}}" },
-                DocumentTemplate = "{{doc.title}}\n{{doc.sectionTitle}}\n{{doc.content}}",
-                DocumentTemplateMaxBytes = 8192
-            }
-        };
-        TaskInfo task = await index.UpdateEmbeddersAsync(embedders);
-        // Wait up to 60 s for the settings to be applied; a still-processing task is accepted.
-        try {
-            await _rawClient!.WaitForTaskAsync(task.TaskUid, timeoutMs: 60_000);
-        } catch { }
+        var config = new EmbedderConfigurationService(new TestMeilisearchClientFactory(_rawClient!),
+            Options.Create(_hybridOptions), Options.Create(_meiliOptions), NullLogger<EmbedderConfigurationService>.Instance);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        await config.ConfigureEmbedderAsync(_embedUrl!, timeout.Token);
+        await config.VerifyConnectionAsync(timeout.Token);
     }
 
     private static SearchChunk MakeChunk(string docId, int idx, string title, string content, string sourceType = "file") =>

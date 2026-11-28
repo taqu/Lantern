@@ -9,6 +9,7 @@ $appData        = Join-Path $webRoot "AppData"
 $secretsDir     = Join-Path $appData "secrets"
 $meiliData      = Join-Path $appData "meilisearch"
 $dbPath       = Join-Path $appData "database"
+$meiliDir = Join-Path $repoRoot "tools\meilisearch\data"
 
 # --- 1. Clean directories ---
 Write-Host "Clean development data directories..."
@@ -17,6 +18,9 @@ if (Test-Path $dbPath -PathType Container) {
 }
 if (Test-Path $meiliData -PathType Container) {
     Remove-Item -Path $meiliData -Recurse
+}
+if (Test-Path $meiliDir -PathType Container) {
+    Remove-Item -Path $meiliDir -Recurse
 }
 
 # --- 2. Create AppData structure ---

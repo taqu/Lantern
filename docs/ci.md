@@ -15,7 +15,7 @@ This document describes the GitHub Actions CI configuration for Lantern.
 |---|---|---|---|
 | `build` | — | yes | Restore NuGet packages, build in Release configuration |
 | `format` | `build` | yes | `dotnet format --verify-no-changes` |
-| `unit-tests` | `build` | yes | Run `Lantern.Core.Tests` (no external dependencies) |
+| `unit-tests` | `build` | yes | Run `Lantern.Embedding.Tests` and `Lantern.Core.Tests` (no external dependencies) |
 | `integration-tests` | `build` | yes | Start Meilisearch, run `Lantern.IntegrationTests` |
 | `dependency-audit` | `build` | yes | `dotnet list package --vulnerable --include-transitive` |
 | `publish-validation` | `unit-tests` + `integration-tests` | yes | `dotnet publish --runtime win-x64 --self-contained`, startup smoke test |
@@ -68,10 +68,10 @@ Integration tests run against a real Meilisearch Community Edition process. Dock
 
 | Property | Value |
 |---|---|
-| Version | 1.55.0 |
+| Version | 1.57.0 |
 | Source | Official GitHub release (`meilisearch/meilisearch`) |
 | File | `meilisearch-windows-amd64.exe` |
-| SHA-256 | `948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A` |
+| SHA-256 | `032CD009E73A16FF77BBBF1FC911A03D6F8672F57E02D8A43310C63732BF6888` |
 | Cache key | `meilisearch-windows-amd64-{version}` |
 
 The binary is cached in GitHub Actions by version. A cache miss downloads from the official release URL and verifies the SHA-256 before proceeding. A checksum mismatch fails the job.
@@ -122,7 +122,7 @@ Options for making the model available:
 
 | Artifact name | Contents | Retention |
 |---|---|---|
-| `unit-test-results` | TRX + coverage from `Lantern.Core.Tests` | 30 days |
+| `unit-test-results` | TRX + coverage from `Lantern.Embedding.Tests` and `Lantern.Core.Tests` | 30 days |
 | `integration-test-results` | TRX + coverage from `Lantern.IntegrationTests` | 30 days |
 | `dependency-audit` | `nuget-audit.txt` | 30 days |
 | `publish-win-x64` | `Lantern.Web.exe` + `wwwroot/` | 7 days |

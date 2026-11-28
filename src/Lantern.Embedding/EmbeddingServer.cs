@@ -31,7 +31,7 @@ public sealed class EmbeddingServer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        string url = $"http://{_options.ListenAddress}:{_options.Port}";
+        string url = _options.Endpoint.GetLeftPart(UriPartial.Authority);
         _logger.LogInformation("Starting embedding server on {Url}", url);
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions {
@@ -41,7 +41,16 @@ public sealed class EmbeddingServer : BackgroundService
 
         WebApplication app = builder.Build();
 
-        app.MapPost("/embed", (Delegate)HandleEmbedAsync);
+        app.Lifetime.ApplicationStarted.Register(_status.SetListening);
+        app.MapPost("/embed", (Delegate)HandleEmbedAsync)
+            .AddEndpointFilter(async (context, next) => {
+                var started = System.Diagnostics.Stopwatch.StartNew();
+                var result = await next(context);
+                _logger.LogDebug("POST /embed {TraceId} from {RemoteAddress} returned {StatusCode} in {ElapsedMs} ms",
+                    context.HttpContext.TraceIdentifier, context.HttpContext.Connection.RemoteIpAddress,
+                    (result as IStatusCodeHttpResult)?.StatusCode, started.ElapsedMilliseconds);
+                return result;
+            });
         app.MapGet("/health", (Delegate)HandleHealth);
         app.MapGet("/ready", (Delegate)HandleReady);
 
@@ -52,44 +61,50 @@ public sealed class EmbeddingServer : BackgroundService
         }
     }
 
-    private async Task<IResult> HandleEmbedAsync(HttpContext context)
+    internal async Task<IResult> HandleEmbedAsync(HttpContext context)
     {
+        using var scope = _logger.BeginScope("Embedding request {TraceId}", context.TraceIdentifier);
         context.Request.Body = new LimitedStream(context.Request.Body, MaxRequestBodyBytes);
 
         EmbedRequest? request;
         try {
             request = await JsonSerializer.DeserializeAsync<EmbedRequest>(
                 context.Request.Body,
-                EmbedJsonContext.Default.EmbedRequest);
-        } catch {
+                EmbedJsonContext.Default.EmbedRequest, context.RequestAborted);
+        } catch(Exception ex) when(ex is JsonException or InvalidOperationException) {
+            _logger.LogWarning("Rejected malformed embedding request");
             return Results.BadRequest(new { error = "Invalid JSON" });
         }
 
-        if(request == null || string.IsNullOrWhiteSpace(request.Text))
+        if(request == null || string.IsNullOrWhiteSpace(request.Text)) {
+            _logger.LogWarning("Rejected embedding request with missing or empty text");
             return Results.BadRequest(new { error = "Missing or empty 'text' field" });
+        }
 
         if(request.Text.Length > MaxTextLength)
             return Results.BadRequest(new { error = $"Text too long (max {MaxTextLength} characters)" });
 
-        if(!_status.IsReady)
+        if(!_status.IsReady) {
+            _logger.LogWarning("Embedding server unavailable with model status {Status}", _status.Status);
             return Results.StatusCode(503);
+        }
 
         TaskCompletionSource<float[]> tcs = new TaskCompletionSource<float[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
         cts.CancelAfter(TimeSpan.FromSeconds(_options.RequestTimeoutSeconds));
 
         EmbeddingRequestItem item = new EmbeddingRequestItem(request.Text, tcs, cts.Token);
-        bool enqueued = await _queue.TryEnqueueAsync(item, TimeSpan.FromSeconds(5), cts.Token);
-
-        if(!enqueued)
-            return Results.StatusCode(503); // Queue full
-
         try {
+            if(!await _queue.TryEnqueueAsync(item, TimeSpan.FromSeconds(5), cts.Token)) {
+                _logger.LogWarning("Embedding queue full for request {TraceId}", context.TraceIdentifier);
+                return Results.StatusCode(503);
+            }
             float[] vector = await tcs.Task.WaitAsync(cts.Token);
             return Results.Ok(new EmbedResponse(vector));
-        } catch(OperationCanceledException) {
+        } catch(OperationCanceledException) when(!context.RequestAborted.IsCancellationRequested) {
+            _logger.LogWarning("Embedding request {TraceId} exceeded {Seconds}s", context.TraceIdentifier, _options.RequestTimeoutSeconds);
             return Results.StatusCode(503);
-        } catch(Exception ex) {
+        } catch(Exception ex) when(ex is not OperationCanceledException) {
             _logger.LogWarning(ex, "Embedding request failed");
             return Results.StatusCode(500);
         }

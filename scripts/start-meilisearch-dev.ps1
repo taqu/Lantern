@@ -106,10 +106,13 @@ Write-Host ""
 
 $startInfo = New-Object System.Diagnostics.ProcessStartInfo
 $startInfo.FileName = $MeilisearchPath
-$startInfo.Arguments = "--db-path `"$DataDir`" --http-addr `"127.0.0.1:$Port`" --master-key `"$masterKey`""
+$startInfo.Arguments = "--db-path `"$DataDir`" --http-addr `"127.0.0.1:$Port`" --master-key `"$masterKey`" --experimental-allowed-ip-networks `"127.0.0.0/8`""
 $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $false
 $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
+# Allow Meilisearch to reach the loopback REST embedding server.
+# Without this, Meilisearch 1.9+ SSRF protection rejects 127.x.x.x with "bad uri: Rejected URI".
+$startInfo.Environment["MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS"] = "127.0.0.0/8"
 
 $process = [System.Diagnostics.Process]::Start($startInfo)
 

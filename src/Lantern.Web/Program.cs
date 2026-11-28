@@ -104,14 +104,29 @@ if(!isCommandMode) {
     // live before EnsureCredentialsAsync is called.
     builder.Services.AddHostedService<Lantern.Infrastructure.Search.MeilisearchCredentialBootstrapper>();
 
-    EmbeddingOptions embeddingOptions =
-        builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>() ?? new();
-    if(embeddingOptions.Enabled) {
-        builder.Services.AddLanternEmbedding(builder.Configuration);
-        HybridSearchOptions hybridSetupOpts =
-            builder.Configuration.GetSection(HybridSearchOptions.SectionName).Get<HybridSearchOptions>() ?? new();
-        if(hybridSetupOpts.Enabled)
-            builder.Services.AddHostedService<EmbedderSetupService>();
+    if(builder.Configuration.GetValue<bool>("Embedding:Enabled")) {
+        bool hybridEnabled = builder.Configuration.GetValue<bool>("HybridSearch:Enabled");
+        if(hybridEnabled)
+            builder.Services.AddSingleton<HybridSearchReadiness>();
+
+        string? error;
+        try {
+            var options = builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>()!;
+            error = options.GetValidationError();
+        } catch(InvalidOperationException ex) {
+            error = ex.Message;
+        }
+
+        if(error == null) {
+            builder.Services.AddLanternEmbedding(builder.Configuration);
+            if(hybridEnabled)
+                builder.Services.AddHostedService<EmbedderSetupService>();
+        } else {
+            var status = new EmbeddingServiceStatus();
+            status.SetFailed(error);
+            builder.Services.AddSingleton(status);
+            Console.Error.WriteLine($"Embedding disabled: {error}");
+        }
     }
 }
 

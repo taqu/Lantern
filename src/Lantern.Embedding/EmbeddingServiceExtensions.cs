@@ -8,7 +8,9 @@ public static class EmbeddingServiceExtensions
 {
     public static IServiceCollection AddLanternEmbedding(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<EmbeddingOptions>(configuration.GetSection(EmbeddingOptions.SectionName));
+        services.AddOptions<EmbeddingOptions>()
+            .Bind(configuration.GetSection(EmbeddingOptions.SectionName))
+            .Validate(o => o.GetValidationError() == null, "Invalid embedding configuration");
         services.AddSingleton<EmbeddingServiceStatus>();
         services.AddSingleton<InferenceQueue>(sp => {
             EmbeddingOptions options = sp.GetRequiredService<IOptions<EmbeddingOptions>>().Value;

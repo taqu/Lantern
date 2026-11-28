@@ -13,7 +13,8 @@ public sealed class FileSynchronizationService(
     IChunkIndexingService chunkIndexing,
     ICrawlStateRepository stateRepository,
     ICrawlerCategoryResolver categoryResolver,
-    ILogger<FileSynchronizationService> logger)
+    ILogger<FileSynchronizationService> logger,
+    HybridSearchReadiness? readiness = null)
 {
     private string[]? _categoryIds;
     private Guid _lastCrawlerIdForCategories = Guid.Empty;
@@ -35,13 +36,18 @@ public sealed class FileSynchronizationService(
     {
         FileState? existing = await stateRepository.FindAsync(crawlerId, file.CanonicalPath, cancellationToken);
 
-        // Unchanged check — also skip IndexingPending so we don't re-submit a task that's still in-flight
-        if(existing is { SyncStatus: CrawlSyncStatus.Indexed or CrawlSyncStatus.IndexingPending }
+        // Unchanged check — skip files that are fully indexed, have a pending task, or are deferred
+        // while the embedder is still not ready (recovery happens automatically when it becomes ready).
+        if(existing != null
             && existing.FileSize == file.FileSize
             && existing.LastWriteTimeUtc == file.LastWriteTimeUtc) {
-            existing.LastSeenScanId = scanId;
-            await stateRepository.SaveAsync(existing, cancellationToken);
-            return (FileSyncOutcome.Unchanged, null);
+            bool skip = existing.SyncStatus is CrawlSyncStatus.Indexed or CrawlSyncStatus.IndexingPending
+                || (existing.SyncStatus == CrawlSyncStatus.WaitingForEmbeddingReadiness && readiness?.IsReady != true);
+            if(skip) {
+                existing.LastSeenScanId = scanId;
+                await stateRepository.SaveAsync(existing, cancellationToken);
+                return (FileSyncOutcome.Unchanged, null);
+            }
         }
 
         bool isNew = existing == null;
@@ -126,12 +132,36 @@ public sealed class FileSynchronizationService(
             : result.Chunks ?? [];
 
         int parentTaskUid;
-        int? chunkTaskUid;
         try {
             parentTaskUid = await documentIndexing.SubmitUpsertAsync(doc, cancellationToken);
+        } catch(Exception ex) {
+            logger.LogError(ex, "Parent document indexing submission failed for {Path}", file.CanonicalPath);
+            await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, ex.Message, cancellationToken);
+            return (FileSyncOutcome.Failed, ex.Message);
+        }
+
+        // Defer chunk indexing if the REST embedder is not yet verified. The parent document
+        // is already submitted so keyword search remains functional for this file.
+        if(readiness?.IsReady == false) {
+            FileState deferred = existing ?? new FileState { CrawlerId = crawlerId, CanonicalPath = file.CanonicalPath };
+            deferred.DocumentId = documentId;
+            deferred.FileSize = file.FileSize;
+            deferred.LastWriteTimeUtc = file.LastWriteTimeUtc;
+            deferred.LastSeenScanId = scanId;
+            deferred.SyncStatus = CrawlSyncStatus.WaitingForEmbeddingReadiness;
+            deferred.PendingMeilisearchTaskUid = parentTaskUid;
+            deferred.LastError = null;
+            await stateRepository.SaveAsync(deferred, cancellationToken);
+            logger.LogInformation(
+                "Chunk indexing deferred for {Path}: waiting for embedding readiness", file.CanonicalPath);
+            return (FileSyncOutcome.Deferred, null);
+        }
+
+        int? chunkTaskUid;
+        try {
             chunkTaskUid = await chunkIndexing.ReplaceDocumentChunksAsync(documentId, chunks, cancellationToken);
         } catch(Exception ex) {
-            logger.LogError(ex, "Indexing submission failed for {Path}", file.CanonicalPath);
+            logger.LogError(ex, "Chunk indexing submission failed for {Path}", file.CanonicalPath);
             await PersistFailureAsync(existing, file, crawlerId, documentId, scanId, ex.Message, cancellationToken);
             return (FileSyncOutcome.Failed, ex.Message);
         }

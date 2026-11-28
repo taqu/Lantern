@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj" />
+    <Project Path="tests/Lantern.Embedding.Tests/Lantern.Embedding.Tests.csproj" />
     <Project Path="tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj" />
   </Folder>
 </Solution>

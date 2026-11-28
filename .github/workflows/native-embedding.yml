@@ -29,7 +29,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   MEILISEARCH_VERSION: '1.57.0'
-  MEILISEARCH_SHA256: '948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A'
+  MEILISEARCH_SHA256: '032CD009E73A16FF77BBBF1FC911A03D6F8672F57E02D8A43310C63732BF6888'
   MEILISEARCH_PORT: '17700'
   # Default model path (relative to repository root).
   DEFAULT_MODEL_PATH: resources/granite-embedding-97M-multilingual-r2.gguf
@@ -41,6 +41,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -55,36 +57,16 @@ jobs:
           restore-keys: ${{ runner.os }}-nuget-
 
       # ── Resolve and validate the GGUF model ──────────────────────────────
-      - name: Resolve model path
-        id: model
+      - name: Resolve required model
         shell: pwsh
+        env:
+          REQUESTED_MODEL: ${{ inputs.model_path }}
         run: |
-          $inputPath = "${{ github.event.inputs.model_path }}"
-          $resolved  = if ($inputPath) { $inputPath } else { "${{ env.DEFAULT_MODEL_PATH }}" }
-          echo "path=$resolved" >> $env:GITHUB_OUTPUT
-          Write-Host "Model path: $resolved"
-
-      - name: Verify GGUF model exists
-        shell: pwsh
-        run: |
-          $model = "${{ steps.model.outputs.path }}"
-          if (-not (Test-Path $model)) {
-            Write-Error @"
-GGUF model not found: $model
-
-This workflow requires the IBM Granite Embedding 97M Multilingual R2 model.
-Options:
-  1. Self-hosted runner: place the model at ${{ env.DEFAULT_MODEL_PATH }}
-  2. Cache: restore it from a GitHub Actions cache seeded separately
-  3. Explicit path: pass model_path when triggering via workflow_dispatch
-
-The model file must be present. Missing model resources fail release qualification.
-"@
-            exit 1
+          $model = if ($env:REQUESTED_MODEL) { $env:REQUESTED_MODEL } else { $env:DEFAULT_MODEL_PATH }
+          if (-not (Test-Path -LiteralPath $model -PathType Leaf)) {
+            throw "Missing required Granite GGUF file at $model"
           }
-          $size = (Get-Item $model).Length
-          Write-Host "Model found: $model ($([math]::Round($size/1MB,1)) MB)"
-          echo "MODEL_PATH=$model" >> $env:GITHUB_ENV
+          echo "MODEL_PATH=$((Resolve-Path -LiteralPath $model).Path)" >> $env:GITHUB_ENV
 
       # ── Meilisearch setup (for hybrid search tests) ───────────────────────
       - name: Cache Meilisearch binary
@@ -133,6 +115,7 @@ The model file must be present. Missing model resources fail release qualificati
           New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
           echo "MEILI_DATA_DIR=$dataDir" >> $env:GITHUB_ENV
 
+          $env:MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS = "127.0.0.1/32"
           $proc = Start-Process `
             -FilePath "tools/meilisearch/meilisearch.exe" `
             -ArgumentList @(
@@ -173,9 +156,6 @@ The model file must be present. Missing model resources fail release qualificati
         env:
           MEILI_MASTER_KEY: ${{ steps.meili-key.outputs.key }}
           MEILI_HOST: http://127.0.0.1:${{ env.MEILISEARCH_PORT }}
-          # Override the embedding model path so the running tests locate the GGUF file.
-          Embedding__ModelPath: ${{ steps.model.outputs.path }}
-          Embedding__Enabled: 'true'
         run: >
           dotnet test tests/Lantern.IntegrationTests/Lantern.IntegrationTests.csproj
           --configuration Release

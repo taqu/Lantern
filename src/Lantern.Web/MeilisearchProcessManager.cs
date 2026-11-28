@@ -29,6 +29,13 @@ public sealed class MeilisearchProcessManager(
     {
         if(!_opts.Managed) {
             logger.LogInformation("Meilisearch process management is disabled. Lantern expects an external instance at the configured URL.");
+            if(!string.IsNullOrEmpty(_opts.AllowedIpNetworks))
+                logger.LogInformation(
+                    "Hybrid Search requires Meilisearch to be started with " +
+                    "MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS={Networks} so the REST embedder on the " +
+                    "loopback address is reachable. Set this environment variable before starting " +
+                    "Meilisearch or use --experimental-allowed-ip-networks {Networks} on the command line.",
+                    _opts.AllowedIpNetworks, _opts.AllowedIpNetworks);
             return;
         }
 
@@ -126,18 +133,27 @@ public sealed class MeilisearchProcessManager(
         // Allow the loopback REST embedder URL (127.0.0.1) to be reached by Meilisearch.
         // Without this, Meilisearch 1.9+ SSRF protection rejects loopback addresses with
         // "bad uri: Rejected URI" on every embedding request.
-        if(!string.IsNullOrEmpty(_opts.AllowedIpNetworks))
+        // Set both the env var and the CLI arg for reliability across platforms/versions.
+        if(!string.IsNullOrEmpty(_opts.AllowedIpNetworks)) {
             startInfo.Environment["MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS"] = _opts.AllowedIpNetworks;
+        }
         startInfo.ArgumentList.Add("--db-path");
         startInfo.ArgumentList.Add(_opts.DataDirectory);
         startInfo.ArgumentList.Add("--http-addr");
         startInfo.ArgumentList.Add($"{_opts.BindAddress}:{_opts.Port}");
         startInfo.ArgumentList.Add("--no-analytics");
+        if(!string.IsNullOrEmpty(_opts.AllowedIpNetworks)) {
+            startInfo.ArgumentList.Add("--experimental-allowed-ip-networks");
+            startInfo.ArgumentList.Add(_opts.AllowedIpNetworks);
+        }
 
         _process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start Meilisearch process.");
 
-        logger.LogInformation("Meilisearch process started (PID {Pid}). Waiting for readiness...", _process.Id);
+        logger.LogInformation(
+            "Meilisearch process started (PID {Pid}). AllowedIpNetworks={Networks}. Waiting for readiness...",
+            _process.Id,
+            string.IsNullOrEmpty(_opts.AllowedIpNetworks) ? "(not set)" : _opts.AllowedIpNetworks);
 
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(_opts.StartupTimeoutSeconds));

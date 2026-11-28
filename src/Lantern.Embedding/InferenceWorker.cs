@@ -51,7 +51,7 @@ public sealed class InferenceWorker : BackgroundService
         if(!File.Exists(_modelPath)) {
             _logger.LogWarning("Embedding model not found at '{ModelPath}'. Embedding disabled.", _modelPath);
             _status.SetFailed($"Model file not found: {_modelPath}");
-            DrainQueueWithError("Embedding model not available", stoppingToken);
+            await DrainQueueWithErrorAsync("Embedding model not available", stoppingToken);
             return;
         }
 
@@ -68,7 +68,7 @@ public sealed class InferenceWorker : BackgroundService
         } catch(Exception ex) {
             _logger.LogError(ex, "Failed to load embedding model from '{ModelPath}'", _modelPath);
             _status.SetFailed($"Model load failed: {ex.Message}");
-            DrainQueueWithError("Model initialization failed", stoppingToken);
+            await DrainQueueWithErrorAsync("Model initialization failed", stoppingToken);
             return;
         }
 
@@ -90,27 +90,7 @@ public sealed class InferenceWorker : BackgroundService
                     _logger.LogDebug("Inference request {ReqId} completed in {ElapsedMs}ms, results: {Count}",
                         reqId, sw.ElapsedMilliseconds, embeddings.Count);
 
-                    if(embeddings.Count == 0) {
-                        request.Result.TrySetException(new InvalidOperationException("Empty embedding result"));
-                        continue;
-                    }
-
-                    float[] vector = embeddings[0];
-
-                    if(vector.Length != ExpectedDimensions) {
-                        request.Result.TrySetException(new InvalidOperationException(
-                            $"Expected {ExpectedDimensions} dimensions, got {vector.Length}"));
-                        continue;
-                    }
-
-                    bool hasNonFinite = false;
-                    foreach(float f in vector) {
-                        if(!float.IsFinite(f)) { hasNonFinite = true; break; }
-                    }
-                    if(hasNonFinite) {
-                        request.Result.TrySetException(new InvalidOperationException("Embedding contains non-finite values"));
-                        continue;
-                    }
+                    float[] vector = ValidateSingleEmbedding(embeddings);
 
                     _logger.LogDebug("Inference request {ReqId} validated: {Dims} dimensions", reqId, vector.Length);
                     request.Result.TrySetResult(vector);
@@ -130,15 +110,28 @@ public sealed class InferenceWorker : BackgroundService
         }
     }
 
-    private void DrainQueueWithError(string message, CancellationToken stoppingToken)
+    internal static float[] ValidateSingleEmbedding(IReadOnlyList<float[]> embeddings)
     {
-        Task.Run(async () => {
-            try {
-                await foreach(EmbeddingRequestItem request in _queue.Reader.ReadAllAsync(stoppingToken)) {
-                    request.Result.TrySetException(new InvalidOperationException(message));
-                }
-            } catch(OperationCanceledException) {
-            }
-        }, CancellationToken.None);
+        if(embeddings.Count != 1)
+            throw new InvalidOperationException($"Expected one embedding for one text, got {embeddings.Count}");
+        return ValidateVector(embeddings[0]);
+    }
+
+    internal static float[] ValidateVector(float[]? vector)
+    {
+        if(vector == null || vector.Length != ExpectedDimensions)
+            throw new InvalidOperationException($"Expected {ExpectedDimensions} dimensions, got {vector?.Length ?? 0}");
+        if(Array.Exists(vector, value => !float.IsFinite(value)))
+            throw new InvalidOperationException("Embedding contains non-finite values");
+        return vector;
+    }
+
+    private async Task DrainQueueWithErrorAsync(string message, CancellationToken stoppingToken)
+    {
+        try {
+            await foreach(var request in _queue.Reader.ReadAllAsync(stoppingToken))
+                request.Result.TrySetException(new InvalidOperationException(message));
+        } catch(OperationCanceledException) when(stoppingToken.IsCancellationRequested) {
+        }
     }
 }

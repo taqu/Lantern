@@ -16,17 +16,19 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     private readonly ILogger<MeilisearchChunkIndexingService> _logger;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private bool _initialized;
+    private readonly HybridSearchReadiness? _readiness;
 
     public MeilisearchChunkIndexingService(
         IMeilisearchClientFactory clientFactory,
         IOptions<MeilisearchOptions> documentOptions,
         IOptions<HybridSearchOptions> hybridOptions,
-        ILogger<MeilisearchChunkIndexingService> logger)
+        ILogger<MeilisearchChunkIndexingService> logger, HybridSearchReadiness? readiness = null)
     {
         _clientFactory = clientFactory;
         _documentOptions = documentOptions.Value;
         _hybridOptions = hybridOptions.Value;
         _logger = logger;
+        _readiness = readiness;
     }
 
     public async Task EnsureIndexAsync(CancellationToken cancellationToken = default)
@@ -209,6 +211,8 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     private async Task<int?> SubmitChunkUpsertAsync(IEnumerable<SearchChunk> chunks, CancellationToken cancellationToken)
     {
         if(!_hybridOptions.Enabled) return null;
+        if(_readiness?.IsReady == false)
+            throw new InvalidOperationException("Hybrid indexing is waiting for REST embedder verification");
         await EnsureIndexAsync(cancellationToken);
         Meilisearch.Index index = _client.Index(_hybridOptions.ChunkIndexName);
         List<SearchChunk> batch = chunks.ToList();
@@ -239,6 +243,8 @@ public sealed class MeilisearchChunkIndexingService : IChunkIndexingService
     public async Task<int?> ReplaceDocumentChunksAsync(string documentId, IEnumerable<SearchChunk> newChunks, CancellationToken cancellationToken = default)
     {
         if(!_hybridOptions.Enabled) return null;
+        if(_readiness?.IsReady == false)
+            throw new InvalidOperationException("Hybrid indexing is waiting for REST embedder verification");
         await EnsureIndexAsync(cancellationToken);
         List<SearchChunk> chunkList = newChunks.ToList();
 

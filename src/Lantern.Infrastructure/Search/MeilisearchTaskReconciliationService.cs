@@ -65,7 +65,7 @@ public sealed class MeilisearchTaskReconciliationService : BackgroundService
             IReadOnlyList<FileState> pending = await _stateRepository.FindPendingIndexingAsync(BatchSize, ct);
             if(pending.Count == 0) return;
 
-            _logger.LogDebug("Reconciling {Count} pending Meilisearch indexing tasks", pending.Count);
+            _logger.LogTrace("Reconciling {Count} pending Meilisearch indexing tasks", pending.Count);
 
             int resolved = 0;
             int failed = 0;
@@ -90,10 +90,10 @@ public sealed class MeilisearchTaskReconciliationService : BackgroundService
                     } else if(task.Status is TaskInfoStatus.Failed or TaskInfoStatus.Canceled) {
                         string errorMsg = task.Error != null
                             ? System.Text.Json.JsonSerializer.Serialize(task.Error)
-                            : $"Task {uid} ended with status {task.Status}";
+                            : "No error details supplied";
                         file.SyncStatus = CrawlSyncStatus.Failed;
                         file.PendingMeilisearchTaskUid = null;
-                        file.LastError = errorMsg;
+                        file.LastError = $"Meilisearch task {uid} {task.Status}: {errorMsg}";
                         await _stateRepository.SaveAsync(file, ct);
                         failed++;
                         _logger.LogWarning(

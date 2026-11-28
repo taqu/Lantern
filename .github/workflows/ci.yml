@@ -22,7 +22,7 @@ env:
   # Meilisearch Community Edition v1.55.0 (Windows x64)
   # SHA-256 verified against local binary. Update both when upgrading.
   MEILISEARCH_VERSION: '1.57.0'
-  MEILISEARCH_SHA256: '948535579776EA8AEEFFD166AC824F26624468B4F82D6E46A613230D8C91E62A'
+  MEILISEARCH_SHA256: '032CD009E73A16FF77BBBF1FC911A03D6F8672F57E02D8A43310C63732BF6888'
   MEILISEARCH_PORT: '17700'
 
 jobs:
@@ -109,6 +109,15 @@ jobs:
       - name: Restore
         run: dotnet restore
 
+      - name: Run embedding unit tests
+        run: >
+          dotnet test tests/Lantern.Embedding.Tests
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=embedding-unit-results.trx"
+          --results-directory artifacts/test-results/embedding-unit
+          --collect:"XPlat Code Coverage"
+
       - name: Run unit tests
         run: >
           dotnet test tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj
@@ -123,7 +132,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
-          path: artifacts/test-results/unit/
+          path: |
+            artifacts/test-results/embedding-unit/
+            artifacts/test-results/unit/
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -543,6 +554,14 @@ jobs:
       - name: Build (Release)
         run: dotnet build --configuration Release --no-restore
 
+      - name: Run embedding unit tests
+        run: >
+          dotnet test tests/Lantern.Embedding.Tests
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=linux-embedding-unit-results.trx"
+          --results-directory artifacts/test-results/linux-embedding-unit
+
       - name: Run unit tests
         run: >
           dotnet test tests/Lantern.Core.Tests/Lantern.Core.Tests.csproj
@@ -556,7 +575,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-unit-test-results
-          path: artifacts/test-results/linux-unit/
+          path: |
+            artifacts/test-results/linux-embedding-unit/
+            artifacts/test-results/linux-unit/
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────────────────

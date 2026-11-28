@@ -1,5 +1,7 @@
 using Lantern.Core.Administration;
 using Lantern.Core.Jobs;
+using Lantern.Core.Search;
+using Lantern.Embedding;
 using Lantern.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +17,9 @@ public static class HealthEndpoints
             ISearchEngineHealthService meiliHealth,
             IDbContextFactory<LanternDbContext> dbFactory,
             ISchedulerHealthService schedulerHealth,
-            MeilisearchProcessManager? processManager,
+            [Microsoft.AspNetCore.Mvc.FromServices] MeilisearchProcessManager? processManager,
+            [Microsoft.AspNetCore.Mvc.FromServices] EmbeddingServiceStatus? embeddingStatus,
+            [Microsoft.AspNetCore.Mvc.FromServices] HybridSearchReadiness? hybridReadiness,
             CancellationToken ct) => {
                 string version = typeof(HealthEndpoints).Assembly.GetName().Version?.ToString(3) ?? "unknown";
 
@@ -43,6 +47,10 @@ public static class HealthEndpoints
                 SchedulerStatus schedulerStatus = schedulerHealth.GetStatus();
                 string schedulerState = schedulerStatus.State.ToString().ToLowerInvariant();
 
+                string? embeddingState = embeddingStatus == null ? null
+                    : embeddingStatus.Status.ToString().ToLowerInvariant();
+                bool? hybridReady = hybridReadiness?.IsReady;
+
                 bool healthy = sqliteStatus == "ready" && meiliStatus == "ready" && schedulerStatus.State != SchedulerState.Faulted;
                 string overall = healthy ? "healthy" : sqliteStatus == "ready" ? "degraded" : "unhealthy";
 
@@ -55,6 +63,8 @@ public static class HealthEndpoints
                         meilisearchProcess = meiliProcess,
                         scheduler = schedulerState,
                         schedulerError = schedulerStatus.LastError,
+                        embedding = embeddingState,
+                        hybridSearch = hybridReady,
                     },
                     timestamp = DateTimeOffset.UtcNow,
                 });
